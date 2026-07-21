@@ -1,0 +1,10 @@
+export const TICK_RATE = 10; // sim ticks per second
+export const MAP_WIDTH = 64;
+export const MAP_HEIGHT = 48;
+export const AGENT_COUNT = 3;
+export const MOVE_TICKS_PER_TILE = 3;
+export const GATHER_TICKS = 20;
+export const CARRY_CAPACITY = 5;
+export const STOCKPILE_TARGET_WOOD = 30;
+export const STOCKPILE_TARGET_FOOD = 20;
+export const WS_PORT = 8790;
