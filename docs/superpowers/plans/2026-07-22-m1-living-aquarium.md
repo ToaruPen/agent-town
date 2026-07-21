@@ -313,7 +313,7 @@ with `isServerMessage` / `isClientMessage` structural guards (check `type` field
 **Interfaces:**
 - Produces:
   - `interface Planner { plan(world: WorldState, agent: AgentState): AgentTask[] }` (exported from `fakePlanner.ts` — this interface is the M2 LLM seam).
-  - `class FakePlanner implements Planner` — if carrying ⇒ `[deposit]`; else if `stockpile.wood < STOCKPILE_TARGET_WOOD` ⇒ moveTo+gather nearest wood tile with resources; else if food below target ⇒ same for food; else moveTo a random walkable tile within radius 5 (wander, uses injected rng).
+  - `class FakePlanner implements Planner` — if carrying ⇒ `[moveTo stockpile.pos, deposit]` (executor requires on/adjacent stockpile to deposit); else if `stockpile.wood < STOCKPILE_TARGET_WOOD` ⇒ moveTo+gather nearest wood tile with resources; else if food below target ⇒ same for food; else moveTo a random walkable tile within radius 5 (wander, uses injected rng).
   - `createEngine(world: WorldState, planner: Planner, rng: () => number)` returning `{ world, step(): void }` — `step()` = one tick: for each agent, if task queue empty ask planner, then `stepAgent`; increment `world.tick`.
 - Consumes: everything from Tasks 2–5.
 
