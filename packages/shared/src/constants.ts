@@ -8,6 +8,7 @@ export const GATHER_TICKS = 20;
 export const CARRY_CAPACITY = 5;
 export const STOCKPILE_TARGET_WOOD = 30;
 export const STOCKPILE_TARGET_FOOD = 20;
+export const WANDER_RADIUS = 5;
 export const WS_PORT = 8790;
 export const TERRAIN_PATCH_SIZE = 4;
 export const WATER_PATCH_CHANCE = 0.05;
