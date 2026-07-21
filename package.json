@@ -1,0 +1,13 @@
+{
+  "name": "agent-town",
+  "private": true,
+  "packageManager": "pnpm@10.23.0",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.3",
+    "concurrently": "^10.0.3",
+    "secretlint": "^13.0.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

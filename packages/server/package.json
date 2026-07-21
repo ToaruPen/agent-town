@@ -1,0 +1,15 @@
+{
+  "name": "@agent-town/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@agent-town/shared": "workspace:*",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.1",
+    "ws": "^8.21.1"
+  }
+}
