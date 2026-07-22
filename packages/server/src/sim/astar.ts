@@ -138,3 +138,75 @@ export function findPath(world: WorldState, from: Position, to: Position): Posit
 
   return null;
 }
+
+function enqueueUnvisited(
+  world: WorldState,
+  next: Position,
+  distance: number,
+  distances: Map<string, number>,
+  queue: Position[],
+): void {
+  const key = positionKey(next);
+  if (!isWalkable(world, next) || distances.has(key)) return;
+  distances.set(key, distance);
+  queue.push(next);
+}
+
+function floodDistances(world: WorldState, from: Position): Map<string, number> | null {
+  if (!isWalkable(world, from)) return null;
+
+  const distances = new Map<string, number>([[positionKey(from), 0]]);
+  const queue: Position[] = [from];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor];
+    if (current === undefined) continue;
+    const currentDistance = distances.get(positionKey(current)) ?? 0;
+
+    for (const next of neighbors(current)) {
+      enqueueUnvisited(world, next, currentDistance + 1, distances, queue);
+    }
+  }
+  return distances;
+}
+
+interface CandidateMatch {
+  pos: Position;
+  distance: number;
+  index: number;
+}
+
+function isBetterCandidate(
+  distance: number,
+  index: number,
+  nearest: CandidateMatch | null,
+): boolean {
+  if (nearest === null) return true;
+  if (distance !== nearest.distance) return distance < nearest.distance;
+  return index < nearest.index;
+}
+
+function selectNearestCandidate(
+  world: WorldState,
+  candidates: readonly Position[],
+  distances: ReadonlyMap<string, number>,
+): Position | null {
+  let nearest: CandidateMatch | null = null;
+  for (const candidate of candidates) {
+    const distance = distances.get(positionKey(candidate));
+    if (distance === undefined) continue;
+    const index = candidate.y * world.width + candidate.x;
+    if (isBetterCandidate(distance, index, nearest)) {
+      nearest = { pos: candidate, distance, index };
+    }
+  }
+  return nearest?.pos ?? null;
+}
+
+export function findNearestReachable(
+  world: WorldState,
+  from: Position,
+  candidates: readonly Position[],
+): Position | null {
+  const distances = floodDistances(world, from);
+  return distances === null ? null : selectNearestCandidate(world, candidates, distances);
+}

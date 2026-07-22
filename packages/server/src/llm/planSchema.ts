@@ -146,6 +146,9 @@ function validateTask(
   task: AgentTask,
 ): { ok: true } | { ok: false; error: string } {
   if (task.kind === "deposit") return { ok: true };
+  if (task.kind === "eat" || task.kind === "forage") {
+    return { ok: false, error: `task kind ${task.kind} is not supported by the LLM planner` };
+  }
 
   const position = task.kind === "moveTo" ? task.dest : task.target;
   const lookup = findWalkableTile(world, position);

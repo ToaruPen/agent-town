@@ -15,6 +15,8 @@ export type AgentActivity =
   | { kind: "idle" }
   | { kind: "moving"; path: Position[]; ticksIntoStep: number }
   | { kind: "gathering"; target: Position; ticksRemaining: number }
+  | { kind: "eating"; ticksRemaining: number }
+  | { kind: "foraging"; target: Position; ticksRemaining: number }
   | { kind: "depositing" };
 
 export interface AgentState {
@@ -36,6 +38,8 @@ export interface AgentState {
 export type AgentTask =
   | { kind: "moveTo"; dest: Position }
   | { kind: "gather"; resource: ResourceKind; target: Position }
+  | { kind: "eat" }
+  | { kind: "forage"; target: Position }
   | { kind: "deposit" };
 
 export interface WorldState {

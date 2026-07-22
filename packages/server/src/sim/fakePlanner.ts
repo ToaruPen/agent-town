@@ -1,6 +1,7 @@
 import {
   type AgentState,
   type AgentTask,
+  HUNGER_EAT_THRESHOLD,
   type Position,
   type ResourceKind,
   STOCKPILE_TARGET_FOOD,
@@ -73,10 +74,12 @@ export class FakePlanner implements Planner {
       return [{ kind: "moveTo", dest: world.stockpile.pos }, { kind: "deposit" }];
     }
 
+    if (agent.hunger < HUNGER_EAT_THRESHOLD) return [{ kind: "eat" }];
+
     if (world.stockpile.wood < STOCKPILE_TARGET_WOOD) {
       const target = findNearestResource(world, agent, "wood");
       if (target !== null) return gatherTasks("wood", target);
-    } else if (world.stockpile.food < STOCKPILE_TARGET_FOOD) {
+    } else if (world.stockpile.food < STOCKPILE_TARGET_FOOD * world.agents.length) {
       const target = findNearestResource(world, agent, "food");
       if (target !== null) return gatherTasks("food", target);
     }

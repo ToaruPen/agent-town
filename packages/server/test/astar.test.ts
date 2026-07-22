@@ -1,7 +1,7 @@
 import type { Terrain, WorldState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { findPath, isWalkable } from "../src/sim/astar.js";
+import { findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
 
 function createWorld(width: number, height: number, terrainAt: Map<string, Terrain> = new Map()) {
   const tiles = Array.from({ length: width * height }, (_, index) => {
@@ -74,5 +74,66 @@ describe("findPath", () => {
     const world = createWorld(3, 3);
 
     expect(findPath(world, { x: 0, y: 0 }, { x: 3, y: 1 })).toBeNull();
+  });
+});
+
+describe("findNearestReachable", () => {
+  it("skips an unreachable candidate and selects a reachable one", () => {
+    const walls = new Map<string, Terrain>([
+      ["1,0", "water"],
+      ["2,1", "water"],
+      ["3,0", "water"],
+    ]);
+    const world = createWorld(5, 5, walls);
+
+    expect(
+      findNearestReachable(world, { x: 0, y: 0 }, [
+        { x: 2, y: 0 },
+        { x: 0, y: 3 },
+      ]),
+    ).toEqual({ x: 0, y: 3 });
+  });
+
+  it("selects by actual path distance when a Manhattan-nearer candidate needs a detour", () => {
+    const wall = new Map<string, Terrain>(
+      Array.from({ length: 6 }, (_, y) => [`2,${y}`, "water"] as const),
+    );
+    const world = createWorld(5, 8, wall);
+
+    expect(
+      findNearestReachable(world, { x: 0, y: 2 }, [
+        { x: 4, y: 2 },
+        { x: 0, y: 7 },
+      ]),
+    ).toEqual({ x: 0, y: 7 });
+  });
+
+  it("breaks equal-distance ties by row-major position", () => {
+    const world = createWorld(3, 3);
+
+    expect(
+      findNearestReachable(world, { x: 1, y: 1 }, [
+        { x: 2, y: 1 },
+        { x: 0, y: 1 },
+      ]),
+    ).toEqual({ x: 0, y: 1 });
+  });
+
+  it("returns null when the start is not walkable", () => {
+    const world = createWorld(2, 1, new Map([["0,0", "water"]]));
+
+    expect(findNearestReachable(world, { x: 0, y: 0 }, [{ x: 1, y: 0 }])).toBeNull();
+  });
+
+  it("returns null when every candidate is unreachable", () => {
+    const walls = new Map<string, Terrain>([
+      ["1,0", "water"],
+      ["0,1", "water"],
+      ["2,1", "water"],
+      ["1,2", "water"],
+    ]);
+    const world = createWorld(3, 3, walls);
+
+    expect(findNearestReachable(world, { x: 0, y: 0 }, [{ x: 1, y: 1 }])).toBeNull();
   });
 });

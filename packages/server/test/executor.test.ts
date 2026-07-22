@@ -1,6 +1,8 @@
 import {
   type AgentState,
   CARRY_CAPACITY,
+  EAT_TICKS,
+  FORAGE_TICKS,
   GATHER_TICKS,
   MOVE_TICKS_PER_TILE,
   type ResourceKind,
@@ -62,6 +64,119 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
 }
 
 describe("stepAgent", () => {
+  it("eats one meal from the stockpile after 10 ticks", () => {
+    const world = createWorld(1, 1);
+    world.stockpile.food = 10;
+    const agent = createAgent({ hunger: 20, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    for (let tick = 1; tick < EAT_TICKS; tick += 1) {
+      stepAgent(world, agent);
+      expect(agent.hunger).toBe(20);
+      expect(world.stockpile.food).toBe(10);
+    }
+    stepAgent(world, agent);
+
+    expect(agent.hunger).toBe(80);
+    expect(world.stockpile.food).toBe(5);
+    expect(agent.tasks).toEqual([]);
+    expect(agent.activity).toEqual({ kind: "idle" });
+  });
+
+  it("caps hunger at the maximum after eating", () => {
+    const world = createWorld(1, 1);
+    world.stockpile.food = 5;
+    const agent = createAgent({ hunger: 70, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < EAT_TICKS; tick += 1) stepAgent(world, agent);
+
+    expect(agent.hunger).toBe(100);
+  });
+
+  it("moves within reach of the stockpile before eating", () => {
+    const world = createWorld(3, 1);
+    world.stockpile = { pos: { x: 2, y: 0 }, wood: 0, food: 5 };
+    const agent = createAgent({ hunger: 20, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    for (let tick = 1; tick < MOVE_TICKS_PER_TILE + EAT_TICKS; tick += 1) {
+      stepAgent(world, agent);
+    }
+    expect(agent.hunger).toBe(20);
+    stepAgent(world, agent);
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(agent.hunger).toBe(80);
+    expect(world.stockpile.food).toBe(0);
+  });
+
+  it("forages one meal directly from a food tile after 30 ticks", () => {
+    const target = { x: 0, y: 0 };
+    const world = createWorld(1, 1, [
+      { pos: target, terrain: "plains", resource: { kind: "food", amount: 7 } },
+    ]);
+    const agent = createAgent({ hunger: 20, tasks: [{ kind: "forage", target }] });
+    world.agents.push(agent);
+
+    for (let tick = 1; tick < FORAGE_TICKS; tick += 1) {
+      stepAgent(world, agent);
+      expect(agent.hunger).toBe(20);
+      expect(world.tiles[0]?.resource).toEqual({ kind: "food", amount: 7 });
+    }
+    stepAgent(world, agent);
+
+    expect(agent.hunger).toBe(80);
+    expect(world.tiles[0]?.resource).toEqual({ kind: "food", amount: 2 });
+    expect(agent.tasks).toEqual([]);
+    expect(agent.activity).toEqual({ kind: "idle" });
+  });
+
+  it("caps hunger at the maximum after foraging", () => {
+    const target = { x: 0, y: 0 };
+    const world = createWorld(1, 1, [
+      { pos: target, terrain: "plains", resource: { kind: "food", amount: 5 } },
+    ]);
+    const agent = createAgent({ hunger: 70, tasks: [{ kind: "forage", target }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < FORAGE_TICKS; tick += 1) stepAgent(world, agent);
+
+    expect(agent.hunger).toBe(100);
+  });
+
+  it("depletes a sparse food tile without making its amount negative", () => {
+    const target = { x: 0, y: 0 };
+    const world = createWorld(1, 1, [
+      { pos: target, terrain: "plains", resource: { kind: "food", amount: 3 } },
+    ]);
+    const agent = createAgent({ hunger: 20, tasks: [{ kind: "forage", target }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < FORAGE_TICKS; tick += 1) stepAgent(world, agent);
+
+    expect(world.tiles[0]?.resource).toBeNull();
+  });
+
+  it("moves onto a food tile before foraging", () => {
+    const target = { x: 2, y: 0 };
+    const world = createWorld(3, 1, [
+      { pos: target, terrain: "plains", resource: { kind: "food", amount: 5 } },
+    ]);
+    const agent = createAgent({ hunger: 20, tasks: [{ kind: "forage", target }] });
+    world.agents.push(agent);
+
+    for (let tick = 1; tick < 2 * MOVE_TICKS_PER_TILE + FORAGE_TICKS; tick += 1) {
+      stepAgent(world, agent);
+    }
+    expect(agent.hunger).toBe(20);
+    stepAgent(world, agent);
+
+    expect(agent.pos).toEqual(target);
+    expect(agent.hunger).toBe(80);
+    expect(world.tiles[2]?.resource).toBeNull();
+  });
+
   it("completes moveTo after distance times MOVE_TICKS_PER_TILE ticks", () => {
     const world = createWorld(3, 1);
     const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
