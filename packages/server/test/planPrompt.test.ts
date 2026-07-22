@@ -182,7 +182,11 @@ describe("buildPlanPrompt", () => {
     expect(prompt).toContain(`costs ${HOUSE_WOOD_COST} wood for a new house`);
     expect(prompt).toContain("never add moveTo onto a build site");
     expect(prompt).toContain("rest: when fatigue is low");
+    expect(prompt).toContain(
+      "moveTo steps before positional actions are optional; the town inserts needed movement automatically",
+    );
     expect(prompt).toContain("deposit: use an explicit moveTo to the stockpile first");
     expect(prompt).toContain(`1..${MAX_PLAN_TASKS} tasks`);
+    expect(prompt).toContain("limit applies to the tasks you author");
   });
 });

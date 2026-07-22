@@ -116,9 +116,10 @@ export function buildPlanPrompt(world: WorldState, agent: AgentState): string {
     `- forage: when hungry and stored food cannot provide a meal; target a live food tile and eat there.`,
     `- build: choose the house site only; this action navigates adjacent and builds. It costs ${HOUSE_WOOD_COST} wood for a new house; never add moveTo onto a build site.`,
     `- rest: when fatigue is low; it navigates to a completed house or the stockpile.`,
+    "- moveTo steps before positional actions are optional; the town inserts needed movement automatically.",
     `- deposit: use an explicit moveTo to the stockpile first, then deposit while beside it.`,
     "Reply with ONLY a JSON object and no prose or code fences:",
     `{"reasoning": "<one short sentence>", "plan": ${taskSchema}}`,
-    `The plan must contain 1..${MAX_PLAN_TASKS} tasks.`,
+    `The plan must contain 1..${MAX_PLAN_TASKS} tasks; this limit applies to the tasks you author, before the town inserts movement.`,
   ].join("\n");
 }

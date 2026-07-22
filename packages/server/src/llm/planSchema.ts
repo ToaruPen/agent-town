@@ -11,6 +11,8 @@ import {
   type WorldState,
 } from "@agent-town/shared";
 
+import { findNearestReachable } from "../sim/astar.js";
+
 export type PlanParseResult =
   | { ok: true; tasks: AgentTask[]; reasoning: string }
   | { ok: false; error: string };
@@ -38,14 +40,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isPosition(value: unknown): value is Position {
-  return (
-    isRecord(value) &&
-    typeof value.x === "number" &&
-    Number.isInteger(value.x) &&
-    typeof value.y === "number" &&
-    Number.isInteger(value.y)
-  );
+function parsePosition(value: unknown): Position | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.x !== "number" || !Number.isInteger(value.x)) return null;
+  if (typeof value.y !== "number" || !Number.isInteger(value.y)) return null;
+  return { x: value.x, y: value.y };
 }
 
 function isResourceKind(value: unknown): value is ResourceKind {
@@ -53,22 +52,26 @@ function isResourceKind(value: unknown): value is ResourceKind {
 }
 
 function parseResourceTask(value: Record<string, unknown>): AgentTask | null {
-  if (value.kind === "moveTo" && isPosition(value.dest)) {
-    return { kind: "moveTo", dest: value.dest };
+  if (value.kind === "moveTo") {
+    const dest = parsePosition(value.dest);
+    return dest === null ? null : { kind: "moveTo", dest };
   }
-  if (value.kind === "gather" && isResourceKind(value.resource) && isPosition(value.target)) {
-    return { kind: "gather", resource: value.resource, target: value.target };
+  if (value.kind === "gather" && isResourceKind(value.resource)) {
+    const target = parsePosition(value.target);
+    return target === null ? null : { kind: "gather", resource: value.resource, target };
   }
   return null;
 }
 
 function parseSurvivalTask(value: Record<string, unknown>): AgentTask | null {
   if (value.kind === "eat") return { kind: "eat" };
-  if (value.kind === "forage" && isPosition(value.target)) {
-    return { kind: "forage", target: value.target };
+  if (value.kind === "forage") {
+    const target = parsePosition(value.target);
+    return target === null ? null : { kind: "forage", target };
   }
-  if (value.kind === "build" && isPosition(value.pos)) {
-    return { kind: "build", pos: value.pos };
+  if (value.kind === "build") {
+    const pos = parsePosition(value.pos);
+    return pos === null ? null : { kind: "build", pos };
   }
   if (value.kind === "rest") return { kind: "rest" };
   if (value.kind === "deposit") return { kind: "deposit" };
@@ -301,20 +304,87 @@ function validateAutonomousTask(
   world: WorldState,
   task: AgentTask,
   budget: ValidationBudget,
+  preserveCursor: boolean,
 ): TaskValidationResult | null {
   let result: TaskValidationResult;
   if (task.kind === "eat") result = validateEat(budget);
   else if (task.kind === "build") result = validateBuild(world, task.pos, budget);
   else if (task.kind === "rest") result = { ok: true };
   else return null;
-  if (result.ok) budget.cursor = null;
+  if (result.ok && !preserveCursor) budget.cursor = null;
   return result;
+}
+
+function normalizedRestTarget(world: WorldState, cursor: Position): Position | null {
+  const houses = world.buildings.filter(({ complete }) => complete).map(({ pos }) => pos);
+  return (
+    findNearestReachable(world, cursor, houses) ??
+    findNearestReachable(world, cursor, [world.stockpile.pos])
+  );
+}
+
+function validateExactArrival(
+  cursor: Position,
+  target: Position,
+  error: string,
+): TaskValidationResult {
+  return positionsEqual(cursor, target) ? { ok: true } : { ok: false, error };
+}
+
+function validateAdjacentArrival(
+  cursor: Position,
+  target: Position,
+  error: string,
+): TaskValidationResult {
+  return isAdjacentOrOn(cursor, target) ? { ok: true } : { ok: false, error };
+}
+
+function validateRestArrival(world: WorldState, cursor: Position): TaskValidationResult {
+  const target = normalizedRestTarget(world, cursor);
+  if (target === null) return { ok: false, error: "rest destination is unreachable" };
+  return validateExactArrival(cursor, target, "rest requires an explicit position on its target");
+}
+
+function validateNormalizedArrival(
+  world: WorldState,
+  task: AgentTask,
+  budget: ValidationBudget,
+): TaskValidationResult {
+  if (task.kind === "moveTo" || task.kind === "deposit") return { ok: true };
+  if (budget.cursor === null) return { ok: false, error: `${task.kind} requires a known position` };
+  if (task.kind === "forage")
+    return validateExactArrival(
+      budget.cursor,
+      task.target,
+      "forage requires an explicit position on its target",
+    );
+  if (task.kind === "gather")
+    return validateAdjacentArrival(
+      budget.cursor,
+      task.target,
+      "gather requires an explicit position beside its target",
+    );
+  if (task.kind === "eat")
+    return validateAdjacentArrival(
+      budget.cursor,
+      world.stockpile.pos,
+      "eat requires an explicit position beside the stockpile",
+    );
+  if (task.kind === "build")
+    return validateAdjacentArrival(
+      budget.cursor,
+      task.pos,
+      "build requires an explicit position beside its target",
+    );
+  if (task.kind === "rest") return validateRestArrival(world, budget.cursor);
+  return { ok: true };
 }
 
 function validateTask(
   world: WorldState,
   task: AgentTask,
   budget: ValidationBudget,
+  preserveCursor: boolean,
 ): { ok: true } | { ok: false; error: string } {
   if (task.kind === "deposit") return validateDeposit(world, budget);
   if (task.kind === "moveTo") {
@@ -326,7 +396,7 @@ function validateTask(
   if (task.kind === "forage") return validateForage(world, task.target, budget);
   if (task.kind === "gather") return validateGather(world, task, budget);
   return (
-    validateAutonomousTask(world, task, budget) ?? {
+    validateAutonomousTask(world, task, budget, preserveCursor) ?? {
       ok: false,
       error: `task kind ${task.kind} is not executable`,
     }
@@ -349,20 +419,23 @@ function taskEntersBuildSite(tasks: AgentTask[]): boolean {
   });
 }
 
-export function validatePlanExecutability(
-  world: WorldState,
+function validatePlanShape(
   agent: AgentState,
   tasks: AgentTask[],
-): { ok: true } | { ok: false; error: string } {
+  normalized: boolean,
+): TaskValidationResult {
   if (tasks.length === 0) return { ok: false, error: `agent ${agent.id} plan is empty` };
-  if (tasks.length > MAX_PLAN_TASKS) {
+  if (!normalized && tasks.length > MAX_PLAN_TASKS) {
     return { ok: false, error: `agent ${agent.id} plan exceeds ${MAX_PLAN_TASKS} tasks` };
   }
   if (taskEntersBuildSite(tasks)) {
     return { ok: false, error: `agent ${agent.id} task must not enter a build site` };
   }
+  return { ok: true };
+}
 
-  const budget: ValidationBudget = {
+function createValidationBudget(world: WorldState, agent: AgentState): ValidationBudget {
+  return {
     carrying: agent.carrying,
     cursor: agent.pos,
     food: world.stockpile.food,
@@ -370,10 +443,52 @@ export function validatePlanExecutability(
     newHouseSites: new Set(),
     resources: snapshotResources(world),
   };
+}
+
+function validateTasks(
+  world: WorldState,
+  agent: AgentState,
+  tasks: AgentTask[],
+  budget: ValidationBudget,
+  normalized: boolean,
+): TaskValidationResult {
   for (const [index, task] of tasks.entries()) {
-    const result = validateTask(world, task, budget);
+    if (normalized) {
+      const arrival = validateNormalizedArrival(world, task, budget);
+      if (!arrival.ok) {
+        return { ok: false, error: `agent ${agent.id} task[${index}]: ${arrival.error}` };
+      }
+    }
+    const result = validateTask(world, task, budget, normalized);
     if (!result.ok)
       return { ok: false, error: `agent ${agent.id} task[${index}]: ${result.error}` };
   }
   return { ok: true };
+}
+
+function validatePlan(
+  world: WorldState,
+  agent: AgentState,
+  tasks: AgentTask[],
+  normalized: boolean,
+): TaskValidationResult {
+  const shape = validatePlanShape(agent, tasks, normalized);
+  if (!shape.ok) return shape;
+  return validateTasks(world, agent, tasks, createValidationBudget(world, agent), normalized);
+}
+
+export function validatePlanExecutability(
+  world: WorldState,
+  agent: AgentState,
+  tasks: AgentTask[],
+): { ok: true } | { ok: false; error: string } {
+  return validatePlan(world, agent, tasks, false);
+}
+
+export function validateNormalizedPlanExecutability(
+  world: WorldState,
+  agent: AgentState,
+  tasks: AgentTask[],
+): { ok: true } | { ok: false; error: string } {
+  return validatePlan(world, agent, tasks, true);
 }

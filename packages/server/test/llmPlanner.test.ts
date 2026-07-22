@@ -1,4 +1,11 @@
-import type { AgentState, AgentTask, Tile, WorldState } from "@agent-town/shared";
+import {
+  type AgentState,
+  type AgentTask,
+  FOOD_PER_MEAL,
+  MAX_PLAN_TASKS,
+  type Tile,
+  type WorldState,
+} from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ClaudeRunner } from "../src/llm/claudeRunner.js";
@@ -49,9 +56,35 @@ afterEach(() => {
 });
 
 describe("LlmPlanner", () => {
+  it("inserts movement before validating a gather-only LLM plan", async () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    world.tiles[1] = { terrain: "plains", resource: null };
+    const gather: AgentTask = {
+      kind: "gather",
+      resource: "wood",
+      target: { x: 2, y: 0 },
+    };
+    const run = vi.fn(async () => ({ ok: true as const, text: validResponse([gather]) }));
+    const runner: ClaudeRunner = { run };
+    const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+
+    expect(result).toEqual({
+      tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }, gather],
+      source: "llm",
+      reasoning: "Gather nearby wood.",
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(fallback.plan).not.toHaveBeenCalled();
+  });
+
   it("returns executable tasks and reasoning from a valid LLM response", async () => {
     const agent = createAgent();
     const world = createWorld(agent);
+    world.tiles[1] = { terrain: "plains", resource: null };
     const tasks: AgentTask[] = [
       { kind: "moveTo", dest: { x: 2, y: 0 } },
       { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
@@ -74,6 +107,38 @@ describe("LlmPlanner", () => {
     expect(log).toHaveBeenCalledWith(
       JSON.stringify({ at: "llmPlanner", agent: agent.id, outcome: "llm" }),
     );
+  });
+
+  it("sanitizes extra ok fields on authored positions before normalization", async () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    world.tiles[1] = { terrain: "plains", resource: null };
+    const run = vi.fn(async () => ({
+      ok: true as const,
+      text: JSON.stringify({
+        reasoning: "Move beside the wood and gather it.",
+        plan: [
+          { kind: "moveTo", dest: { x: 1, y: 0, ok: true } },
+          { kind: "gather", resource: "wood", target: { x: 2, y: 0, ok: true } },
+        ],
+      }),
+    }));
+    const runner: ClaudeRunner = { run };
+    const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+
+    expect(result).toEqual({
+      tasks: [
+        { kind: "moveTo", dest: { x: 1, y: 0 } },
+        { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
+      ],
+      source: "llm",
+      reasoning: "Move beside the wood and gather it.",
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(fallback.plan).not.toHaveBeenCalled();
   });
 
   it("never calls the runner with an empty prompt", async () => {
@@ -118,6 +183,7 @@ describe("LlmPlanner", () => {
   it("returns LLM tasks when garbage is followed by a valid response", async () => {
     const agent = createAgent();
     const world = createWorld(agent);
+    world.tiles[1] = { terrain: "plains", resource: null };
     const tasks: AgentTask[] = [{ kind: "moveTo", dest: { x: 2, y: 0 } }];
     const run = vi
       .fn<ClaudeRunner["run"]>()
@@ -159,5 +225,51 @@ describe("LlmPlanner", () => {
 
     expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries plans whose authored movement cannot reach its destination", async () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const fallbackTasks: AgentTask[] = [{ kind: "deposit" }];
+    const run = vi.fn(async () => ({
+      ok: true as const,
+      text: validResponse([{ kind: "moveTo", dest: { x: 2, y: 0 } }]),
+    }));
+    const runner: ClaudeRunner = { run };
+    const fallback: Planner = { plan: vi.fn((): AgentTask[] => fallbackTasks) };
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+
+    expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(2);
+    for (const [line] of log.mock.calls) expect(line).toContain("unreachable");
+  });
+
+  it("accepts MAX_PLAN_TASKS authored actions when normalization inserts extra movement", async () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    world.tiles = [
+      { terrain: "plains", resource: { kind: "food", amount: FOOD_PER_MEAL * 4 } },
+      { terrain: "plains", resource: null },
+      { terrain: "forest", resource: { kind: "food", amount: FOOD_PER_MEAL * 4 } },
+    ];
+    const authored: AgentTask[] = Array.from({ length: MAX_PLAN_TASKS }, (_, index) => ({
+      kind: "forage",
+      target: index % 2 === 0 ? { x: 2, y: 0 } : { x: 0, y: 0 },
+    }));
+    const run = vi.fn(async () => ({ ok: true as const, text: validResponse(authored) }));
+    const runner: ClaudeRunner = { run };
+    const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+
+    expect(result.source).toBe("llm");
+    expect(result.tasks.filter(({ kind }) => kind === "forage")).toHaveLength(MAX_PLAN_TASKS);
+    expect(result.tasks.length).toBeGreaterThan(MAX_PLAN_TASKS);
+    expect(run).toHaveBeenCalledOnce();
+    expect(fallback.plan).not.toHaveBeenCalled();
   });
 });

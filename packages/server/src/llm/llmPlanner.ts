@@ -2,8 +2,9 @@ import type { AgentState, AgentTask, PlanSource, WorldState } from "@agent-town/
 
 import type { Planner } from "../sim/fakePlanner.js";
 import type { ClaudeRunner } from "./claudeRunner.js";
+import { normalizePlan } from "./normalizePlan.js";
 import { buildPlanPrompt } from "./planPrompt.js";
-import { parsePlanResponse, validatePlanExecutability } from "./planSchema.js";
+import { parsePlanResponse, validateNormalizedPlanExecutability } from "./planSchema.js";
 
 const PLAN_ATTEMPTS = 2;
 
@@ -42,14 +43,19 @@ export class LlmPlanner {
         continue;
       }
 
-      const executable = validatePlanExecutability(world, agent, parsed.tasks);
+      const normalized = normalizePlan(world, agent, parsed.tasks);
+      if (!normalized.ok) {
+        logAttempt(agent, "error", normalized.error);
+        continue;
+      }
+      const executable = validateNormalizedPlanExecutability(world, agent, normalized.tasks);
       if (!executable.ok) {
         logAttempt(agent, "error", executable.error);
         continue;
       }
 
       logAttempt(agent, "llm");
-      return { tasks: parsed.tasks, source: "llm", reasoning: parsed.reasoning };
+      return { tasks: normalized.tasks, source: "llm", reasoning: parsed.reasoning };
     }
 
     return { tasks: this.fallback.plan(world, agent), source: "fake" };
