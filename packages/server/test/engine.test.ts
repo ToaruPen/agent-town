@@ -1,5 +1,9 @@
 import {
   type AgentTask,
+  BERRY_REGROWTH_PER_DAY,
+  CARRY_CAPACITY,
+  COLD_HEALTH_PER_DAY,
+  DAYS_PER_SEASON,
   EAT_TICKS,
   FATIGUE_DECAY_PER_DAY,
   FATIGUE_MAX,
@@ -9,8 +13,12 @@ import {
   HUNGER_EAT_THRESHOLD,
   HUNGER_MAX,
   MOVE_TICKS_PER_TILE,
+  SEASONS,
   STARVATION_HEALTH_PER_DAY,
   TICKS_PER_DAY,
+  TREE_REGROWTH_CAP,
+  TREE_REGROWTH_PER_DAY,
+  WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +54,28 @@ function runAcceptance(seed: number): WorldState {
   return engine.world;
 }
 
+function runSingleAgentYear(wood: number): WorldState {
+  const world = generateWorld(42);
+  const agent = world.agents[0];
+  if (agent === undefined) throw new Error("missing test agent");
+  world.width = 1;
+  world.height = 1;
+  world.tiles = [{ terrain: "plains", resource: null }];
+  world.agents = [agent];
+  world.stockpile = {
+    pos: { x: 0, y: 0 },
+    wood,
+    food: DAYS_PER_SEASON * SEASONS.length * FOOD_PER_MEAL,
+  };
+  agent.pos = { x: 0, y: 0 };
+  agent.tasks = [];
+  const engine = createEngine(world, idlePlanner, () => 0);
+  const ticksPerYear = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY;
+
+  for (let step = 0; step < ticksPerYear; step += 1) engine.step();
+  return world;
+}
+
 describe("createEngine", () => {
   it("gathers wood and food safely and deterministically over 3000 steps", () => {
     const first = runAcceptance(42);
@@ -67,6 +97,252 @@ describe("createEngine", () => {
     expect(engine.isDayBoundary()).toBe(true);
     engine.world.tick = TICKS_PER_DAY + 1;
     expect(engine.isDayBoundary()).toBe(false);
+  });
+
+  it("runs daily resource hooks only at positive day-boundary ticks", () => {
+    const world = generateWorld(42);
+    world.width = 1;
+    world.height = 1;
+    world.tiles = [{ terrain: "plains", resource: { kind: "food", amount: 10 } }];
+    world.agents = [];
+    const engine = createEngine(world, idlePlanner, () => 0);
+    const resource = world.tiles[0]?.resource;
+    if (resource === null || resource === undefined) throw new Error("missing test resource");
+    resource.amount = 1;
+
+    engine.step();
+    expect(resource.amount).toBe(1);
+
+    world.tick = TICKS_PER_DAY - 2;
+    engine.step();
+    expect(resource.amount).toBe(1);
+
+    engine.step();
+    expect(world.tick).toBe(TICKS_PER_DAY);
+    expect(resource.amount).toBe(1 + BERRY_REGROWTH_PER_DAY);
+    expect(engine.drainDirtyTiles()).toEqual([0]);
+
+    engine.step();
+    expect(resource.amount).toBe(1 + BERRY_REGROWTH_PER_DAY);
+    expect(engine.drainDirtyTiles()).toEqual([]);
+  });
+
+  it("regrows berries up to each tile's captured initial amount, including depleted tiles", () => {
+    const world = generateWorld(42);
+    world.width = 3;
+    world.height = 1;
+    world.tiles = [
+      { terrain: "plains", resource: { kind: "food", amount: 10 } },
+      { terrain: "plains", resource: { kind: "food", amount: 10 } },
+      { terrain: "plains", resource: { kind: "food", amount: 3 } },
+    ];
+    world.agents = [];
+    const engine = createEngine(world, idlePlanner, () => 0);
+    world.tiles[0] = { terrain: "plains", resource: { kind: "food", amount: 8 } };
+    world.tiles[1] = { terrain: "plains", resource: null };
+    world.tiles[2] = { terrain: "plains", resource: null };
+    world.tick = TICKS_PER_DAY - 1;
+
+    engine.step();
+
+    expect(world.tiles.map(({ resource }) => resource)).toEqual([
+      { kind: "food", amount: 10 },
+      { kind: "food", amount: BERRY_REGROWTH_PER_DAY },
+      { kind: "food", amount: 3 },
+    ]);
+    expect(engine.drainDirtyTiles()).toEqual([0, 1, 2]);
+  });
+
+  it("marks both preceding agent gathering and boundary regrowth as dirty", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    const woodTarget = { x: 1, y: 0 };
+    world.width = 2;
+    world.height = 1;
+    world.tiles = [
+      { terrain: "plains", resource: { kind: "food", amount: 10 } },
+      { terrain: "forest", resource: { kind: "wood", amount: 10 } },
+    ];
+    world.agents = [agent];
+    agent.pos = { x: 0, y: 0 };
+    agent.tasks = [{ kind: "gather", resource: "wood", target: woodTarget }];
+    agent.activity = { kind: "gathering", target: woodTarget, ticksRemaining: 1 };
+    const engine = createEngine(world, idlePlanner, () => 0);
+    const food = world.tiles[0]?.resource;
+    if (food === null || food === undefined) throw new Error("missing test food");
+    food.amount = 1;
+    world.tick = TICKS_PER_DAY - 1;
+
+    engine.step();
+
+    expect(world.tiles.map(({ resource }) => resource)).toEqual([
+      { kind: "food", amount: 1 + BERRY_REGROWTH_PER_DAY },
+      { kind: "wood", amount: 10 - CARRY_CAPACITY + TREE_REGROWTH_PER_DAY },
+    ]);
+    expect(engine.drainDirtyTiles()).toEqual([0, 1]);
+  });
+
+  it("regrows trees only up to the tree cap without reducing larger initial amounts", () => {
+    const world = generateWorld(42);
+    world.width = 4;
+    world.height = 1;
+    world.tiles = [
+      { terrain: "forest", resource: { kind: "wood", amount: TREE_REGROWTH_CAP + 10 } },
+      { terrain: "forest", resource: { kind: "wood", amount: TREE_REGROWTH_CAP } },
+      { terrain: "forest", resource: { kind: "wood", amount: TREE_REGROWTH_CAP - 1 } },
+      { terrain: "forest", resource: null },
+    ];
+    world.agents = [];
+    const engine = createEngine(world, idlePlanner, () => 0);
+    world.tick = TICKS_PER_DAY - 1;
+
+    engine.step();
+
+    expect(world.tiles.map(({ resource }) => resource)).toEqual([
+      { kind: "wood", amount: TREE_REGROWTH_CAP + 10 },
+      { kind: "wood", amount: TREE_REGROWTH_CAP },
+      { kind: "wood", amount: TREE_REGROWTH_CAP },
+      { kind: "wood", amount: TREE_REGROWTH_PER_DAY },
+    ]);
+    expect(engine.drainDirtyTiles()).toEqual([2, 3]);
+  });
+
+  it("pauses berry and tree regrowth during winter", () => {
+    const world = generateWorld(42);
+    world.width = 2;
+    world.height = 1;
+    world.tiles = [
+      { terrain: "plains", resource: { kind: "food", amount: 10 } },
+      { terrain: "forest", resource: { kind: "wood", amount: 10 } },
+    ];
+    world.agents = [];
+    const engine = createEngine(world, idlePlanner, () => 0);
+    world.tiles[0] = { terrain: "plains", resource: { kind: "food", amount: 1 } };
+    world.tiles[1] = { terrain: "forest", resource: null };
+    world.tick = 3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1;
+
+    engine.step();
+
+    expect(world.tiles.map(({ resource }) => resource)).toEqual([
+      { kind: "food", amount: 1 },
+      null,
+    ]);
+    expect(engine.drainDirtyTiles()).toEqual([]);
+  });
+
+  it("burns the exact population requirement at each winter day boundary and never outside winter", () => {
+    const world = generateWorld(42);
+    const dailyRequirement = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY;
+    world.stockpile.wood = dailyRequirement * 3;
+    const engine = createEngine(world, idlePlanner, () => 0);
+    world.tick = 2 * DAYS_PER_SEASON * TICKS_PER_DAY - 1;
+
+    engine.step();
+    expect(world.stockpile.wood).toBe(dailyRequirement * 3);
+
+    world.tick = 3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1;
+    engine.step();
+    expect(world.stockpile.wood).toBe(dailyRequirement * 2);
+
+    world.tick += TICKS_PER_DAY - 1;
+    engine.step();
+    expect(world.stockpile.wood).toBe(dailyRequirement);
+  });
+
+  it("consumes remaining wood and damages every living agent when the winter requirement is short", () => {
+    const world = generateWorld(42);
+    const dailyRequirement = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY;
+    world.stockpile.wood = dailyRequirement - 1;
+    world.tick = 3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(world.stockpile.wood).toBe(0);
+    expect(world.agents.map(({ health }) => health)).toEqual(
+      world.agents.map(() => HEALTH_MAX - COLD_HEALTH_PER_DAY),
+    );
+  });
+
+  it("does not cause cold damage when the full winter wood requirement is available", () => {
+    const world = generateWorld(42);
+    world.stockpile.wood = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY;
+    world.tick = 3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(world.agents.map(({ health }) => health)).toEqual(world.agents.map(() => HEALTH_MAX));
+  });
+
+  it("applies winter cold and records multiple deaths before returning at the boundary tick", () => {
+    const world = generateWorld(42);
+    const [first, second, survivor] = world.agents;
+    if (first === undefined || second === undefined || survivor === undefined) {
+      throw new Error("missing test agents");
+    }
+    first.health = COLD_HEALTH_PER_DAY;
+    second.health = COLD_HEALTH_PER_DAY - 1;
+    survivor.health = COLD_HEALTH_PER_DAY + 1;
+    world.stockpile.wood = 0;
+    const winterStart = 3 * DAYS_PER_SEASON * TICKS_PER_DAY;
+    world.tick = winterStart - 1;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(world.tick).toBe(winterStart);
+    expect(world.agents).toEqual([survivor]);
+    expect(survivor.health).toBe(1);
+    expect(world.deaths).toEqual([
+      { name: first.name, tick: winterStart, cause: "cold" },
+      { name: second.name, tick: winterStart, cause: "cold" },
+    ]);
+  });
+
+  it("excludes a preceding-tick starvation death from winter burn population", () => {
+    const world = generateWorld(42);
+    const [doomed, survivor] = world.agents;
+    if (doomed === undefined || survivor === undefined) throw new Error("missing test agents");
+    world.agents = [doomed, survivor];
+    doomed.hunger = 0;
+    doomed.health = STARVATION_HEALTH_PER_DAY / TICKS_PER_DAY / 2;
+    world.stockpile.wood = WOOD_BURN_PER_AGENT_PER_DAY;
+    const winterStart = 3 * DAYS_PER_SEASON * TICKS_PER_DAY;
+    world.tick = winterStart - 1;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(world.tick).toBe(winterStart);
+    expect(world.stockpile.wood).toBe(0);
+    expect(world.agents).toEqual([survivor]);
+    expect(survivor.health).toBe(HEALTH_MAX);
+    expect(world.deaths).toEqual([
+      { name: doomed.name, tick: winterStart - 1, cause: "starvation" },
+    ]);
+  });
+
+  it("keeps a stocked colony alive through a full deterministic eight-day year", () => {
+    const winterReserve = DAYS_PER_SEASON * WOOD_BURN_PER_AGENT_PER_DAY;
+
+    const first = runSingleAgentYear(winterReserve);
+    const second = runSingleAgentYear(winterReserve);
+
+    expect(first.agents).toHaveLength(1);
+    expect(first.agents[0]?.health).toBe(HEALTH_MAX);
+    expect(first.deaths).toEqual([]);
+    expect(first.stockpile.wood).toBe(0);
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+  });
+
+  it("makes an unprepared colony lose health during the winter of a full year", () => {
+    const world = runSingleAgentYear(0);
+
+    expect(world.agents).toHaveLength(1);
+    expect(world.agents[0]?.health).toBe(HEALTH_MAX - DAYS_PER_SEASON * COLD_HEALTH_PER_DAY);
+    expect(world.deaths).toEqual([]);
   });
 
   it("derives fractional per-tick gauge decay from per-day constants", () => {

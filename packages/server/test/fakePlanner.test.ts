@@ -1,10 +1,12 @@
 import {
   type AgentState,
+  DAYS_PER_SEASON,
   FOOD_PER_MEAL,
   HUNGER_EAT_THRESHOLD,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
   type Tile,
+  WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
@@ -110,5 +112,31 @@ describe("FakePlanner", () => {
       { kind: "moveTo", dest: { x: 1, y: 0 } },
       { kind: "gather", resource: "food", target: { x: 1, y: 0 } },
     ]);
+  });
+
+  it("gathers wood only below the current population's full-winter reserve", () => {
+    const agent = createAgent();
+    const woodTarget = { x: 1, y: 0 };
+    const world = createWorld(agent, [
+      { terrain: "plains", resource: null },
+      { terrain: "forest", resource: { kind: "wood", amount: 10 } },
+    ]);
+    world.agents.push(createAgent({ id: "agent-2", name: "Birch" }));
+    world.stockpile.food = STOCKPILE_TARGET_FOOD * world.agents.length;
+    const winterReserve = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+    const planner = new FakePlanner(() => 0);
+
+    world.stockpile.wood = winterReserve - 1;
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "moveTo", dest: woodTarget },
+      { kind: "gather", resource: "wood", target: woodTarget },
+    ]);
+
+    world.stockpile.wood = winterReserve;
+    expect(planner.plan(world, agent)).not.toContainEqual({
+      kind: "gather",
+      resource: "wood",
+      target: woodTarget,
+    });
   });
 });

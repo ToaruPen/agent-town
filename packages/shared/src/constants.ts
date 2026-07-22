@@ -20,6 +20,7 @@ export const COLD_HEALTH_PER_DAY = 15; // winter with no wood to burn
 export const WOOD_BURN_PER_AGENT_PER_DAY = 2; // winter only
 export const BERRY_REGROWTH_PER_DAY = 4; // per food tile, spring/summer/autumn only, cap at initial amount
 export const TREE_REGROWTH_PER_DAY = 1; // per depleted forest tile, cap 30
+export const TREE_REGROWTH_CAP = 30;
 export const HOUSE_WOOD_COST = 15;
 export const HOUSE_BUILD_TICKS = 400;
 export const HOUSE_CAPACITY = 2;

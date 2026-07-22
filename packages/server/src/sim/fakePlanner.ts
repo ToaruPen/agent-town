@@ -1,12 +1,13 @@
 import {
   type AgentState,
   type AgentTask,
+  DAYS_PER_SEASON,
   HUNGER_EAT_THRESHOLD,
   type Position,
   type ResourceKind,
   STOCKPILE_TARGET_FOOD,
-  STOCKPILE_TARGET_WOOD,
   WANDER_RADIUS,
+  WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 
@@ -76,7 +77,8 @@ export class FakePlanner implements Planner {
 
     if (agent.hunger < HUNGER_EAT_THRESHOLD) return [{ kind: "eat" }];
 
-    if (world.stockpile.wood < STOCKPILE_TARGET_WOOD) {
+    const winterWoodTarget = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+    if (world.stockpile.wood < winterWoodTarget) {
       const target = findNearestResource(world, agent, "wood");
       if (target !== null) return gatherTasks("wood", target);
     } else if (world.stockpile.food < STOCKPILE_TARGET_FOOD * world.agents.length) {

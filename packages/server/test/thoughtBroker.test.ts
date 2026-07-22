@@ -1,6 +1,9 @@
 import {
   type AgentState,
   type AgentTask,
+  COLD_HEALTH_PER_DAY,
+  DAYS_PER_SEASON,
+  HEALTH_MAX,
   type PlanSource,
   THINK_COOLDOWN_TICKS,
   TICKS_PER_DAY,
@@ -93,6 +96,39 @@ describe("ThoughtBroker", () => {
 
     expect(planFn).toHaveBeenCalledOnce();
     expect(agent.thinking).toBe(true);
+
+    pending.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await pending.promise;
+  });
+
+  it("observes winter hooks after engine step returns at the day boundary", async () => {
+    const engine = createTestEngine();
+    const doomed = getAgent(engine, 0);
+    const observer = getAgent(engine, 1);
+    engine.world.agents = [doomed, observer];
+    doomed.health = COLD_HEALTH_PER_DAY;
+    doomed.tasks = [{ kind: "deposit" }];
+    observer.tasks = [{ kind: "deposit" }];
+    engine.world.stockpile.wood = 1;
+    const winterStart = 3 * DAYS_PER_SEASON * TICKS_PER_DAY;
+    engine.world.tick = winterStart - 1;
+    const pending = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+    );
+    const broker = new ThoughtBroker({ engine, llmAgentIds: [observer.id], planFn });
+
+    engine.step();
+    broker.onTick();
+
+    expect(planFn).toHaveBeenCalledOnce();
+    const observedWorld = planFn.mock.calls[0]?.[0];
+    expect(observedWorld?.tick).toBe(winterStart);
+    expect(observedWorld?.stockpile.wood).toBe(0);
+    expect(observer.health).toBe(HEALTH_MAX - COLD_HEALTH_PER_DAY);
+    expect(observedWorld?.deaths).toEqual([
+      { name: doomed.name, tick: winterStart, cause: "cold" },
+    ]);
 
     pending.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
     await pending.promise;
