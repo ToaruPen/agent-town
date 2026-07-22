@@ -5,6 +5,7 @@ import {
   FOOD_PER_MEAL,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
+  MAX_PLAN_REASONING_CHARS,
   MAX_PLAN_TASKS,
   type Tile,
   type WorldState,
@@ -111,6 +112,25 @@ describe("parsePlanResponse", () => {
     const plan = Array.from({ length: MAX_PLAN_TASKS + 1 }, () => ({ kind: "deposit" }));
 
     expectParseFailure(parsePlanResponse(JSON.stringify({ reasoning: "Too much.", plan })));
+  });
+
+  it("accepts reasoning exactly at the Unicode code point limit", () => {
+    const reasoning = "🧠".repeat(MAX_PLAN_REASONING_CHARS);
+
+    expect(parsePlanResponse(JSON.stringify({ reasoning, plan: [] }))).toEqual({
+      ok: true,
+      reasoning,
+      tasks: [],
+    });
+  });
+
+  it("rejects reasoning one astral Unicode code point over the limit", () => {
+    const reasoning = "🧠".repeat(MAX_PLAN_REASONING_CHARS + 1);
+
+    expect(parsePlanResponse(JSON.stringify({ reasoning, plan: [] }))).toEqual({
+      ok: false,
+      error: `reasoning exceeds ${MAX_PLAN_REASONING_CHARS} characters`,
+    });
   });
 
   it("parses every survival task kind", () => {

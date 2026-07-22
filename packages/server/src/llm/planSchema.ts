@@ -4,6 +4,7 @@ import {
   CARRY_CAPACITY,
   FOOD_PER_MEAL,
   HOUSE_WOOD_COST,
+  MAX_PLAN_REASONING_CHARS,
   MAX_PLAN_TASKS,
   type Position,
   type ResourceKind,
@@ -124,6 +125,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function exceedsUnicodeCodePointLimit(value: string, limit: number): boolean {
+  let length = 0;
+  for (const _codePoint of value) {
+    length += 1;
+    if (length > limit) return true;
+  }
+  return false;
+}
+
 export function parsePlanResponse(raw: string): PlanParseResult {
   const objectBlock = extractFirstBalancedObject(raw);
   if (objectBlock === null) return { ok: false, error: "response has no balanced JSON object" };
@@ -138,6 +148,12 @@ export function parsePlanResponse(raw: string): PlanParseResult {
   if (!isRecord(parsed)) return { ok: false, error: "response must be an object" };
   if (typeof parsed.reasoning !== "string") {
     return { ok: false, error: "reasoning must be a string" };
+  }
+  if (exceedsUnicodeCodePointLimit(parsed.reasoning, MAX_PLAN_REASONING_CHARS)) {
+    return {
+      ok: false,
+      error: `reasoning exceeds ${MAX_PLAN_REASONING_CHARS} characters`,
+    };
   }
   if (!Array.isArray(parsed.plan)) return { ok: false, error: "plan must be an array" };
   if (parsed.plan.length > MAX_PLAN_TASKS) {

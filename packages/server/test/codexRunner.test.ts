@@ -87,60 +87,87 @@ describe("CliCodexRunner", () => {
       ok: true,
       text: '{"reasoning":"Work.","plan":[]}',
     });
-    expect(spawnMock).toHaveBeenCalledWith(
-      "codex",
-      [
-        "exec",
-        "--strict-config",
-        "--ephemeral",
-        "--ignore-user-config",
-        "--ignore-rules",
-        "--disable",
-        "hooks",
-        "--disable",
-        "plugins",
-        "--disable",
-        "apps",
-        "--disable",
-        "remote_plugin",
-        "--disable",
-        "tool_suggest",
-        "--disable",
-        "multi_agent",
-        "--disable",
-        "shell_tool",
-        "--disable",
-        "unified_exec",
-        "-c",
-        "skills.include_instructions=false",
-        "-c",
-        "skills.bundled.enabled=false",
-        "-c",
-        "include_apps_instructions=false",
-        "-c",
-        "include_collaboration_mode_instructions=false",
-        "-c",
-        "include_environment_context=false",
-        "--sandbox",
-        "read-only",
-        "--skip-git-repo-check",
-        "--color",
-        "never",
-        "--json",
-        "-",
-      ],
-      { cwd: "test-codex-cwd", env: expect.any(Object) },
-    );
+    expect(spawnMock).toHaveBeenCalledOnce();
+    const spawnCall = spawnMock.mock.calls[0];
+    expect(spawnCall?.[0]).toBe("codex");
+    expect(spawnCall?.[1]).toEqual([
+      "exec",
+      "--strict-config",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--disable",
+      "hooks",
+      "--disable",
+      "plugins",
+      "--disable",
+      "apps",
+      "--disable",
+      "remote_plugin",
+      "--disable",
+      "tool_suggest",
+      "--disable",
+      "multi_agent",
+      "--disable",
+      "shell_tool",
+      "--disable",
+      "unified_exec",
+      "--disable",
+      "image_generation",
+      "--disable",
+      "browser_use",
+      "--disable",
+      "browser_use_external",
+      "--disable",
+      "browser_use_full_cdp_access",
+      "--disable",
+      "computer_use",
+      "--disable",
+      "in_app_browser",
+      "--disable",
+      "standalone_web_search",
+      "-c",
+      'web_search="disabled"',
+      "-c",
+      "skills.include_instructions=false",
+      "-c",
+      "skills.bundled.enabled=false",
+      "-c",
+      "include_apps_instructions=false",
+      "-c",
+      "include_collaboration_mode_instructions=false",
+      "-c",
+      "include_environment_context=false",
+      "--sandbox",
+      "read-only",
+      "--skip-git-repo-check",
+      "--color",
+      "never",
+      "--json",
+      "-",
+    ]);
+    const spawnOptions = spawnCall?.[2];
+    expect(spawnOptions?.cwd).toBe("test-codex-cwd");
+    expect(typeof spawnOptions?.env).toBe("object");
     expect(stdin).toBe("Plan Ash's day.");
   });
 
   it("passes only allowlisted environment variables to codex", async () => {
     vi.stubEnv("PATH", "test-bin-path");
     vi.stubEnv("CODEX_HOME", "test-codex-home");
+    vi.stubEnv("CODEX_API_KEY", "test-codex-key");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("OPENAI_ORG", "test-openai-org");
+    vi.stubEnv("OPENAI_ORG_ID", "test-openai-org-id");
+    vi.stubEnv("OPENAI_ORGANIZATION", "test-openai-organization");
+    vi.stubEnv("OPENAI_PROJECT", "test-openai-project");
+    vi.stubEnv("OPENAI_PROJECT_ID", "test-openai-project-id");
+    vi.stubEnv("OPENAI_BASE_URL", "https://test-openai.invalid");
     vi.stubEnv("LC_TEST", "test-locale");
+    vi.stubEnv("HTTP_PROXY", "http://test-proxy.invalid");
     vi.stubEnv("HTTPS_PROXY", "https://test-proxy.invalid");
+    vi.stubEnv("ALL_PROXY", "socks5://test-proxy.invalid");
+    vi.stubEnv("NO_PROXY", "localhost");
     vi.stubEnv("SystemRoot", "test-windows-root");
     vi.stubEnv("ANTHROPIC_API_KEY", "must-not-leak");
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", "must-not-leak");
@@ -159,21 +186,28 @@ describe("CliCodexRunner", () => {
       await resultPromise;
 
       const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env: NodeJS.ProcessEnv };
-      expect(spawnOptions.env).toMatchObject({
-        PATH: "test-bin-path",
-        CODEX_HOME: "test-codex-home",
-        OPENAI_API_KEY: "test-openai-key",
-        OPENAI_ORG: "test-openai-org",
-        LC_TEST: "test-locale",
-        HTTPS_PROXY: "https://test-proxy.invalid",
-        SystemRoot: "test-windows-root",
-      });
-      expect(spawnOptions.env).not.toHaveProperty("ANTHROPIC_API_KEY");
-      expect(spawnOptions.env).not.toHaveProperty("AWS_SECRET_ACCESS_KEY");
-      expect(spawnOptions.env).not.toHaveProperty("APP_SECRET");
-      expect(spawnOptions.env).not.toHaveProperty("NODE_OPTIONS");
-      expect(spawnOptions.env).not.toHaveProperty("LD_PRELOAD");
-      expect(spawnOptions.env).not.toHaveProperty("DYLD_INSERT_LIBRARIES");
+      expect(spawnOptions.env.PATH).toBe("test-bin-path");
+      expect(spawnOptions.env.CODEX_HOME).toBe("test-codex-home");
+      expect(spawnOptions.env.CODEX_API_KEY).toBe("test-codex-key");
+      expect(spawnOptions.env.OPENAI_API_KEY).toBe("test-openai-key");
+      expect(spawnOptions.env.OPENAI_ORG).toBe("test-openai-org");
+      expect(spawnOptions.env.OPENAI_ORG_ID).toBe("test-openai-org-id");
+      expect(spawnOptions.env.OPENAI_ORGANIZATION).toBe("test-openai-organization");
+      expect(spawnOptions.env.OPENAI_PROJECT).toBe("test-openai-project");
+      expect(spawnOptions.env.OPENAI_PROJECT_ID).toBe("test-openai-project-id");
+      expect(spawnOptions.env.OPENAI_BASE_URL).toBe("https://test-openai.invalid");
+      expect(spawnOptions.env.LC_TEST).toBe("test-locale");
+      expect(spawnOptions.env.HTTP_PROXY).toBe("http://test-proxy.invalid");
+      expect(spawnOptions.env.HTTPS_PROXY).toBe("https://test-proxy.invalid");
+      expect(spawnOptions.env.ALL_PROXY).toBe("socks5://test-proxy.invalid");
+      expect(spawnOptions.env.NO_PROXY).toBe("localhost");
+      expect(spawnOptions.env.SystemRoot).toBe("test-windows-root");
+      expect(spawnOptions.env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(spawnOptions.env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+      expect(spawnOptions.env.APP_SECRET).toBeUndefined();
+      expect(spawnOptions.env.NODE_OPTIONS).toBeUndefined();
+      expect(spawnOptions.env.LD_PRELOAD).toBeUndefined();
+      expect(spawnOptions.env.DYLD_INSERT_LIBRARIES).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
