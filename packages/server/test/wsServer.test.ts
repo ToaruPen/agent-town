@@ -52,10 +52,10 @@ function receiveMessages(socket: WebSocket, count: number): Promise<ServerMessag
 }
 
 describe("startServer", () => {
-  it("sends welcome and tick updates and closes cleanly", async () => {
+  it("accepts /ws upgrades, sends updates, and closes cleanly", async () => {
     const port = await getEphemeralPort();
     const server = startServer({ port, seed: 42 });
-    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     let serverClosed = false;
 
     try {
@@ -80,6 +80,24 @@ describe("startServer", () => {
     } finally {
       if (socket.readyState !== WebSocket.CLOSED) socket.terminate();
       if (!serverClosed) await server.close();
+    }
+  });
+
+  it("rejects WebSocket upgrades outside /ws", async () => {
+    const port = await getEphemeralPort();
+    const server = startServer({ port, seed: 42 });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/`);
+
+    try {
+      await expect(
+        new Promise<void>((resolve, reject) => {
+          socket.once("error", () => resolve());
+          socket.once("open", () => reject(new Error("unexpected WebSocket connection")));
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      if (socket.readyState !== WebSocket.CLOSED) socket.terminate();
+      await server.close();
     }
   });
 });

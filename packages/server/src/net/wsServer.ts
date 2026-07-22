@@ -1,3 +1,4 @@
+import { createServer, type Server as HttpServer } from "node:http";
 import { AGENT_NAMES, encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
 import WebSocket, { WebSocketServer } from "ws";
 
@@ -8,6 +9,9 @@ import { createEngine, type Engine } from "../sim/engine.js";
 import { FakePlanner } from "../sim/fakePlanner.js";
 import { createRng } from "../sim/rng.js";
 import { generateWorld } from "../sim/worldGen.js";
+import { createStaticHandler } from "./staticServer.js";
+
+const WEBSOCKET_PATH = "/ws";
 
 export interface ServerHandle {
   close(): Promise<void>;
@@ -17,6 +21,7 @@ interface ServerOptions {
   port: number;
   seed: number;
   llmPlannerEnabled?: boolean;
+  staticDir?: string;
 }
 
 function updateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
@@ -42,16 +47,49 @@ function broadcast(server: WebSocketServer, message: ServerMessage): void {
   }
 }
 
-function closeServer(server: WebSocketServer, interval: NodeJS.Timeout): Promise<void> {
-  clearInterval(interval);
-  for (const client of server.clients) client.terminate();
-
+function closeWebSocketServer(server: WebSocketServer): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((error) => {
       if (error) reject(error);
       else resolve();
     });
   });
+}
+
+function closeHttpServer(server: HttpServer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+async function closeServer(
+  httpServer: HttpServer,
+  socketServer: WebSocketServer,
+  interval: NodeJS.Timeout,
+): Promise<void> {
+  clearInterval(interval);
+  for (const client of socketServer.clients) client.terminate();
+  await Promise.all([closeWebSocketServer(socketServer), closeHttpServer(httpServer)]);
+}
+
+function createWebSocketServer(httpServer: HttpServer, path: string): WebSocketServer {
+  const socketServer = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request, socket, head) => {
+    const requestPath = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (requestPath !== path) {
+      socket.destroy();
+      return;
+    }
+    socketServer.handleUpgrade(request, socket, head, (client) => {
+      socketServer.emit("connection", client, request);
+    });
+  });
+
+  return socketServer;
 }
 
 function createThoughtBroker(
@@ -76,9 +114,10 @@ export function startServer(opts: ServerOptions): ServerHandle {
   const fallback = new FakePlanner(rng);
   const engine = createEngine(generateWorld(opts.seed), fallback, rng);
   const broker = createThoughtBroker(opts.llmPlannerEnabled === true, engine, fallback, rng);
-  const server = new WebSocketServer({ port: opts.port });
+  const httpServer = createServer(createStaticHandler(opts.staticDir));
+  const socketServer = createWebSocketServer(httpServer, WEBSOCKET_PATH);
 
-  server.on("connection", (socket) => {
+  socketServer.on("connection", (socket) => {
     const welcome: ServerMessage = { type: "welcome", state: engine.world };
     socket.send(encodeMessage(welcome));
   });
@@ -86,10 +125,12 @@ export function startServer(opts: ServerOptions): ServerHandle {
   const interval = setInterval(() => {
     engine.step();
     broker?.onTick();
-    broadcast(server, updateMessage(engine));
+    broadcast(socketServer, updateMessage(engine));
   }, 1_000 / TICK_RATE);
 
+  httpServer.listen(opts.port);
+
   return {
-    close: () => closeServer(server, interval),
+    close: () => closeServer(httpServer, socketServer, interval),
   };
 }

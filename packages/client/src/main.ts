@@ -1,7 +1,7 @@
-import { MAP_HEIGHT, MAP_WIDTH, type WorldState, WS_PORT } from "@agent-town/shared";
+import { MAP_HEIGHT, MAP_WIDTH, type WorldState } from "@agent-town/shared";
 import { Application, Container } from "pixi.js";
 
-import { connect } from "./net/wsClient.js";
+import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
 import { renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
@@ -43,7 +43,7 @@ function updateState(next: WorldState): void {
   hudDirty = true;
 }
 
-connect(`ws://localhost:${WS_PORT}`, { onWelcome: replaceState, onUpdate: updateState });
+connect(getWebSocketUrl(window.location), { onWelcome: replaceState, onUpdate: updateState });
 
 app.ticker.add(() => {
   if (state === null) return;

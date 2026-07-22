@@ -14,6 +14,16 @@ interface ConnectionHandlers {
   onUpdate(state: WorldState): void;
 }
 
+interface WebSocketLocation {
+  host: string;
+  protocol: string;
+}
+
+export function getWebSocketUrl(location: WebSocketLocation): string {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${location.host}/ws`;
+}
+
 function createBrowserSocket(url: string): WebSocketLike {
   const socket = new WebSocket(url);
   const adapter: WebSocketLike = { onmessage: null, onclose: null };

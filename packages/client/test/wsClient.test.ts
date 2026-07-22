@@ -1,7 +1,7 @@
 import type { ServerMessage, WorldState } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
-import { connect, type WebSocketLike } from "../src/net/wsClient.js";
+import { connect, getWebSocketUrl, type WebSocketLike } from "../src/net/wsClient.js";
 
 class MockWebSocket implements WebSocketLike {
   onmessage: ((event: { data: string }) => void) | null = null;
@@ -77,5 +77,19 @@ describe("connect", () => {
         { terrain: "forest", resource: null },
       ],
     });
+  });
+});
+
+describe("getWebSocketUrl", () => {
+  it("uses the same-origin /ws path for HTTP development", () => {
+    expect(getWebSocketUrl({ host: "localhost:5173", protocol: "http:" })).toBe(
+      "ws://localhost:5173/ws",
+    );
+  });
+
+  it("uses secure WebSockets for an HTTPS production origin", () => {
+    expect(getWebSocketUrl({ host: "town.example", protocol: "https:" })).toBe(
+      "wss://town.example/ws",
+    );
   });
 });
