@@ -2,12 +2,56 @@ import type { AgentState, Tile } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import {
+  agentDepth,
   agentFacingScale,
   agentSpritePath,
+  agentTileOffset,
+  layoutAgentsOnTiles,
+  objectDepth,
   resourceSpritePath,
   SPRITE_ASSETS,
   terrainSpritePath,
 } from "../src/render/sprites.js";
+
+describe("agentTileOffset", () => {
+  it("keeps one agent centered and separates same-tile occupants deterministically", () => {
+    expect(agentTileOffset(0, 1)).toEqual({ x: 0, y: 0 });
+    expect([agentTileOffset(0, 2), agentTileOffset(1, 2)]).toEqual([
+      { x: -4, y: 0 },
+      { x: 4, y: 0 },
+    ]);
+    expect(Array.from({ length: 4 }, (_, index) => agentTileOffset(index, 4))).toEqual([
+      { x: -4, y: -4 },
+      { x: 4, y: -4 },
+      { x: -4, y: 4 },
+      { x: 4, y: 4 },
+    ]);
+  });
+});
+
+describe("objectDepth", () => {
+  it("places agents over same-tile features and every lower row over the row above", () => {
+    expect(objectDepth(4, "resource")).toBeLessThan(objectDepth(4, "agent"));
+    expect(objectDepth(4, "agent")).toBeLessThan(objectDepth(5, "resource"));
+  });
+});
+
+describe("agentDepth", () => {
+  it("sorts five same-tile agents by their jittered visual y position", () => {
+    const agents = Array.from({ length: 5 }, (_, index) => ({
+      ...movingAgent(5),
+      id: `agent-${index}`,
+    }));
+    const placements = layoutAgentsOnTiles(agents);
+    const upper = placements.find(({ offset }) => offset.y === -4);
+    const lower = placements.find(({ offset }) => offset.y === 4);
+
+    expect(upper).toBeDefined();
+    expect(lower).toBeDefined();
+    expect(agentDepth(2, upper?.offset.y ?? 0)).toBeLessThan(agentDepth(2, lower?.offset.y ?? 0));
+    expect(agentDepth(2, lower?.offset.y ?? 0)).toBeLessThan(objectDepth(3, "resource"));
+  });
+});
 
 function movingAgent(nextX: number): AgentState {
   return {

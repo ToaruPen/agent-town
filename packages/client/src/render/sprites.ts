@@ -1,5 +1,103 @@
 import type { AgentState, Terrain, Tile } from "@agent-town/shared";
 
+export type WorldObjectKind = "resource" | "stockpile" | "house" | "tombstone" | "agent";
+
+const OBJECT_DEPTHS: Record<WorldObjectKind, number> = {
+  resource: 0,
+  stockpile: 1,
+  house: 2,
+  tombstone: 3,
+  agent: 4,
+};
+const DEPTHS_PER_ROW = 10;
+
+export function objectDepth(tileY: number, kind: WorldObjectKind): number {
+  return (tileY + 1) * DEPTHS_PER_ROW + OBJECT_DEPTHS[kind];
+}
+
+export function agentDepth(tileY: number, offsetY: number): number {
+  return objectDepth(tileY, "agent") + offsetY / DEPTHS_PER_ROW;
+}
+
+const TWO_AGENT_OFFSETS = [
+  { x: -4, y: 0 },
+  { x: 4, y: 0 },
+] as const;
+const THREE_AGENT_OFFSETS = [
+  { x: 0, y: -4 },
+  { x: -4, y: 4 },
+  { x: 4, y: 4 },
+] as const;
+const FOUR_AGENT_OFFSETS = [
+  { x: -4, y: -4 },
+  { x: 4, y: -4 },
+  { x: -4, y: 4 },
+  { x: 4, y: 4 },
+] as const;
+const MANY_AGENT_OFFSETS = [
+  ...FOUR_AGENT_OFFSETS,
+  { x: 0, y: -4 },
+  { x: 0, y: 4 },
+  { x: -4, y: 0 },
+  { x: 4, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: -2 },
+] as const;
+
+export interface AgentTilePlacement {
+  agent: AgentState;
+  offset: { x: number; y: number };
+}
+
+export function agentTileOffset(
+  occupantIndex: number,
+  occupantCount: number,
+): {
+  x: number;
+  y: number;
+} {
+  if (occupantCount <= 1) return { x: 0, y: 0 };
+  const offsets =
+    occupantCount === 2
+      ? TWO_AGENT_OFFSETS
+      : occupantCount === 3
+        ? THREE_AGENT_OFFSETS
+        : occupantCount === 4
+          ? FOUR_AGENT_OFFSETS
+          : MANY_AGENT_OFFSETS;
+  return offsets[occupantIndex % offsets.length] ?? { x: 0, y: 0 };
+}
+
+export function layoutAgentsOnTiles(agents: AgentState[]): AgentTilePlacement[] {
+  const counts = new Map<string, number>();
+  for (const agent of agents) {
+    const key = `${agent.pos.x},${agent.pos.y}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const indexes = new Map<string, number>();
+  return agents.map((agent) => {
+    const key = `${agent.pos.x},${agent.pos.y}`;
+    const occupantIndex = indexes.get(key) ?? 0;
+    indexes.set(key, occupantIndex + 1);
+    return {
+      agent,
+      offset: agentTileOffset(occupantIndex, counts.get(key) ?? 1),
+    };
+  });
+}
+
+export function layoutAgentsFrontToBack(agents: AgentState[]): AgentTilePlacement[] {
+  return layoutAgentsOnTiles(agents)
+    .map((placement, additionIndex) => ({ additionIndex, placement }))
+    .toSorted((left, right) => {
+      const leftDepth = agentDepth(left.placement.agent.pos.y, left.placement.offset.y);
+      const rightDepth = agentDepth(right.placement.agent.pos.y, right.placement.offset.y);
+      return rightDepth - leftDepth || right.additionIndex - left.additionIndex;
+    })
+    .map(({ placement }) => placement);
+}
+
 export const SPRITE_ASSETS = {
   terrain: {
     grass: [

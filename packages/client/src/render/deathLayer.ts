@@ -3,16 +3,21 @@ import { type Container, Graphics, Sprite, Text } from "pixi.js";
 import type { DeathEvent } from "../ui/survivalViewModel.js";
 import { HUD_TEXT_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
-import { SPRITE_ASSETS } from "./sprites.js";
+import { objectDepth, SPRITE_ASSETS } from "./sprites.js";
 
 const TICKER_FONT_SIZE = 11;
 const TICKER_HORIZONTAL_PADDING = 8;
 const TICKER_VERTICAL_PADDING = 4;
 const TICKER_BACKGROUND_COLOR = 0x182126;
 const TICKER_BORDER_COLOR = 0xb29a80;
+const TOMBSTONE_OBJECT_LABEL = "tombstone-object";
 
 export function renderDeathMarkerLayer(layer: Container, events: DeathEvent[]): void {
-  for (const child of layer.removeChildren()) child.destroy({ children: true });
+  for (const child of [...layer.children]) {
+    if (child.label !== TOMBSTONE_OBJECT_LABEL) continue;
+    layer.removeChild(child);
+    child.destroy({ children: true });
+  }
 
   for (const event of events) {
     if (event.pos === null) continue;
@@ -21,6 +26,8 @@ export function renderDeathMarkerLayer(layer: Container, events: DeathEvent[]): 
     marker.position.set(event.pos.x * TILE_SIZE + TILE_SIZE / 2, (event.pos.y + 1) * TILE_SIZE);
     marker.width = TILE_SIZE;
     marker.height = TILE_SIZE;
+    marker.label = TOMBSTONE_OBJECT_LABEL;
+    marker.zIndex = objectDepth(event.pos.y, "tombstone");
     layer.addChild(marker);
   }
 }

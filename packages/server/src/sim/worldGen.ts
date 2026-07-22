@@ -55,6 +55,7 @@ function createResourceTile(rng: () => number): Tile {
   if (rng() < FOREST_TILE_CHANCE) {
     return {
       terrain: "forest",
+      resourceOrigin: "wood",
       resource: {
         kind: "wood",
         amount: randomInteger(rng, WOOD_RESOURCE_MIN, WOOD_RESOURCE_MAX),
@@ -64,6 +65,7 @@ function createResourceTile(rng: () => number): Tile {
   if (rng() < FOOD_TILE_CHANCE) {
     return {
       terrain: "plains",
+      resourceOrigin: "food",
       resource: {
         kind: "food",
         amount: randomInteger(rng, FOOD_RESOURCE_MIN, FOOD_RESOURCE_MAX),

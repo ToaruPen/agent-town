@@ -24,6 +24,7 @@ interface TileOverride {
   pos: { x: number; y: number };
   terrain: Terrain;
   resource?: { kind: ResourceKind; amount: number };
+  resourceOrigin?: ResourceKind;
 }
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -55,6 +56,9 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
     return {
       terrain: override?.terrain ?? "plains",
       resource: override?.resource ?? null,
+      ...(override?.resourceOrigin === undefined
+        ? {}
+        : { resourceOrigin: override.resourceOrigin }),
     };
   });
 
@@ -203,7 +207,12 @@ describe("stepAgent", () => {
   it("gathers exactly CARRY_CAPACITY and removes a depleted resource", () => {
     const target = { x: 1, y: 0 };
     const world = createWorld(2, 1, [
-      { pos: target, terrain: "forest", resource: { kind: "wood", amount: CARRY_CAPACITY } },
+      {
+        pos: target,
+        terrain: "forest",
+        resource: { kind: "wood", amount: CARRY_CAPACITY },
+        resourceOrigin: "wood",
+      },
     ]);
     const agent = createAgent({ tasks: [{ kind: "gather", resource: "wood", target }] });
     world.agents.push(agent);
@@ -216,6 +225,7 @@ describe("stepAgent", () => {
 
     expect(agent.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY });
     expect(world.tiles[1]?.resource).toBeNull();
+    expect(world.tiles[1]?.resourceOrigin).toBe("wood");
     expect(agent.tasks).toEqual([]);
     expect(agent.activity).toEqual({ kind: "idle" });
   });
