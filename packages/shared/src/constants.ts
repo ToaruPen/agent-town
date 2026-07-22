@@ -1,4 +1,8 @@
 export const TICK_RATE = 10; // sim ticks per second
+export const TICKS_PER_DAY = 2400;
+export const THINK_COOLDOWN_TICKS = 300;
+export const MAX_PLAN_TASKS = 8;
+export const LLM_TIMEOUT_MS = 90_000;
 export const MAP_WIDTH = 64;
 export const MAP_HEIGHT = 48;
 export const AGENT_COUNT = 3;

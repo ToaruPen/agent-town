@@ -107,6 +107,8 @@ function createAgents(stockpile: Position): AgentState[] {
       carrying: null,
       activity: { kind: "idle" },
       tasks: [],
+      planSource: "fake",
+      thinking: false,
     };
   });
 }

@@ -101,6 +101,15 @@ describe("generateWorld", () => {
       expect(agent.tasks).toEqual([]);
     }
   });
+
+  it("initializes agents with fake planning state", () => {
+    const world = generateWorld(42);
+
+    for (const agent of world.agents) {
+      expect(agent.planSource).toBe("fake");
+      expect(agent.thinking).toBe(false);
+    }
+  });
 });
 
 describe("createRng", () => {

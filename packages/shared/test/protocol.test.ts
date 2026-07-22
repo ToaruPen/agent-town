@@ -15,7 +15,18 @@ describe("wire protocol", () => {
       width: 1,
       height: 1,
       tiles: [{ terrain: "plains", resource: null }],
-      agents: [],
+      agents: [
+        {
+          id: "agent-1",
+          name: "Ash",
+          pos: { x: 0, y: 0 },
+          carrying: null,
+          activity: { kind: "idle" },
+          tasks: [],
+          planSource: "llm",
+          thinking: true,
+        },
+      ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
     };
     const message: ServerMessage = { type: "welcome", state };

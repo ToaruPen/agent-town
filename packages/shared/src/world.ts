@@ -1,5 +1,6 @@
 export type Terrain = "plains" | "forest" | "water" | "rock";
 export type ResourceKind = "wood" | "food";
+export type PlanSource = "fake" | "llm";
 
 export interface Tile {
   terrain: Terrain;
@@ -24,6 +25,8 @@ export interface AgentState {
   activity: AgentActivity;
   /** Current task queue, head = active. */
   tasks: AgentTask[];
+  planSource: PlanSource;
+  thinking: boolean;
 }
 
 export type AgentTask =
