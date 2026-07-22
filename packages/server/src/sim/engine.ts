@@ -31,7 +31,7 @@ export interface Engine {
   world: WorldState;
   step(): void;
   drainDirtyTiles(): number[];
-  applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource): void;
+  applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource, reasoning?: string): void;
   isDayBoundary(): boolean;
 }
 
@@ -61,7 +61,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       dirtyTileIndexes.clear();
       return indexes;
     },
-    applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource): void {
+    applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource, reasoning?: string): void {
       const agent = world.agents.find(({ id }) => id === agentId);
       if (agent === undefined) {
         warnUnknownAgent(agentId);
@@ -70,6 +70,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       agent.tasks = tasks;
       agent.planSource = source;
       agent.thinking = false;
+      agent.lastThought = reasoning ?? null;
     },
     isDayBoundary(): boolean {
       return world.tick > 0 && world.tick % TICKS_PER_DAY === 0;

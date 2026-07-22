@@ -17,6 +17,7 @@ import { generateWorld } from "../src/sim/worldGen.js";
 interface PlanResult {
   tasks: AgentTask[];
   source: PlanSource;
+  reasoning?: string;
 }
 
 interface DeferredPlan {
@@ -67,12 +68,13 @@ describe("ThoughtBroker", () => {
     expect(agent.thinking).toBe(true);
     expect(broker.inFlightCount()).toBe(1);
 
-    pending.resolve({ tasks, source: "llm" });
+    pending.resolve({ tasks, source: "llm", reasoning: "Return the gathered supplies." });
     await pending.promise;
 
     expect(agent.tasks).toEqual(tasks);
     expect(agent.planSource).toBe("llm");
     expect(agent.thinking).toBe(false);
+    expect(agent.lastThought).toBe("Return the gathered supplies.");
     expect(broker.inFlightCount()).toBe(0);
   });
 

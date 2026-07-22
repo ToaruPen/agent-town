@@ -14,7 +14,7 @@ interface ThoughtBrokerOptions {
   planFn: (
     world: WorldState,
     agent: AgentState,
-  ) => Promise<{ tasks: AgentTask[]; source: PlanSource }>;
+  ) => Promise<{ tasks: AgentTask[]; source: PlanSource; reasoning?: string }>;
 }
 
 export class ThoughtBroker {
@@ -38,8 +38,11 @@ export class ThoughtBroker {
     return !agent.thinking && this.cooldownElapsed(agent) && triggered;
   }
 
-  private finishRequest(agentId: string, result: { tasks: AgentTask[]; source: PlanSource }): void {
-    this.opts.engine.applyPlan(agentId, result.tasks, result.source);
+  private finishRequest(
+    agentId: string,
+    result: { tasks: AgentTask[]; source: PlanSource; reasoning?: string },
+  ): void {
+    this.opts.engine.applyPlan(agentId, result.tasks, result.source, result.reasoning);
     this.cooldownUntil.set(agentId, this.opts.engine.world.tick + THINK_COOLDOWN_TICKS);
     this.requestInFlight = false;
     this.dispatchNext();

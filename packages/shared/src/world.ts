@@ -27,6 +27,7 @@ export interface AgentState {
   tasks: AgentTask[];
   planSource: PlanSource;
   thinking: boolean;
+  lastThought: string | null;
 }
 
 export type AgentTask =

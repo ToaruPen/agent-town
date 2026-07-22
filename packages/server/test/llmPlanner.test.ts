@@ -15,6 +15,7 @@ function createAgent(): AgentState {
     tasks: [],
     planSource: "fake",
     thinking: false,
+    lastThought: null,
   };
 }
 

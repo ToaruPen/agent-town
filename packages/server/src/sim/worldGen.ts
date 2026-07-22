@@ -109,6 +109,7 @@ function createAgents(stockpile: Position): AgentState[] {
       tasks: [],
       planSource: "fake",
       thinking: false,
+      lastThought: null,
     };
   });
 }

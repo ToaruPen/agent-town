@@ -25,6 +25,7 @@ describe("wire protocol", () => {
           tasks: [],
           planSource: "llm",
           thinking: true,
+          lastThought: "Gather nearby wood before winter.",
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },

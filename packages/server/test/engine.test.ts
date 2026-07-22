@@ -54,7 +54,7 @@ describe("createEngine", () => {
     expect(engine.isDayBoundary()).toBe(false);
   });
 
-  it("applies a plan by replacing tasks and updating planning state", () => {
+  it("applies a plan by replacing tasks and storing its reasoning", () => {
     const rng = createRng(42);
     const engine = createEngine(generateWorld(42), new FakePlanner(rng), rng);
     const agent = engine.world.agents[0];
@@ -63,11 +63,24 @@ describe("createEngine", () => {
     agent.thinking = true;
     const tasks: AgentTask[] = [{ kind: "moveTo", dest: { x: 5, y: 6 } }];
 
-    engine.applyPlan(agent.id, tasks, "llm");
+    engine.applyPlan(agent.id, tasks, "llm", "Gather nearby wood.");
 
     expect(agent.tasks).toEqual(tasks);
     expect(agent.planSource).toBe("llm");
     expect(agent.thinking).toBe(false);
+    expect(agent.lastThought).toBe("Gather nearby wood.");
+  });
+
+  it("clears the last thought when applying a plan without reasoning", () => {
+    const rng = createRng(42);
+    const engine = createEngine(generateWorld(42), new FakePlanner(rng), rng);
+    const agent = engine.world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    agent.lastThought = "Gather nearby wood.";
+
+    engine.applyPlan(agent.id, [{ kind: "deposit" }], "fake");
+
+    expect(agent.lastThought).toBeNull();
   });
 
   it("warns once and changes nothing when applying a plan to an unknown agent", () => {
