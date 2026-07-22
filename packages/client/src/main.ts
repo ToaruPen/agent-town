@@ -1,13 +1,17 @@
 import { MAP_HEIGHT, MAP_WIDTH, type WorldState } from "@agent-town/shared";
-import { Application, Container } from "pixi.js";
+import { Application, Assets, Container, TextureStyle } from "pixi.js";
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
 import { renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
+import { SPRITE_PATHS } from "./render/sprites.js";
 import { createWorldViewport } from "./render/worldViewport.js";
 
 const HUD_PADDING = 16;
+
+TextureStyle.defaultOptions.scaleMode = "nearest";
+await Assets.load([...SPRITE_PATHS]);
 
 const app = new Application();
 await app.init({
