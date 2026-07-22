@@ -1,7 +1,7 @@
 import type { AgentState, AgentTask, PlanSource, WorldState } from "@agent-town/shared";
 
 import type { Planner } from "../sim/fakePlanner.js";
-import type { ClaudeRunner } from "./claudeRunner.js";
+import type { LlmRunner } from "./llmRunner.js";
 import { normalizePlan } from "./normalizePlan.js";
 import { buildPlanPrompt } from "./planPrompt.js";
 import { parsePlanResponse, validateNormalizedPlanExecutability } from "./planSchema.js";
@@ -24,7 +24,7 @@ function logAttempt(agent: AgentState, outcome: "llm" | "error", error?: string)
 
 export class LlmPlanner {
   constructor(
-    private readonly runner: ClaudeRunner,
+    private readonly runner: LlmRunner,
     private readonly fallback: Planner,
     _rng: () => number,
   ) {}

@@ -8,8 +8,8 @@ import {
 } from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ClaudeRunner } from "../src/llm/claudeRunner.js";
 import { LlmPlanner } from "../src/llm/llmPlanner.js";
+import type { LlmRunner } from "../src/llm/llmRunner.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
 
 function createAgent(): AgentState {
@@ -67,7 +67,7 @@ describe("LlmPlanner", () => {
       target: { x: 2, y: 0 },
     };
     const run = vi.fn(async () => ({ ok: true as const, text: validResponse([gather]) }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -91,7 +91,7 @@ describe("LlmPlanner", () => {
       { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
     ];
     const run = vi.fn(async () => ({ ok: true as const, text: validResponse(tasks) }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -124,7 +124,7 @@ describe("LlmPlanner", () => {
         ],
       }),
     }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -150,7 +150,7 @@ describe("LlmPlanner", () => {
       ok: true as const,
       text: validResponse(tasks),
     }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -164,7 +164,7 @@ describe("LlmPlanner", () => {
     const world = createWorld(agent);
     const fallbackTasks: AgentTask[] = [{ kind: "deposit" }];
     const run = vi.fn(async () => ({ ok: true as const, text: "not JSON" }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallbackPlan = vi.fn((): AgentTask[] => fallbackTasks);
     const fallback: Planner = { plan: fallbackPlan };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -187,10 +187,10 @@ describe("LlmPlanner", () => {
     world.tiles[1] = { terrain: "plains", resource: null };
     const tasks: AgentTask[] = [{ kind: "moveTo", dest: { x: 2, y: 0 } }];
     const run = vi
-      .fn<ClaudeRunner["run"]>()
+      .fn<LlmRunner["run"]>()
       .mockResolvedValueOnce({ ok: true, text: "not JSON" })
       .mockResolvedValueOnce({ ok: true, text: validResponse(tasks) });
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallbackPlan = vi.fn((): AgentTask[] => [{ kind: "deposit" }]);
     const fallback: Planner = { plan: fallbackPlan };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -218,7 +218,7 @@ describe("LlmPlanner", () => {
       ok: true as const,
       text: validResponse(unexecutableTasks),
     }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => fallbackTasks) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -236,7 +236,7 @@ describe("LlmPlanner", () => {
       ok: true as const,
       text: validResponse([{ kind: "moveTo", dest: { x: 2, y: 0 } }]),
     }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => fallbackTasks) };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -261,7 +261,7 @@ describe("LlmPlanner", () => {
       target: index % 2 === 0 ? { x: 2, y: 0 } : { x: 0, y: 0 },
     }));
     const run = vi.fn(async () => ({ ok: true as const, text: validResponse(authored) }));
-    const runner: ClaudeRunner = { run };
+    const runner: LlmRunner = { run };
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 

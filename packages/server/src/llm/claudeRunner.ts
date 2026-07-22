@@ -2,11 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
 import { LLM_TIMEOUT_MS } from "@agent-town/shared";
 
-export type RunnerResult = { ok: true; text: string } | { ok: false; error: string };
-
-export interface ClaudeRunner {
-  run(prompt: string): Promise<RunnerResult>;
-}
+import type { LlmRunner, RunnerResult } from "./llmRunner.js";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -27,7 +23,7 @@ function parseWrapper(raw: string): RunnerResult {
     : { ok: false, error: "claude wrapper result must be a string" };
 }
 
-export class CliClaudeRunner implements ClaudeRunner {
+export class CliClaudeRunner implements LlmRunner {
   private readonly spawnFn: typeof spawn;
   private readonly timeoutMs: number;
 
