@@ -59,6 +59,7 @@ function createWorld(agent: AgentState): WorldState {
     tiles,
     agents: [agent],
     stockpile: { pos: { x: 3, y: 3 }, wood: 7, food: 4 },
+    buildings: [],
     deaths: [],
   };
 }

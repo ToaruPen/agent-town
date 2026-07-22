@@ -1,7 +1,10 @@
 import {
   type AgentState,
   DAYS_PER_SEASON,
+  FATIGUE_REST_THRESHOLD,
   FOOD_PER_MEAL,
+  HOUSE_BUILD_TICKS,
+  HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
@@ -39,6 +42,7 @@ function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
     tiles,
     agents: [agent],
     stockpile: { pos: { x: tiles.length - 1, y: 0 }, wood: 0, food: 0 },
+    buildings: [],
     deaths: [],
   };
 }
@@ -137,6 +141,124 @@ describe("FakePlanner", () => {
       kind: "gather",
       resource: "wood",
       target: woodTarget,
+    });
+  });
+
+  it("rests after carrying and hunger priorities when fatigue is below threshold", () => {
+    const agent = createAgent({ fatigue: FATIGUE_REST_THRESHOLD - 1 });
+    const world = createWorld(agent, [{ terrain: "plains", resource: null }]);
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([{ kind: "rest" }]);
+
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([{ kind: "eat" }]);
+
+    agent.carrying = { kind: "food", amount: 1 };
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "moveTo", dest: world.stockpile.pos },
+      { kind: "deposit" },
+    ]);
+  });
+
+  it("resumes the nearest reachable incomplete house without requiring more wood", () => {
+    const agent = createAgent();
+    const world = createWorld(
+      agent,
+      Array.from({ length: 5 }, () => ({ terrain: "plains", resource: null })),
+    );
+    world.buildings = [
+      { kind: "house", pos: { x: 3, y: 0 }, progress: 10, complete: false },
+      { kind: "house", pos: { x: 1, y: 0 }, progress: 20, complete: false },
+    ];
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "build", pos: { x: 1, y: 0 } },
+    ]);
+  });
+
+  it("starts a house at the exact cost plus full-winter reserve when capacity is not free", () => {
+    const agent = createAgent();
+    const world = createWorld(
+      agent,
+      Array.from({ length: 4 }, () => ({ terrain: "plains", resource: null })),
+    );
+    const reserve = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+    world.stockpile.wood = HOUSE_WOOD_COST + reserve;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "build", pos: { x: 2, y: 0 } },
+    ]);
+  });
+
+  it("does not build with free completed capacity or wood below cost plus reserve", () => {
+    const agent = createAgent();
+    const world = createWorld(
+      agent,
+      Array.from({ length: 3 }, () => ({ terrain: "plains", resource: null })),
+    );
+    const reserve = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+    const planner = new FakePlanner(() => 0);
+
+    world.stockpile.wood = HOUSE_WOOD_COST + reserve;
+    world.buildings = [
+      { kind: "house", pos: { x: 1, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+    ];
+    expect(planner.plan(world, agent)).not.toContainEqual({
+      kind: "build",
+      pos: expect.anything(),
+    });
+
+    world.buildings = [];
+    world.stockpile.wood = HOUSE_WOOD_COST + reserve - 1;
+    expect(planner.plan(world, agent)).not.toContainEqual({
+      kind: "build",
+      pos: expect.anything(),
+    });
+  });
+
+  it("chooses a reachable resource-free site near stockpile excluding stockpile agents and buildings", () => {
+    const agent = createAgent({ pos: { x: 3, y: 0 } });
+    const world = createWorld(agent, [
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: { kind: "food", amount: 1 } },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
+    ]);
+    world.buildings = [{ kind: "house", pos: { x: 2, y: 0 }, progress: 1, complete: true }];
+    world.agents.push(createAgent({ id: "agent-2", name: "Birch", pos: { x: 3, y: 0 } }));
+    world.stockpile.wood =
+      HOUSE_WOOD_COST + world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "build", pos: { x: 0, y: 0 } },
+    ]);
+  });
+
+  it("does not start a house when no valid site exists", () => {
+    const agent = createAgent();
+    const world = createWorld(agent, [{ terrain: "plains", resource: null }]);
+    world.stockpile.wood = HOUSE_WOOD_COST + WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).not.toContainEqual({
+      kind: "build",
+      pos: expect.anything(),
+    });
+  });
+
+  it("does not choose a valid stockpile-side site that the builder cannot reach", () => {
+    const agent = createAgent();
+    const world = createWorld(agent, [
+      { terrain: "plains", resource: null },
+      { terrain: "water", resource: null },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
+    ]);
+    world.stockpile.wood = HOUSE_WOOD_COST + WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).not.toContainEqual({
+      kind: "build",
+      pos: expect.anything(),
     });
   });
 });

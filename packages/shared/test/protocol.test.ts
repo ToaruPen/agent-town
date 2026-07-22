@@ -32,6 +32,7 @@ describe("wire protocol", () => {
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
       deaths: [{ name: "Birch", tick: 7200, cause: "starvation" }],
     };
     const message: ServerMessage = { type: "welcome", state };
@@ -53,6 +54,19 @@ describe("wire protocol", () => {
     });
 
     expect(() => decodeServerMessage(updateWithoutDeaths)).toThrow("invalid server message");
+  });
+
+  it("rejects an update without buildings", () => {
+    const updateWithoutBuildings = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      deaths: [],
+      changedTiles: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutBuildings)).toThrow("invalid server message");
   });
 
   it("decodes a hello client message", () => {

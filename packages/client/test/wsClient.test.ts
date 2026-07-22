@@ -23,6 +23,7 @@ function makeWorld(): WorldState {
     ],
     agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    buildings: [],
     deaths: [],
   };
 }
@@ -56,6 +57,7 @@ describe("connect", () => {
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
+      buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
       deaths: [{ name: "Birch", tick: 4, cause: "starvation" }],
       changedTiles: [{ index: 1, tile: { terrain: "forest", resource: null } }],
     });
@@ -82,6 +84,7 @@ describe("connect", () => {
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
+      buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
       deaths: [{ name: "Birch", tick: 4, cause: "starvation" }],
       tiles: [
         { terrain: "plains", resource: { kind: "food", amount: 3 } },

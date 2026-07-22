@@ -14,6 +14,7 @@ export const FATIGUE_MAX = 100;
 export const FATIGUE_DECAY_PER_DAY = 60;
 export const FATIGUE_REST_THRESHOLD = 25;
 export const FATIGUE_SLOWDOWN = 0.5; // work/move speed multiplier when fatigue < threshold
+export const FATIGUE_REST_RECOVERY_PER_DAY = FATIGUE_MAX + FATIGUE_DECAY_PER_DAY;
 export const HEALTH_MAX = 100;
 export const STARVATION_HEALTH_PER_DAY = 25; // ~4 days of grace at hunger 0
 export const COLD_HEALTH_PER_DAY = 15; // winter with no wood to burn
@@ -30,6 +31,15 @@ export const MAP_WIDTH = 64;
 export const MAP_HEIGHT = 48;
 export const AGENT_COUNT = 3;
 export const AGENT_NAMES = ["Ash", "Birch", "Cedar"] as const;
+export const IMMIGRANT_NAMES = [
+  "Dahlia",
+  "Elm",
+  "Fern",
+  "Gorse",
+  "Hazel",
+  "Iris",
+  "Juniper",
+] as const;
 export const MOVE_TICKS_PER_TILE = 3;
 export const GATHER_TICKS = 20;
 export const EAT_TICKS = 10;

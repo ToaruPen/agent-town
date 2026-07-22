@@ -169,6 +169,16 @@ function floodDistances(world: WorldState, from: Position): Map<string, number> 
   return distances;
 }
 
+export function filterReachable(
+  world: WorldState,
+  from: Position,
+  candidates: readonly Position[],
+): Position[] {
+  const distances = floodDistances(world, from);
+  if (distances === null) return [];
+  return candidates.filter((candidate) => distances.has(positionKey(candidate)));
+}
+
 interface CandidateMatch {
   pos: Position;
   distance: number;

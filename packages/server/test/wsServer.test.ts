@@ -1,10 +1,23 @@
 import { createServer } from "node:net";
 
-import { decodeServerMessage, MAP_HEIGHT, MAP_WIDTH, type ServerMessage } from "@agent-town/shared";
+import {
+  DAYS_PER_SEASON,
+  decodeServerMessage,
+  HOUSE_BUILD_TICKS,
+  IMMIGRANT_NAMES,
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  SEASONS,
+  type ServerMessage,
+  TICKS_PER_DAY,
+} from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 import WebSocket, { type RawData } from "ws";
 
-import { startServer } from "../src/net/wsServer.js";
+import { createUpdateMessage, startServer } from "../src/net/wsServer.js";
+import { createEngine } from "../src/sim/engine.js";
+import type { Planner } from "../src/sim/fakePlanner.js";
+import { generateWorld } from "../src/sim/worldGen.js";
 
 function getEphemeralPort(): Promise<number> {
   const probe = createServer();
@@ -52,6 +65,33 @@ function receiveMessages(socket: WebSocket, count: number): Promise<ServerMessag
 }
 
 describe("startServer", () => {
+  it("includes a spring-boundary immigrant in the same-step broadcast update", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    agent.tasks = [{ kind: "deposit" }];
+    world.stockpile.food = 1_000;
+    world.buildings = [
+      {
+        kind: "house",
+        pos: { x: world.stockpile.pos.x + 2, y: world.stockpile.pos.y },
+        progress: HOUSE_BUILD_TICKS,
+        complete: true,
+      },
+    ];
+    world.tick = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY - 1;
+    const idlePlanner: Planner = { plan: () => [] };
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+    const update = createUpdateMessage(engine);
+
+    expect(update.type).toBe("update");
+    if (update.type !== "update") throw new Error("expected update message");
+    expect(update.agents.map(({ name }) => name)).toEqual(["Ash", IMMIGRANT_NAMES[0]]);
+  });
+
   it("accepts /ws upgrades, sends updates, and closes cleanly", async () => {
     const port = await getEphemeralPort();
     const server = startServer({ port, seed: 42 });
@@ -71,6 +111,7 @@ describe("startServer", () => {
       if (update?.type !== "update") throw new Error("second message was not update");
       expect(update.tick).toBeGreaterThan(welcome.state.tick);
       expect(update.agents[0]).toMatchObject({ planSource: "fake", thinking: false });
+      expect(update.buildings).toEqual(welcome.state.buildings);
       expect(update.deaths).toEqual(welcome.state.deaths);
 
       const socketClosed = new Promise<void>((resolve) => socket.once("close", () => resolve()));

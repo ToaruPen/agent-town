@@ -143,6 +143,7 @@ export function generateWorld(seed: number): WorldState {
     tiles,
     agents,
     stockpile: { pos: stockpilePosition, wood: 0, food: 0 },
+    buildings: [],
     deaths: [],
   };
 }

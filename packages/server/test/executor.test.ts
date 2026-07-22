@@ -2,11 +2,17 @@ import {
   type AgentState,
   CARRY_CAPACITY,
   EAT_TICKS,
+  FATIGUE_MAX,
+  FATIGUE_REST_RECOVERY_PER_DAY,
+  FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
+  HOUSE_BUILD_TICKS,
+  HOUSE_WOOD_COST,
   MOVE_TICKS_PER_TILE,
   type ResourceKind,
   type Terrain,
+  TICKS_PER_DAY,
   type Tile,
   type WorldState,
 } from "@agent-town/shared";
@@ -59,6 +65,7 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
     tiles,
     agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    buildings: [],
     deaths: [],
   };
 }
@@ -272,5 +279,271 @@ describe("stepAgent", () => {
     stepAgent(world, agent);
 
     expect(agent.activity).toEqual({ kind: "idle" });
+  });
+
+  it("moves to a valid build site, charges once, and completes after 400 action ticks", () => {
+    const site = { x: 2, y: 0 };
+    const world = createWorld(3, 1);
+    world.stockpile.wood = HOUSE_WOOD_COST;
+    const agent = createAgent({ tasks: [{ kind: "build", pos: site }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent);
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(world.buildings).toEqual([]);
+
+    for (let tick = 1; tick < HOUSE_BUILD_TICKS; tick += 1) stepAgent(world, agent);
+    expect(world.stockpile.wood).toBe(0);
+    expect(world.buildings).toEqual([
+      { kind: "house", pos: site, progress: HOUSE_BUILD_TICKS - 1, complete: false },
+    ]);
+
+    stepAgent(world, agent);
+    expect(world.buildings).toEqual([
+      { kind: "house", pos: site, progress: HOUSE_BUILD_TICKS, complete: true },
+    ]);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("resumes and cooperatively caps an incomplete house without another charge", () => {
+    const site = { x: 0, y: 0 };
+    const world = createWorld(1, 1);
+    world.stockpile.wood = 99;
+    world.buildings = [
+      { kind: "house", pos: site, progress: HOUSE_BUILD_TICKS - 1, complete: false },
+    ];
+    const first = createAgent({ id: "agent-1", tasks: [{ kind: "build", pos: site }] });
+    const second = createAgent({ id: "agent-2", tasks: [{ kind: "build", pos: site }] });
+    world.agents.push(first, second);
+
+    stepAgent(world, first);
+    stepAgent(world, second);
+
+    expect(world.stockpile.wood).toBe(99);
+    expect(world.buildings).toEqual([
+      { kind: "house", pos: site, progress: HOUSE_BUILD_TICKS, complete: true },
+    ]);
+    expect(first.tasks).toEqual([]);
+    expect(second.tasks).toEqual([]);
+  });
+
+  it("drops unaffordable, invalid, and unreachable build tasks without mutation", () => {
+    const invalidWorld = createWorld(1, 1);
+    invalidWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const unreachableWorld = createWorld(3, 1, [{ pos: { x: 1, y: 0 }, terrain: "water" }]);
+    unreachableWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const cases = [
+      { world: createWorld(1, 1), pos: { x: 0, y: 0 } },
+      { world: invalidWorld, pos: { x: 1, y: 0 } },
+      { world: unreachableWorld, pos: { x: 2, y: 0 } },
+    ];
+
+    for (const { world, pos } of cases) {
+      const woodBefore = world.stockpile.wood;
+      const agent = createAgent({ tasks: [{ kind: "build", pos }] });
+      world.agents.push(agent);
+      stepAgent(world, agent);
+      expect(agent.tasks).toEqual([]);
+      expect(world.stockpile.wood).toBe(woodBefore);
+      expect(world.buildings).toEqual([]);
+    }
+  });
+
+  it("rejects a distant unaffordable build before moving", () => {
+    const world = createWorld(3, 1);
+    const agent = createAgent({ tasks: [{ kind: "build", pos: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.pos).toEqual({ x: 0, y: 0 });
+    expect(agent.tasks).toEqual([]);
+    expect(world.buildings).toEqual([]);
+  });
+
+  it("drops a new build without charging when a resource appears during travel", () => {
+    const site = { x: 3, y: 0 };
+    const world = createWorld(4, 1);
+    world.stockpile.wood = HOUSE_WOOD_COST;
+    const agent = createAgent({ tasks: [{ kind: "build", pos: site }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+    world.tiles[3] = {
+      terrain: "plains",
+      resource: { kind: "food", amount: 1 },
+    };
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(world.stockpile.wood).toBe(HOUSE_WOOD_COST);
+    expect(world.buildings).toEqual([]);
+  });
+
+  it("drops a new build without charging when another agent occupies the site", () => {
+    const site = { x: 3, y: 0 };
+    const world = createWorld(4, 1);
+    world.stockpile.wood = HOUSE_WOOD_COST;
+    const builder = createAgent({ tasks: [{ kind: "build", pos: site }] });
+    const occupant = createAgent({ id: "agent-2", name: "Birch", pos: { x: 2, y: 0 } });
+    world.agents.push(builder, occupant);
+
+    stepAgent(world, builder);
+    occupant.pos = site;
+    stepAgent(world, builder);
+
+    expect(builder.tasks).toEqual([]);
+    expect(world.stockpile.wood).toBe(HOUSE_WOOD_COST);
+    expect(world.buildings).toEqual([]);
+  });
+
+  it("rejects direct new builds on the stockpile, a resource, or the builder's tile", () => {
+    const stockpileWorld = createWorld(2, 1);
+    stockpileWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const stockpileBuilder = createAgent({
+      pos: { x: 1, y: 0 },
+      tasks: [{ kind: "build", pos: stockpileWorld.stockpile.pos }],
+    });
+    stockpileWorld.agents.push(stockpileBuilder);
+
+    const resourceWorld = createWorld(2, 1, [
+      {
+        pos: { x: 1, y: 0 },
+        terrain: "plains",
+        resource: { kind: "food", amount: 1 },
+      },
+    ]);
+    resourceWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const resourceBuilder = createAgent({ tasks: [{ kind: "build", pos: { x: 1, y: 0 } }] });
+    resourceWorld.agents.push(resourceBuilder);
+
+    const occupiedWorld = createWorld(2, 1);
+    occupiedWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const occupyingBuilder = createAgent({
+      pos: { x: 1, y: 0 },
+      tasks: [{ kind: "build", pos: { x: 1, y: 0 } }],
+    });
+    occupiedWorld.agents.push(occupyingBuilder);
+
+    stepAgent(stockpileWorld, stockpileBuilder);
+    stepAgent(resourceWorld, resourceBuilder);
+    stepAgent(occupiedWorld, occupyingBuilder);
+
+    for (const world of [stockpileWorld, resourceWorld, occupiedWorld]) {
+      expect(world.stockpile.wood).toBe(HOUSE_WOOD_COST);
+      expect(world.buildings).toEqual([]);
+    }
+  });
+
+  it("finishes an already complete house task without creating a duplicate", () => {
+    const site = { x: 1, y: 0 };
+    const world = createWorld(2, 1);
+    world.buildings = [{ kind: "house", pos: site, progress: HOUSE_BUILD_TICKS, complete: true }];
+    const agent = createAgent({ tasks: [{ kind: "build", pos: site }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(world.buildings).toHaveLength(1);
+  });
+
+  it("rests at the nearest reachable complete house and restores gross fatigue per tick", () => {
+    const world = createWorld(5, 1);
+    world.stockpile.pos = { x: 0, y: 0 };
+    world.buildings = [
+      { kind: "house", pos: { x: 4, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+      { kind: "house", pos: { x: 2, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+    ];
+    const agent = createAgent({ fatigue: 10, tasks: [{ kind: "rest" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < 2 * MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent);
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+    stepAgent(world, agent);
+
+    expect(agent.activity).toEqual({ kind: "resting", target: { x: 2, y: 0 } });
+    expect(agent.fatigue).toBeCloseTo(10 + FATIGUE_REST_RECOVERY_PER_DAY / TICKS_PER_DAY, 10);
+  });
+
+  it("falls back to the stockpile when no complete reachable house exists", () => {
+    const world = createWorld(3, 1, [{ pos: { x: 1, y: 0 }, terrain: "water" }]);
+    world.buildings = [
+      { kind: "house", pos: { x: 2, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+      { kind: "house", pos: { x: 0, y: 0 }, progress: 1, complete: false },
+    ];
+    const agent = createAgent({ fatigue: 10, tasks: [{ kind: "rest" }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.activity).toEqual({ kind: "resting", target: world.stockpile.pos });
+    expect(agent.fatigue).toBeGreaterThan(10);
+  });
+
+  it("caps rest at full fatigue and finishes the task", () => {
+    const world = createWorld(1, 1);
+    const agent = createAgent({
+      fatigue: FATIGUE_MAX - FATIGUE_REST_RECOVERY_PER_DAY / TICKS_PER_DAY / 2,
+      tasks: [{ kind: "rest" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.fatigue).toBe(FATIGUE_MAX);
+    expect(agent.tasks).toEqual([]);
+    expect(agent.activity).toEqual({ kind: "idle" });
+  });
+
+  it("takes exactly twice as long to move and gather at half speed", () => {
+    const moveWorld = createWorld(2, 1);
+    const mover = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }] });
+    moveWorld.agents.push(mover);
+    for (let tick = 1; tick < 2 * MOVE_TICKS_PER_TILE; tick += 1) stepAgent(moveWorld, mover, 0.5);
+    expect(mover.pos).toEqual({ x: 0, y: 0 });
+    stepAgent(moveWorld, mover, 0.5);
+    expect(mover.pos).toEqual({ x: 1, y: 0 });
+
+    const target = { x: 1, y: 0 };
+    const gatherWorld = createWorld(2, 1, [
+      { pos: target, terrain: "forest", resource: { kind: "wood", amount: CARRY_CAPACITY } },
+    ]);
+    const gatherer = createAgent({ tasks: [{ kind: "gather", resource: "wood", target }] });
+    gatherWorld.agents.push(gatherer);
+    for (let tick = 1; tick < 2 * GATHER_TICKS; tick += 1) stepAgent(gatherWorld, gatherer, 0.5);
+    expect(gatherer.carrying).toBeNull();
+    stepAgent(gatherWorld, gatherer, 0.5);
+    expect(gatherer.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY });
+  });
+
+  it("does not slow eat, forage, build, or rest action progress", () => {
+    const eatWorld = createWorld(1, 1);
+    eatWorld.stockpile.food = FOOD_PER_MEAL;
+    const eater = createAgent({ hunger: 0, tasks: [{ kind: "eat" }] });
+    eatWorld.agents.push(eater);
+    for (let tick = 0; tick < EAT_TICKS; tick += 1) stepAgent(eatWorld, eater, 0.5);
+    expect(eater.tasks).toEqual([]);
+
+    const forageWorld = createWorld(1, 1, [
+      { pos: { x: 0, y: 0 }, terrain: "plains", resource: { kind: "food", amount: 5 } },
+    ]);
+    const forager = createAgent({ hunger: 0, tasks: [{ kind: "forage", target: { x: 0, y: 0 } }] });
+    forageWorld.agents.push(forager);
+    for (let tick = 0; tick < FORAGE_TICKS; tick += 1) stepAgent(forageWorld, forager, 0.5);
+    expect(forager.tasks).toEqual([]);
+
+    const buildWorld = createWorld(2, 1);
+    buildWorld.stockpile.wood = HOUSE_WOOD_COST;
+    const builder = createAgent({ tasks: [{ kind: "build", pos: { x: 1, y: 0 } }] });
+    buildWorld.agents.push(builder);
+    stepAgent(buildWorld, builder, 0.5);
+    expect(buildWorld.buildings[0]?.progress).toBe(1);
+
+    const restWorld = createWorld(1, 1);
+    const rester = createAgent({ fatigue: 0, tasks: [{ kind: "rest" }] });
+    restWorld.agents.push(rester);
+    stepAgent(restWorld, rester, 0.5);
+    expect(rester.fatigue).toBeCloseTo(FATIGUE_REST_RECOVERY_PER_DAY / TICKS_PER_DAY, 10);
   });
 });

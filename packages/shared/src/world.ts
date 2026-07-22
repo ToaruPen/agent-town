@@ -17,6 +17,8 @@ export type AgentActivity =
   | { kind: "gathering"; target: Position; ticksRemaining: number }
   | { kind: "eating"; ticksRemaining: number }
   | { kind: "foraging"; target: Position; ticksRemaining: number }
+  | { kind: "building"; target: Position }
+  | { kind: "resting"; target: Position }
   | { kind: "depositing" };
 
 export interface AgentState {
@@ -40,7 +42,16 @@ export type AgentTask =
   | { kind: "gather"; resource: ResourceKind; target: Position }
   | { kind: "eat" }
   | { kind: "forage"; target: Position }
+  | { kind: "build"; pos: Position }
+  | { kind: "rest" }
   | { kind: "deposit" };
+
+export interface House {
+  kind: "house";
+  pos: Position;
+  progress: number;
+  complete: boolean;
+}
 
 export interface WorldState {
   tick: number;
@@ -49,5 +60,6 @@ export interface WorldState {
   tiles: Tile[]; // row-major, index = y * width + x
   agents: AgentState[];
   stockpile: { pos: Position; wood: number; food: number };
+  buildings: House[];
   deaths: { name: string; tick: number; cause: "starvation" | "cold" }[];
 }

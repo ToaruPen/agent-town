@@ -52,6 +52,7 @@ function applyUpdate(
     tick: message.tick,
     agents: message.agents,
     stockpile: message.stockpile,
+    buildings: message.buildings,
     deaths: message.deaths,
     tiles,
   };

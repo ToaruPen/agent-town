@@ -3,13 +3,25 @@ import {
   type AgentTask,
   BERRY_REGROWTH_PER_DAY,
   COLD_HEALTH_PER_DAY,
+  DAYS_PER_SEASON,
   FATIGUE_DECAY_PER_DAY,
+  FATIGUE_MAX,
+  FATIGUE_REST_THRESHOLD,
+  FATIGUE_SLOWDOWN,
   FOOD_PER_MEAL,
+  foodDaysRemaining,
+  HEALTH_MAX,
+  HOUSE_CAPACITY,
   HUNGER_DECAY_PER_DAY,
   HUNGER_EAT_THRESHOLD,
+  HUNGER_MAX,
+  IMMIGRANT_NAMES,
+  IMMIGRATION_FOOD_DAYS_MIN,
   isWinter,
+  MAX_POPULATION,
   type PlanSource,
   type Position,
+  SEASONS,
   STARVATION_HEALTH_PER_DAY,
   TICKS_PER_DAY,
   type Tile,
@@ -141,6 +153,77 @@ function burnWinterWood(world: WorldState): void {
 function runDailyHooks(world: WorldState, berryCaps: (number | null)[]): void {
   regrowResources(world, berryCaps);
   burnWinterWood(world);
+  maybeImmigrate(world);
+}
+
+const TICKS_PER_YEAR = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY;
+
+function positionsEqual(left: Position, right: Position): boolean {
+  return left.x === right.x && left.y === right.y;
+}
+
+function isOccupied(world: WorldState, pos: Position): boolean {
+  return (
+    world.agents.some((agent) => positionsEqual(agent.pos, pos)) ||
+    world.buildings.some((building) => positionsEqual(building.pos, pos))
+  );
+}
+
+function findImmigrantSpawn(world: WorldState): Position | null {
+  const candidates: Position[] = [];
+  for (let index = 0; index < world.tiles.length; index += 1) {
+    const pos = { x: index % world.width, y: Math.floor(index / world.width) };
+    if (positionsEqual(pos, world.stockpile.pos) || isOccupied(world, pos)) continue;
+    candidates.push(pos);
+  }
+  return findNearestReachable(world, world.stockpile.pos, candidates);
+}
+
+function nextImmigrantName(world: WorldState): string {
+  const usedNames = new Set(world.agents.map(({ name }) => name));
+  for (let round = 1; round <= world.agents.length + 1; round += 1) {
+    for (const baseName of IMMIGRANT_NAMES) {
+      const candidate = round === 1 ? baseName : `${baseName} ${round}`;
+      if (!usedNames.has(candidate)) return candidate;
+    }
+  }
+  throw new Error("immigrant name selection exhausted unexpectedly");
+}
+
+function nextAgentId(world: WorldState): string {
+  const usedIds = new Set(world.agents.map(({ id }) => id));
+  let sequence = world.agents.length + world.deaths.length + 1;
+  while (usedIds.has(`agent-${sequence}`)) sequence += 1;
+  return `agent-${sequence}`;
+}
+
+function hasImmigrationCapacity(world: WorldState): boolean {
+  const completedHouses = world.buildings.filter(({ complete }) => complete).length;
+  return completedHouses * HOUSE_CAPACITY > world.agents.length;
+}
+
+function maybeImmigrate(world: WorldState): void {
+  if (world.tick % TICKS_PER_YEAR !== 0) return;
+  if (world.agents.length >= MAX_POPULATION || !hasImmigrationCapacity(world)) return;
+  const foodDays = foodDaysRemaining(world);
+  if (!Number.isFinite(foodDays) || foodDays < IMMIGRATION_FOOD_DAYS_MIN) return;
+  const name = nextImmigrantName(world);
+  const pos = findImmigrantSpawn(world);
+  if (pos === null) return;
+  world.agents.push({
+    id: nextAgentId(world),
+    name,
+    pos,
+    carrying: null,
+    activity: { kind: "idle" },
+    tasks: [],
+    planSource: "fake",
+    thinking: false,
+    lastThought: null,
+    hunger: HUNGER_MAX,
+    fatigue: FATIGUE_MAX,
+    health: HEALTH_MAX,
+  });
 }
 
 function markDirtyTiles(
@@ -175,7 +258,8 @@ function advanceAgent(world: WorldState, agent: AgentState, planner: Planner): v
   if (removeIfDead(world, agent, "starvation")) return;
   maybeInterruptForHunger(world, agent);
   if (agent.tasks.length === 0) agent.tasks.push(...planner.plan(world, agent));
-  stepAgent(world, agent);
+  const speed = agent.fatigue < FATIGUE_REST_THRESHOLD ? FATIGUE_SLOWDOWN : 1;
+  stepAgent(world, agent, speed);
 }
 
 export function createEngine(world: WorldState, planner: Planner, rng: () => number): Engine {

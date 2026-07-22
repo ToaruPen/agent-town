@@ -7,6 +7,7 @@ export type ServerMessage =
       tick: number;
       agents: AgentState[];
       stockpile: { pos: Position; wood: number; food: number };
+      buildings: WorldState["buildings"];
       deaths: WorldState["deaths"];
       changedTiles: { index: number; tile: Tile }[];
     };
@@ -41,7 +42,14 @@ function isServerMessage(value: unknown): value is ServerMessage {
   if (!isRecord(value)) return false;
   if (value.type === "welcome") return hasRequiredKeys(value, ["state"]);
   if (value.type === "update") {
-    return hasRequiredKeys(value, ["tick", "agents", "stockpile", "deaths", "changedTiles"]);
+    return hasRequiredKeys(value, [
+      "tick",
+      "agents",
+      "stockpile",
+      "buildings",
+      "deaths",
+      "changedTiles",
+    ]);
   }
   return false;
 }

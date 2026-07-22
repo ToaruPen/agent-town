@@ -31,6 +31,7 @@ function worldWithFood(food: number, population: number): WorldState {
       health: 100,
     })),
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food },
+    buildings: [],
     deaths: [],
   };
 }

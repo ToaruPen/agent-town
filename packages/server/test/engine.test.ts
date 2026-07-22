@@ -1,4 +1,5 @@
 import {
+  AGENT_NAMES,
   type AgentTask,
   BERRY_REGROWTH_PER_DAY,
   CARRY_CAPACITY,
@@ -7,11 +8,19 @@ import {
   EAT_TICKS,
   FATIGUE_DECAY_PER_DAY,
   FATIGUE_MAX,
+  FATIGUE_REST_THRESHOLD,
+  FATIGUE_SLOWDOWN,
   FOOD_PER_MEAL,
   HEALTH_MAX,
+  HOUSE_BUILD_TICKS,
+  HOUSE_CAPACITY,
   HUNGER_DECAY_PER_DAY,
   HUNGER_EAT_THRESHOLD,
   HUNGER_MAX,
+  HUNGER_PER_MEAL,
+  IMMIGRANT_NAMES,
+  IMMIGRATION_FOOD_DAYS_MIN,
+  MAX_POPULATION,
   MOVE_TICKS_PER_TILE,
   SEASONS,
   STARVATION_HEALTH_PER_DAY,
@@ -30,6 +39,7 @@ import { generateWorld } from "../src/sim/worldGen.js";
 
 const ACCEPTANCE_STEPS = 3000;
 const idlePlanner: Planner = { plan: () => [] };
+const TICKS_PER_YEAR = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -73,6 +83,36 @@ function runSingleAgentYear(wood: number): WorldState {
   const ticksPerYear = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY;
 
   for (let step = 0; step < ticksPerYear; step += 1) engine.step();
+  return world;
+}
+
+function setFoodDays(world: WorldState, days: number): void {
+  const dailyNeed =
+    Math.max(world.agents.length, 1) * FOOD_PER_MEAL * (HUNGER_DECAY_PER_DAY / HUNGER_PER_MEAL);
+  world.stockpile.food = dailyNeed * days;
+}
+
+function immigrationWorld(): WorldState {
+  const world = generateWorld(42);
+  const agent = world.agents[0];
+  if (agent === undefined) throw new Error("missing test agent");
+  world.width = 3;
+  world.height = 3;
+  world.tiles = Array.from({ length: 9 }, () => ({ terrain: "plains", resource: null }));
+  world.agents = [agent];
+  world.stockpile = { pos: { x: 1, y: 1 }, wood: 0, food: 0 };
+  world.buildings = [
+    {
+      kind: "house",
+      pos: { x: 2, y: 2 },
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    },
+  ];
+  agent.pos = { x: 1, y: 0 };
+  agent.tasks = [{ kind: "deposit" }];
+  setFoodDays(world, IMMIGRATION_FOOD_DAYS_MIN);
+  world.tick = TICKS_PER_YEAR - 1;
   return world;
 }
 
@@ -693,5 +733,265 @@ describe("createEngine", () => {
       at: "engine.applyPlan",
       agent: "missing-agent",
     });
+  });
+
+  it("uses fatigue slowdown only when fatigue is below the threshold after decay", () => {
+    const world = generateWorld(42);
+    const [normal, slow] = world.agents;
+    if (normal === undefined || slow === undefined) throw new Error("missing test agents");
+    world.width = 2;
+    world.height = 1;
+    world.tiles = Array.from({ length: 2 }, () => ({ terrain: "plains", resource: null }));
+    world.agents = [normal, slow];
+    for (const agent of world.agents) {
+      agent.pos = { x: 0, y: 0 };
+      agent.tasks = [{ kind: "moveTo", dest: { x: 1, y: 0 } }];
+    }
+    normal.fatigue = FATIGUE_REST_THRESHOLD + FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
+    slow.fatigue = normal.fatigue - 0.001;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(normal.fatigue).toBeCloseTo(FATIGUE_REST_THRESHOLD, 10);
+    expect(normal.activity).toMatchObject({ kind: "moving", ticksIntoStep: 1 });
+    expect(slow.activity).toMatchObject({ kind: "moving", ticksIntoStep: FATIGUE_SLOWDOWN });
+  });
+
+  it("nets exactly FATIGUE_MAX fatigue restoration per day while resting", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    agent.pos = world.stockpile.pos;
+    agent.fatigue = 50;
+    agent.tasks = [{ kind: "rest" }];
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(agent.fatigue).toBeCloseTo(50 + FATIGUE_MAX / TICKS_PER_DAY, 10);
+  });
+
+  it("spawns one fully initialized immigrant on the positive spring year boundary", () => {
+    const world = immigrationWorld();
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(world.tick).toBe(TICKS_PER_YEAR);
+    expect(world.agents).toHaveLength(2);
+    expect(world.agents[1]).toEqual({
+      id: "agent-2",
+      name: IMMIGRANT_NAMES[0],
+      pos: { x: 0, y: 1 },
+      carrying: null,
+      activity: { kind: "idle" },
+      tasks: [],
+      planSource: "fake",
+      thinking: false,
+      lastThought: null,
+      hunger: HUNGER_MAX,
+      fatigue: FATIGUE_MAX,
+      health: HEALTH_MAX,
+    });
+  });
+
+  it("accepts the exact food threshold and rejects a value below it", () => {
+    const exact = immigrationWorld();
+    const below = immigrationWorld();
+    below.stockpile.food -= 0.001;
+
+    createEngine(exact, idlePlanner, () => 0).step();
+    createEngine(below, idlePlanner, () => 0).step();
+
+    expect(exact.agents).toHaveLength(2);
+    expect(below.agents).toHaveLength(1);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects a nonfinite food-days forecast from stockpile food %s",
+    (food) => {
+      const world = immigrationWorld();
+      world.stockpile.food = food;
+
+      createEngine(world, idlePlanner, () => 0).step();
+
+      expect(world.agents).toHaveLength(1);
+    },
+  );
+
+  it("does not spawn on the stockpile when every non-stockpile tile is occupied", () => {
+    const world = immigrationWorld();
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.width = 2;
+    world.height = 1;
+    world.tiles = Array.from({ length: 2 }, () => ({ terrain: "plains", resource: null }));
+    world.stockpile.pos = { x: 0, y: 0 };
+    agent.pos = { x: 1, y: 0 };
+    world.buildings = [
+      {
+        kind: "house",
+        pos: { x: 1, y: 0 },
+        progress: HOUSE_BUILD_TICKS,
+        complete: true,
+      },
+    ];
+
+    createEngine(world, idlePlanner, () => 0).step();
+
+    expect(world.agents).toEqual([agent]);
+    expect(world.agents.some(({ pos }) => pos.x === 0 && pos.y === 0)).toBe(false);
+  });
+
+  it("does not immigrate at tick zero or an ordinary positive day boundary", () => {
+    const atTickZero = immigrationWorld();
+    atTickZero.tick = 0;
+    const ordinaryBoundary = immigrationWorld();
+    ordinaryBoundary.tick = TICKS_PER_DAY - 1;
+
+    createEngine(atTickZero, idlePlanner, () => 0).step();
+    createEngine(ordinaryBoundary, idlePlanner, () => 0).step();
+
+    expect(atTickZero.tick).toBe(1);
+    expect(atTickZero.agents).toHaveLength(1);
+    expect(ordinaryBoundary.tick).toBe(TICKS_PER_DAY);
+    expect(ordinaryBoundary.agents).toHaveLength(1);
+  });
+
+  it("requires strictly free completed housing capacity", () => {
+    const equalCapacity = immigrationWorld();
+    const second = { ...equalCapacity.agents[0], id: "agent-2", name: "Birch" };
+    equalCapacity.agents.push(second);
+    setFoodDays(equalCapacity, IMMIGRATION_FOOD_DAYS_MIN);
+    expect(HOUSE_CAPACITY).toBe(equalCapacity.agents.length);
+
+    const incomplete = immigrationWorld();
+    const house = incomplete.buildings[0];
+    if (house === undefined) throw new Error("missing test house");
+    house.complete = false;
+
+    createEngine(equalCapacity, idlePlanner, () => 0).step();
+    createEngine(incomplete, idlePlanner, () => 0).step();
+
+    expect(equalCapacity.agents).toHaveLength(2);
+    expect(incomplete.agents).toHaveLength(1);
+  });
+
+  it("respects MAX_POPULATION even with excess housing and food", () => {
+    const world = immigrationWorld();
+    const template = world.agents[0];
+    if (template === undefined) throw new Error("missing test agent");
+    world.agents = Array.from({ length: MAX_POPULATION }, (_, index) => ({
+      ...template,
+      id: `agent-${index + 1}`,
+      name: `Resident ${index + 1}`,
+      pos: { x: index % world.width, y: Math.floor(index / world.width) % world.height },
+    }));
+    world.buildings = Array.from({ length: MAX_POPULATION }, (_, index) => ({
+      kind: "house" as const,
+      pos: { x: index % world.width, y: Math.floor(index / world.width) % world.height },
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    }));
+    setFoodDays(world, IMMIGRATION_FOOD_DAYS_MIN);
+
+    createEngine(world, idlePlanner, () => 0).step();
+
+    expect(world.agents).toHaveLength(MAX_POPULATION);
+  });
+
+  it("uses immigrant names in order while skipping names of living agents", () => {
+    const livingSkip = immigrationWorld();
+    const first = livingSkip.agents[0];
+    if (first === undefined) throw new Error("missing test agent");
+    first.name = IMMIGRANT_NAMES[0];
+
+    createEngine(livingSkip, idlePlanner, () => 0).step();
+
+    expect(livingSkip.agents[1]?.name).toBe(IMMIGRANT_NAMES[1]);
+  });
+
+  it("reuses the first available name even when it appears in death history", () => {
+    const world = immigrationWorld();
+    world.deaths.push({ name: IMMIGRANT_NAMES[0], tick: 1, cause: "starvation" });
+
+    createEngine(world, idlePlanner, () => 0).step();
+
+    expect(world.agents[1]?.name).toBe(IMMIGRANT_NAMES[0]);
+  });
+
+  it("ignores an exhausted death-history pool when selecting a living-unique name", () => {
+    const world = immigrationWorld();
+    world.deaths = IMMIGRANT_NAMES.map((name) => ({ name, tick: 1, cause: "starvation" }));
+
+    createEngine(world, idlePlanner, () => 0).step();
+
+    expect(world.agents[1]?.name).toBe(IMMIGRANT_NAMES[0]);
+    expect(new Set(world.agents.map(({ id }) => id)).size).toBe(world.agents.length);
+  });
+
+  it("starts a deterministic second name round when every base immigrant name is living", () => {
+    const world = immigrationWorld();
+    const template = world.agents[0];
+    if (template === undefined) throw new Error("missing test agent");
+    const livingPositions = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+      { x: 3, y: 0 },
+      { x: 0, y: 1 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+    ];
+    world.width = 4;
+    world.height = 4;
+    world.tiles = Array.from({ length: 16 }, () => ({ terrain: "plains", resource: null }));
+    world.stockpile.pos = { x: 1, y: 1 };
+    world.agents = IMMIGRANT_NAMES.map((name, index) => ({
+      ...template,
+      id: `agent-${index + 1}`,
+      name,
+      pos: livingPositions[index] ?? { x: 0, y: 0 },
+      activity: { kind: "idle" },
+      tasks: [{ kind: "deposit" }],
+    }));
+    world.buildings = Array.from({ length: 4 }, (_, x) => ({
+      kind: "house" as const,
+      pos: { x, y: 3 },
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    }));
+    world.deaths = AGENT_NAMES.map((name) => ({ name, tick: 1, cause: "starvation" }));
+    setFoodDays(world, IMMIGRATION_FOOD_DAYS_MIN);
+
+    createEngine(world, idlePlanner, () => 0).step();
+
+    expect(world.agents).toHaveLength(8);
+    expect(world.agents[7]?.name).toBe("Dahlia 2");
+  });
+
+  it("spawns at most one immigrant at each yearly boundary", () => {
+    const world = immigrationWorld();
+    world.buildings.push({
+      kind: "house",
+      pos: { x: 2, y: 1 },
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    });
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+    expect(world.agents.map(({ name }) => name)).toEqual(["Ash", IMMIGRANT_NAMES[0]]);
+
+    world.tick = 2 * TICKS_PER_YEAR - 1;
+    setFoodDays(world, IMMIGRATION_FOOD_DAYS_MIN);
+    engine.step();
+    expect(world.agents.map(({ name }) => name)).toEqual([
+      "Ash",
+      IMMIGRANT_NAMES[0],
+      IMMIGRANT_NAMES[1],
+    ]);
   });
 });

@@ -24,7 +24,7 @@ interface ServerOptions {
   staticDir?: string;
 }
 
-function updateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
+export function createUpdateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
   const changedTiles = engine.drainDirtyTiles().map((index) => {
     const tile = engine.world.tiles[index];
     if (tile === undefined) throw new Error(`dirty tile index out of bounds: ${index}`);
@@ -36,6 +36,7 @@ function updateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
     tick: engine.world.tick,
     agents: engine.world.agents,
     stockpile: engine.world.stockpile,
+    buildings: engine.world.buildings,
     deaths: engine.world.deaths,
     changedTiles,
   };
@@ -126,7 +127,7 @@ export function startServer(opts: ServerOptions): ServerHandle {
   const interval = setInterval(() => {
     engine.step();
     broker?.onTick();
-    broadcast(socketServer, updateMessage(engine));
+    broadcast(socketServer, createUpdateMessage(engine));
   }, 1_000 / TICK_RATE);
 
   httpServer.listen(opts.port);

@@ -128,6 +128,10 @@ describe("generateWorld", () => {
   it("starts with an empty death history", () => {
     expect(generateWorld(42).deaths).toEqual([]);
   });
+
+  it("starts without buildings", () => {
+    expect(generateWorld(42).buildings).toEqual([]);
+  });
 });
 
 describe("createRng", () => {

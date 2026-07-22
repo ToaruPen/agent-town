@@ -4,7 +4,10 @@ import {
   COLD_HEALTH_PER_DAY,
   DAYS_PER_SEASON,
   HEALTH_MAX,
+  HOUSE_BUILD_TICKS,
+  IMMIGRANT_NAMES,
   type PlanSource,
+  SEASONS,
   THINK_COOLDOWN_TICKS,
   TICKS_PER_DAY,
   type WorldState,
@@ -128,6 +131,39 @@ describe("ThoughtBroker", () => {
     expect(observer.health).toBe(HEALTH_MAX - COLD_HEALTH_PER_DAY);
     expect(observedWorld?.deaths).toEqual([
       { name: doomed.name, tick: winterStart, cause: "cold" },
+    ]);
+
+    pending.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await pending.promise;
+  });
+
+  it("observes a spring-boundary immigrant in the same step", async () => {
+    const engine = createTestEngine();
+    const agent = getAgent(engine, 0);
+    engine.world.agents = [agent];
+    agent.tasks = [{ kind: "deposit" }];
+    engine.world.stockpile.food = 1_000;
+    engine.world.buildings = [
+      {
+        kind: "house",
+        pos: { x: engine.world.stockpile.pos.x + 2, y: engine.world.stockpile.pos.y },
+        progress: HOUSE_BUILD_TICKS,
+        complete: true,
+      },
+    ];
+    engine.world.tick = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY - 1;
+    const pending = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+    );
+    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+
+    engine.step();
+    broker.onTick();
+
+    expect(planFn.mock.calls[0]?.[0].agents.map(({ name }) => name)).toEqual([
+      "Ash",
+      IMMIGRANT_NAMES[0],
     ]);
 
     pending.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });

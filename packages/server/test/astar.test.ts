@@ -1,7 +1,7 @@
 import type { Terrain, WorldState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
+import { filterReachable, findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
 
 function createWorld(width: number, height: number, terrainAt: Map<string, Terrain> = new Map()) {
   const tiles = Array.from({ length: width * height }, (_, index) => {
@@ -17,6 +17,7 @@ function createWorld(width: number, height: number, terrainAt: Map<string, Terra
     tiles,
     agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    buildings: [],
     deaths: [],
   } satisfies WorldState;
 }
@@ -135,5 +136,24 @@ describe("findNearestReachable", () => {
     const world = createWorld(3, 3, walls);
 
     expect(findNearestReachable(world, { x: 0, y: 0 }, [{ x: 1, y: 1 }])).toBeNull();
+  });
+});
+
+describe("filterReachable", () => {
+  it("filters candidates with one reachability flood while preserving candidate order", () => {
+    const world = createWorld(4, 1, new Map([["1,0", "water"]]));
+    const candidates = [
+      { x: 3, y: 0 },
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+    ];
+
+    expect(filterReachable(world, { x: 0, y: 0 }, candidates)).toEqual([{ x: 0, y: 0 }]);
+  });
+
+  it("returns an empty list when the origin is not walkable", () => {
+    const world = createWorld(2, 1, new Map([["0,0", "water"]]));
+
+    expect(filterReachable(world, { x: 0, y: 0 }, [{ x: 1, y: 0 }])).toEqual([]);
   });
 });
