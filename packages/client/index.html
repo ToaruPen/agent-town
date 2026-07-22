@@ -21,9 +21,124 @@
         display: block;
         touch-action: none;
       }
+
+      .inspect-panel {
+        position: fixed;
+        z-index: 10;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        box-sizing: border-box;
+        width: min(22rem, 40vw);
+        padding: calc(1rem + env(safe-area-inset-top)) 1rem
+          calc(1rem + env(safe-area-inset-bottom));
+        overflow-y: auto;
+        color: #f4f0df;
+        background: rgb(29 36 40 / 96%);
+        border-left: 1px solid #54646b;
+        box-shadow: -0.25rem 0 1rem rgb(0 0 0 / 35%);
+        font-family: system-ui, sans-serif;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+      }
+
+      .inspect-panel[hidden] {
+        display: none;
+      }
+
+      .inspect-panel__header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .inspect-panel__name {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+
+      .inspect-panel__badge {
+        padding: 0.15rem 0.45rem;
+        border: 1px solid currentcolor;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .inspect-panel__badge--llm {
+        color: #ffd75a;
+      }
+
+      .inspect-panel__badge--fake {
+        color: #9bd59b;
+      }
+
+      .inspect-panel__close {
+        margin-left: auto;
+        padding: 0.15rem 0.45rem;
+        color: inherit;
+        background: transparent;
+        border: 0;
+        font-size: 1.6rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .inspect-panel__section-title {
+        margin: 1.2rem 0 0.35rem;
+        color: #b9c8cd;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .inspect-panel__activity,
+      .inspect-panel__empty {
+        margin: 0;
+      }
+
+      .inspect-panel__tasks {
+        margin: 0;
+        padding-left: 1.4rem;
+      }
+
+      .inspect-panel__task + .inspect-panel__task {
+        margin-top: 0.3rem;
+      }
+
+      .inspect-panel__thought {
+        margin: 0;
+        padding: 0.75rem 0 0.75rem 1rem;
+        color: #fff8dc;
+        border-left: 3px solid #d6b85a;
+        font-family: Georgia, serif;
+        font-style: italic;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      @media (max-width: 600px) {
+        .inspect-panel {
+          top: auto;
+          left: 0;
+          width: auto;
+          max-height: 48dvh;
+          border-top: 1px solid #54646b;
+          border-left: 0;
+          box-shadow: 0 -0.25rem 1rem rgb(0 0 0 / 35%);
+        }
+      }
     </style>
   </head>
   <body>
+    <aside
+      id="inspect-panel"
+      class="inspect-panel"
+      aria-labelledby="inspect-panel-name"
+      hidden
+    ></aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
