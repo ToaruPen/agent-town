@@ -3,17 +3,27 @@ import { Application, Assets, Container, type FederatedPointerEvent, TextureStyl
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
-import { renderHudLayer } from "./render/hudLayer.js";
+import { renderDeathMarkerLayer, renderDeathTickerLayer } from "./render/deathLayer.js";
+import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
+import { renderStructureLayer } from "./render/structureLayer.js";
 import { createWorldViewport } from "./render/worldViewport.js";
 import {
   createInspectPanel,
   createThoughtBubbleSchedule,
   updateThoughtBubbleSchedule,
 } from "./ui/inspectPanel.js";
+import {
+  createDeathEventSchedule,
+  type DeathEventSchedule,
+  latestDeathEvent,
+  updateDeathEventSchedule,
+} from "./ui/survivalViewModel.js";
 
 const HUD_PADDING = 16;
+const NARROW_SCREEN_MAX_WIDTH = 520;
+const TICKER_HUD_GAP = 6;
 const MAX_GROUND_TAP_DISTANCE = 12;
 const MAX_GROUND_TAP_DURATION_MS = 300;
 
@@ -73,11 +83,22 @@ function closeOnGroundTap(event: FederatedPointerEvent): void {
 
 const world = new Container();
 const mapLayer = new Container();
+const structureLayer = new Container();
 const agentLayer = new Container();
+const deathMarkerLayer = new Container();
 const hudLayer = new Container();
-world.addChild(mapLayer, agentLayer);
+const tickerLayer = new Container();
+world.addChild(mapLayer, structureLayer, deathMarkerLayer, agentLayer);
 hudLayer.position.set(HUD_PADDING, HUD_PADDING);
-app.stage.addChild(world, hudLayer);
+app.stage.addChild(world, hudLayer, tickerLayer);
+
+function positionTicker(width: number): void {
+  const y =
+    width < NARROW_SCREEN_MAX_WIDTH ? HUD_PADDING + HUD_PANEL_HEIGHT + TICKER_HUD_GAP : HUD_PADDING;
+  tickerLayer.position.set(width / 2, y);
+}
+
+positionTicker(app.screen.width);
 
 const viewport = createWorldViewport(
   app.stage,
@@ -87,7 +108,10 @@ const viewport = createWorldViewport(
   app.screen.width,
   app.screen.height,
 );
-app.renderer.on("resize", viewport.resize);
+app.renderer.on("resize", (width, height) => {
+  viewport.resize(width, height);
+  positionTicker(width);
+});
 app.stage.on("pointerdown", startGroundTap);
 app.stage.on("globalpointermove", trackGroundTap);
 app.stage.on("pointertap", closeOnGroundTap);
@@ -96,8 +120,12 @@ app.stage.on("pointercancel", (event) => groundTapCandidates.delete(event.pointe
 
 let state: WorldState | null = null;
 let bubbleSchedule = createThoughtBubbleSchedule();
+let deathSchedule: DeathEventSchedule = { observedDeaths: 0, events: [] };
 let mapDirty = false;
+let structuresDirty = false;
 let agentsDirty = false;
+let deathsDirty = false;
+let tickerDirty = false;
 let hudDirty = false;
 
 function syncInspectPanel(next: WorldState): void {
@@ -124,20 +152,32 @@ function replaceState(next: WorldState): void {
     next.agents,
     performance.now(),
   );
+  deathSchedule = createDeathEventSchedule(next);
   state = next;
   viewport.fit(next.width * TILE_SIZE, next.height * TILE_SIZE);
   syncInspectPanel(next);
   mapDirty = true;
+  structuresDirty = true;
   agentsDirty = true;
+  deathsDirty = true;
+  tickerDirty = true;
   hudDirty = true;
 }
 
 function updateState(next: WorldState): void {
-  mapDirty = mapDirty || next.tiles !== state?.tiles;
+  if (state === null) {
+    replaceState(next);
+    return;
+  }
+  mapDirty = mapDirty || next.tiles !== state.tiles;
+  structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
+  deathSchedule = updateDeathEventSchedule(deathSchedule, state, next);
   state = next;
   syncInspectPanel(next);
   agentsDirty = true;
+  deathsDirty = true;
+  tickerDirty = true;
   hudDirty = true;
 }
 
@@ -154,9 +194,21 @@ app.ticker.add(() => {
     renderMapLayer(mapLayer, state);
     mapDirty = false;
   }
+  if (structuresDirty) {
+    renderStructureLayer(structureLayer, state.buildings);
+    structuresDirty = false;
+  }
   if (agentsDirty) {
     renderAgentLayer(agentLayer, state.agents, bubbleSchedule.bubbles, openInspectPanel);
     agentsDirty = false;
+  }
+  if (deathsDirty) {
+    renderDeathMarkerLayer(deathMarkerLayer, deathSchedule.events);
+    deathsDirty = false;
+  }
+  if (tickerDirty) {
+    renderDeathTickerLayer(tickerLayer, latestDeathEvent(deathSchedule));
+    tickerDirty = false;
   }
   if (hudDirty) {
     renderHudLayer(hudLayer, state);

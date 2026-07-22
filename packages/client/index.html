@@ -99,6 +99,67 @@
         margin: 0;
       }
 
+      .inspect-panel__needs {
+        display: grid;
+        gap: 0.45rem;
+        margin: 0;
+      }
+
+      .inspect-panel__need {
+        --need-color: #d6b85a;
+        display: grid;
+        grid-template-columns: 4.5rem minmax(5rem, 1fr) 2.2rem;
+        align-items: center;
+        gap: 0.55rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.75rem;
+      }
+
+      .inspect-panel__need--hunger {
+        --need-color: #d7a64f;
+      }
+
+      .inspect-panel__need--fatigue {
+        --need-color: #78a9c2;
+      }
+
+      .inspect-panel__need--health {
+        --need-color: #8ec07c;
+      }
+
+      .inspect-panel__need-label,
+      .inspect-panel__need-value {
+        margin: 0;
+      }
+
+      .inspect-panel__need-value {
+        color: #f4f0df;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .inspect-panel__need-meter {
+        width: 100%;
+        height: 0.55rem;
+        overflow: hidden;
+        accent-color: var(--need-color);
+        background: #11171a;
+        border: 1px solid #54646b;
+        border-radius: 0;
+      }
+
+      .inspect-panel__need-meter::-webkit-progress-bar {
+        background: #11171a;
+      }
+
+      .inspect-panel__need-meter::-webkit-progress-value {
+        background: var(--need-color);
+      }
+
+      .inspect-panel__need-meter::-moz-progress-bar {
+        background: var(--need-color);
+      }
+
       .inspect-panel__tasks {
         margin: 0;
         padding-left: 1.4rem;

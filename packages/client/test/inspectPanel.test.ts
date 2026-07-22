@@ -31,14 +31,33 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
 
 describe("buildInspectPanelViewModel", () => {
   it("formats activity and task targets while preserving lastThought verbatim", () => {
-    expect(buildInspectPanelViewModel(makeAgent())).toEqual({
+    expect(
+      buildInspectPanelViewModel(
+        makeAgent({
+          tasks: [
+            { kind: "moveTo", dest: { x: 4, y: 5 } },
+            { kind: "gather", resource: "wood", target: { x: 6, y: 7 } },
+            { kind: "forage", target: { x: 8, y: 9 } },
+            { kind: "build", pos: { x: 10, y: 11 } },
+            { kind: "deposit" },
+          ],
+        }),
+      ),
+    ).toEqual({
       name: "Ash",
       planSource: "llm",
       activityKind: "moving",
       tasks: [
         { kind: "moveTo", target: "(4, 5)" },
         { kind: "gather", target: "(6, 7)" },
+        { kind: "forage", target: "(8, 9)" },
+        { kind: "build", target: "(10, 11)" },
         { kind: "deposit", target: null },
+      ],
+      needs: [
+        { kind: "hunger", label: "Hunger", value: 100, max: 100, valueLabel: "100" },
+        { kind: "fatigue", label: "Fatigue", value: 100, max: 100, valueLabel: "100" },
+        { kind: "health", label: "Health", value: 100, max: 100, valueLabel: "100" },
       ],
       lastThought: 'Gather <wood> before dusk.\nThen say "hello".',
     });

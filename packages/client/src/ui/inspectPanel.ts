@@ -1,5 +1,7 @@
 import type { AgentState, AgentTask } from "@agent-town/shared";
 
+import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
+
 export const THOUGHT_BUBBLE_DURATION_MS = 6_000;
 export const THOUGHT_BUBBLE_MAX_CHARS = 40;
 
@@ -23,6 +25,7 @@ export interface InspectPanelViewModel {
   planSource: AgentState["planSource"];
   activityKind: AgentState["activity"]["kind"];
   tasks: InspectTaskViewModel[];
+  needs: NeedViewModel[];
   lastThought: string | null;
 }
 
@@ -38,6 +41,8 @@ function formatPosition(position: { x: number; y: number }): string {
 function taskTarget(task: AgentTask): string | null {
   if (task.kind === "moveTo") return formatPosition(task.dest);
   if (task.kind === "gather") return formatPosition(task.target);
+  if (task.kind === "forage") return formatPosition(task.target);
+  if (task.kind === "build") return formatPosition(task.pos);
   return null;
 }
 
@@ -47,6 +52,7 @@ export function buildInspectPanelViewModel(agent: AgentState): InspectPanelViewM
     planSource: agent.planSource,
     activityKind: agent.activity.kind,
     tasks: agent.tasks.map((task) => ({ kind: task.kind, target: taskTarget(task) })),
+    needs: buildNeedsViewModel(agent),
     lastThought: agent.lastThought,
   };
 }
@@ -114,6 +120,23 @@ function createTaskList(tasks: InspectTaskViewModel[]): HTMLElement {
   return list;
 }
 
+function createNeedsList(needs: NeedViewModel[]): HTMLElement {
+  const list = createElement("div", "inspect-panel__needs");
+  for (const need of needs) {
+    const row = createElement("div", `inspect-panel__need inspect-panel__need--${need.kind}`);
+    const label = createElement("span", "inspect-panel__need-label", need.label);
+    const meter = createElement("progress", "inspect-panel__need-meter");
+    meter.max = need.max;
+    meter.value = need.value;
+    meter.setAttribute("aria-label", need.label);
+    meter.setAttribute("aria-valuetext", `${need.valueLabel} out of ${need.max}`);
+    const value = createElement("span", "inspect-panel__need-value", need.valueLabel);
+    row.append(label, meter, value);
+    list.append(row);
+  }
+  return list;
+}
+
 function renderPanel(
   root: HTMLElement,
   viewModel: InspectPanelViewModel,
@@ -133,6 +156,7 @@ function renderPanel(
   closeButton.addEventListener("click", onClose);
   header.append(name, badge, closeButton);
 
+  const needsHeading = createElement("h3", "inspect-panel__section-title", "Needs");
   const activityHeading = createElement("h3", "inspect-panel__section-title", "Current activity");
   const activity = createElement("p", "inspect-panel__activity", viewModel.activityKind);
   const queueHeading = createElement("h3", "inspect-panel__section-title", "Task queue");
@@ -145,6 +169,8 @@ function renderPanel(
 
   root.replaceChildren(
     header,
+    needsHeading,
+    createNeedsList(viewModel.needs),
     activityHeading,
     activity,
     queueHeading,
