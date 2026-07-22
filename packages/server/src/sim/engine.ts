@@ -1,4 +1,10 @@
-import type { Tile, WorldState } from "@agent-town/shared";
+import {
+  type AgentTask,
+  type PlanSource,
+  TICKS_PER_DAY,
+  type Tile,
+  type WorldState,
+} from "@agent-town/shared";
 
 import { stepAgent } from "./executor.js";
 import type { Planner } from "./fakePlanner.js";
@@ -21,7 +27,21 @@ function markDirtyTiles(
   }
 }
 
-export function createEngine(world: WorldState, planner: Planner, rng: () => number) {
+export interface Engine {
+  world: WorldState;
+  step(): void;
+  drainDirtyTiles(): number[];
+  applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource): void;
+  isDayBoundary(): boolean;
+}
+
+function warnUnknownAgent(agentId: string): void {
+  console.warn(
+    JSON.stringify({ at: "engine.applyPlan", agent: agentId, outcome: "unknown-agent" }),
+  );
+}
+
+export function createEngine(world: WorldState, planner: Planner, rng: () => number): Engine {
   void rng;
   const dirtyTileIndexes = new Set<number>();
 
@@ -40,6 +60,19 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       const indexes = [...dirtyTileIndexes];
       dirtyTileIndexes.clear();
       return indexes;
+    },
+    applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource): void {
+      const agent = world.agents.find(({ id }) => id === agentId);
+      if (agent === undefined) {
+        warnUnknownAgent(agentId);
+        return;
+      }
+      agent.tasks = tasks;
+      agent.planSource = source;
+      agent.thinking = false;
+    },
+    isDayBoundary(): boolean {
+      return world.tick > 0 && world.tick % TICKS_PER_DAY === 0;
     },
   };
 }

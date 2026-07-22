@@ -1,13 +1,22 @@
-import { encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
+import { AGENT_NAMES, encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
 import WebSocket, { WebSocketServer } from "ws";
 
-import { createEngine } from "../sim/engine.js";
+import { CliClaudeRunner } from "../llm/claudeRunner.js";
+import { LlmPlanner } from "../llm/llmPlanner.js";
+import { ThoughtBroker } from "../llm/thoughtBroker.js";
+import { createEngine, type Engine } from "../sim/engine.js";
 import { FakePlanner } from "../sim/fakePlanner.js";
 import { createRng } from "../sim/rng.js";
 import { generateWorld } from "../sim/worldGen.js";
 
 export interface ServerHandle {
   close(): Promise<void>;
+}
+
+interface ServerOptions {
+  port: number;
+  seed: number;
+  llmPlannerEnabled?: boolean;
 }
 
 function updateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
@@ -45,9 +54,28 @@ function closeServer(server: WebSocketServer, interval: NodeJS.Timeout): Promise
   });
 }
 
-export function startServer(opts: { port: number; seed: number }): ServerHandle {
+function createThoughtBroker(
+  enabled: boolean,
+  engine: Engine,
+  fallback: FakePlanner,
+  rng: () => number,
+): ThoughtBroker | undefined {
+  if (!enabled) return undefined;
+  const llmAgent = engine.world.agents.find(({ name }) => name === AGENT_NAMES[0]);
+  if (llmAgent === undefined) throw new Error(`missing LLM agent ${AGENT_NAMES[0]}`);
+  const planner = new LlmPlanner(new CliClaudeRunner(), fallback, rng);
+  return new ThoughtBroker({
+    engine,
+    llmAgentIds: [llmAgent.id],
+    planFn: (world, agent) => planner.planAsync(world, agent),
+  });
+}
+
+export function startServer(opts: ServerOptions): ServerHandle {
   const rng = createRng(opts.seed);
-  const engine = createEngine(generateWorld(opts.seed), new FakePlanner(rng), rng);
+  const fallback = new FakePlanner(rng);
+  const engine = createEngine(generateWorld(opts.seed), fallback, rng);
+  const broker = createThoughtBroker(opts.llmPlannerEnabled === true, engine, fallback, rng);
   const server = new WebSocketServer({ port: opts.port });
 
   server.on("connection", (socket) => {
@@ -57,6 +85,7 @@ export function startServer(opts: { port: number; seed: number }): ServerHandle 
 
   const interval = setInterval(() => {
     engine.step();
+    broker?.onTick();
     broadcast(server, updateMessage(engine));
   }, 1_000 / TICK_RATE);
 
