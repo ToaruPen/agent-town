@@ -218,6 +218,7 @@ function maybeImmigrate(world: WorldState): void {
     activity: { kind: "idle" },
     tasks: [],
     planSource: "fake",
+    llmProvider: null,
     thinking: false,
     lastThought: null,
     hunger: HUNGER_MAX,

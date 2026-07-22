@@ -24,6 +24,7 @@ function worldWithFood(food: number, population: number): WorldState {
       activity: { kind: "idle" as const },
       tasks: [],
       planSource: "fake" as const,
+      llmProvider: null,
       thinking: false,
       lastThought: null,
       hunger: 100,

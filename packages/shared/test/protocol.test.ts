@@ -24,6 +24,7 @@ describe("wire protocol", () => {
           activity: { kind: "idle" },
           tasks: [],
           planSource: "llm",
+          llmProvider: "codex",
           thinking: true,
           lastThought: "Gather nearby wood before winter.",
           hunger: 42,

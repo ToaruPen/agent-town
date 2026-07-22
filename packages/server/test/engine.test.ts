@@ -781,6 +781,8 @@ describe("createEngine", () => {
 
     expect(world.tick).toBe(TICKS_PER_YEAR);
     expect(world.agents).toHaveLength(2);
+    const immigrant = world.agents.find(({ name }) => name === IMMIGRANT_NAMES[0]);
+    expect(immigrant?.llmProvider).toBeNull();
     expect(world.agents[1]).toEqual({
       id: "agent-2",
       name: IMMIGRANT_NAMES[0],
@@ -789,6 +791,7 @@ describe("createEngine", () => {
       activity: { kind: "idle" },
       tasks: [],
       planSource: "fake",
+      llmProvider: null,
       thinking: false,
       lastThought: null,
       hunger: HUNGER_MAX,

@@ -119,6 +119,7 @@ describe("generateWorld", () => {
 
     for (const agent of world.agents) {
       expect(agent.planSource).toBe("fake");
+      expect(agent.llmProvider).toBeNull();
       expect(agent.thinking).toBe(false);
       expect(agent.lastThought).toBeNull();
     }

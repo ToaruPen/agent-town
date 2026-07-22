@@ -20,6 +20,7 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
       { kind: "deposit" },
     ],
     planSource: "llm",
+    llmProvider: "claude",
     thinking: false,
     lastThought: 'Gather <wood> before dusk.\nThen say "hello".',
     hunger: 100,

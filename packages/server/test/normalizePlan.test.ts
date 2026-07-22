@@ -26,6 +26,7 @@ function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
     activity: { kind: "idle" },
     tasks: [],
     planSource: "fake",
+    llmProvider: null,
     thinking: false,
     lastThought: null,
     hunger: 100,

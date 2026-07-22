@@ -66,6 +66,7 @@ function movingAgent(nextX: number): AgentState {
     },
     tasks: [],
     planSource: "fake",
+    llmProvider: null,
     thinking: false,
     lastThought: null,
     hunger: 100,

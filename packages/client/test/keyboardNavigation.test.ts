@@ -28,6 +28,7 @@ function makeWorld(): WorldState {
         activity: { kind: "idle" },
         tasks: [],
         planSource: "llm",
+        llmProvider: "claude",
         thinking: false,
         lastThought: null,
         hunger: 100,

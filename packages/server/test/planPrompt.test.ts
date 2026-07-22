@@ -25,6 +25,7 @@ function createAgent(overrides: Partial<AgentState> = {}): AgentState {
     activity: { kind: "idle" },
     tasks: [],
     planSource: "fake",
+    llmProvider: null,
     thinking: false,
     lastThought: null,
     hunger: 100,

@@ -40,6 +40,7 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     activity: { kind: "moving", path: [{ x: 3, y: 3 }], ticksIntoStep: 1 },
     tasks: [],
     planSource: "llm",
+    llmProvider: "claude",
     thinking: false,
     lastThought: "Gather wood before dusk.\nThen return home.",
     hunger: 21.2,
