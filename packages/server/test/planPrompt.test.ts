@@ -1,9 +1,15 @@
 import {
   type AgentState,
+  DAYS_PER_SEASON,
+  FOOD_PER_MEAL,
+  HOUSE_CAPACITY,
+  HOUSE_WOOD_COST,
   MAX_PLAN_TASKS,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
+  TICKS_PER_DAY,
   type Tile,
+  WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
@@ -71,11 +77,60 @@ describe("buildPlanPrompt", () => {
     const prompt = buildPlanPrompt(createWorld(agent), agent);
 
     expect(prompt).toContain("Ash, a diligent forester who worries about winter");
+    expect(prompt).toContain("you must survive the winter");
     expect(prompt).toContain("position: (3,1)");
     expect(prompt).toContain("carrying: wood 2");
     expect(prompt).toContain("stockpile position: (3,3)");
     expect(prompt).toContain(`wood: 7 / target ${STOCKPILE_TARGET_WOOD}`);
     expect(prompt).toContain(`food: 4 / target ${STOCKPILE_TARGET_FOOD}`);
+  });
+
+  it("includes calendar, survival forecasts, needs, and completed housing capacity", () => {
+    const agent = createAgent({ hunger: 39, fatigue: 24, health: 75 });
+    const world = createWorld(agent);
+    const secondAgent = createAgent({ id: "agent-2", name: "Birch" });
+    world.agents.push(secondAgent);
+    world.tick = 4 * TICKS_PER_DAY;
+    world.stockpile.food = FOOD_PER_MEAL * 2;
+    world.stockpile.wood = 3;
+    world.buildings = [
+      { kind: "house", pos: { x: 0, y: 3 }, progress: 400, complete: true },
+      { kind: "house", pos: { x: 1, y: 3 }, progress: 20, complete: false },
+    ];
+
+    const prompt = buildPlanPrompt(world, agent);
+    const winterWoodNeed = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+
+    expect(prompt).toContain("calendar: day 5, season autumn, 2 days until winter");
+    expect(prompt).toContain("food: 10 stored, 1.20 days remaining");
+    expect(prompt).toContain(
+      `wood: 3 stored / ${winterWoodNeed} needed for remaining winter (2 future burn days)`,
+    );
+    expect(prompt).toContain("needs: hunger=39, fatigue=24, health=75");
+    expect(prompt).toContain(`population: 2 / completed-house capacity ${HOUSE_CAPACITY}`);
+  });
+
+  it("reduces remaining winter wood need after each winter day-start burn", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const winterStart = 3 * DAYS_PER_SEASON * TICKS_PER_DAY;
+    const nextSpring = 4 * DAYS_PER_SEASON * TICKS_PER_DAY;
+    const woodPerDay = WOOD_BURN_PER_AGENT_PER_DAY;
+
+    world.tick = winterStart;
+    expect(buildPlanPrompt(world, agent)).toContain(
+      `wood: 7 stored / ${woodPerDay} needed for remaining winter (1 future burn day)`,
+    );
+
+    world.tick = winterStart + TICKS_PER_DAY;
+    expect(buildPlanPrompt(world, agent)).toContain(
+      "wood: 7 stored / 0 needed for remaining winter (0 future burn days)",
+    );
+
+    world.tick = nextSpring;
+    expect(buildPlanPrompt(world, agent)).toContain(
+      `wood: 7 stored / ${woodPerDay * DAYS_PER_SEASON} needed for remaining winter (2 future burn days)`,
+    );
   });
 
   it("lists the five Manhattan-nearest resource tiles with index tie-breaking", () => {
@@ -117,6 +172,17 @@ describe("buildPlanPrompt", () => {
     expect(prompt).toContain('"kind":"moveTo","dest":{"x":0,"y":0}');
     expect(prompt).toContain('"kind":"gather","resource":"wood"|"food"');
     expect(prompt).toContain('{"kind":"deposit"}');
+    expect(prompt).toContain('{"kind":"eat"}');
+    expect(prompt).toContain('{"kind":"forage","target":{"x":0,"y":0}}');
+    expect(prompt).toContain('{"kind":"build","pos":{"x":0,"y":0}}');
+    expect(prompt).toContain('{"kind":"rest"}');
+    expect(prompt).toContain("eat: when hunger is low");
+    expect(prompt).toContain("forage: when hungry and stored food cannot provide a meal");
+    expect(prompt).toContain("build: choose the house site only; this action navigates adjacent");
+    expect(prompt).toContain(`costs ${HOUSE_WOOD_COST} wood for a new house`);
+    expect(prompt).toContain("never add moveTo onto a build site");
+    expect(prompt).toContain("rest: when fatigue is low");
+    expect(prompt).toContain("deposit: use an explicit moveTo to the stockpile first");
     expect(prompt).toContain(`1..${MAX_PLAN_TASKS} tasks`);
   });
 });

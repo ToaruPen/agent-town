@@ -9,10 +9,12 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error(`invalid PORT: ${configuredPort}`);
 }
 const staticDir = process.env.STATIC_DIR;
+const llmAgents = process.env.LLM_AGENTS;
 
 startServer({
   port,
   seed: Date.now() % 2 ** 31,
   llmPlannerEnabled,
   ...(staticDir === undefined ? {} : { staticDir }),
+  ...(llmAgents === undefined ? {} : { llmAgents }),
 });

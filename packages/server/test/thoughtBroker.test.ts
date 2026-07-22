@@ -5,6 +5,7 @@ import {
   DAYS_PER_SEASON,
   HEALTH_MAX,
   HOUSE_BUILD_TICKS,
+  HUNGER_EAT_THRESHOLD,
   IMMIGRANT_NAMES,
   type PlanSource,
   SEASONS,
@@ -242,5 +243,124 @@ describe("ThoughtBroker", () => {
     await second.promise;
 
     expect(broker.inFlightCount()).toBe(0);
+  });
+
+  it("dispatches once when hunger crosses below the eat threshold", async () => {
+    const engine = createTestEngine();
+    const agent = getAgent(engine, 0);
+    agent.tasks = [{ kind: "deposit" }];
+    agent.hunger = HUNGER_EAT_THRESHOLD;
+    const requests: DeferredPlan[] = [];
+    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
+      const request = createDeferredPlan();
+      requests.push(request);
+      return request.promise;
+    });
+    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+
+    broker.onTick();
+    expect(planFn).not.toHaveBeenCalled();
+
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledOnce();
+    const first = requests[0];
+    if (first === undefined) throw new Error("hunger plan was not dispatched");
+    first.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await first.promise;
+
+    engine.world.tick += THINK_COOLDOWN_TICKS;
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledOnce();
+  });
+
+  it("does not trigger for an agent first observed below the threshold", () => {
+    const engine = createTestEngine();
+    const missingId = "future-agent";
+    const planFn = vi.fn(async (): Promise<PlanResult> => ({ tasks: [], source: "llm" }));
+    const broker = new ThoughtBroker({ engine, llmAgentIds: [missingId], planFn });
+    const newcomer = { ...getAgent(engine, 0), id: missingId, tasks: [{ kind: "deposit" }] };
+    newcomer.hunger = HUNGER_EAT_THRESHOLD - 1;
+    engine.world.agents.push(newcomer);
+
+    broker.onTick();
+
+    expect(planFn).not.toHaveBeenCalled();
+  });
+
+  it("dynamically queues a new managed resident without breaking single-flight", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    engine.world.agents = [firstAgent];
+    const requests: DeferredPlan[] = [];
+    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
+      const request = createDeferredPlan();
+      requests.push(request);
+      return request.promise;
+    });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: () => engine.world.agents.map(({ id }) => id),
+      planFn,
+    });
+
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledOnce();
+
+    const newcomer = {
+      ...getAgent(createTestEngine(), 0),
+      id: "agent-new",
+      name: "Dahlia",
+      hunger: HUNGER_EAT_THRESHOLD - 1,
+      tasks: [{ kind: "deposit" } as const],
+    };
+    engine.world.agents.push(newcomer);
+    broker.onTick();
+    expect(newcomer.thinking).toBe(false);
+    expect(planFn).toHaveBeenCalledOnce();
+
+    newcomer.tasks = [];
+    broker.onTick();
+    expect(newcomer.thinking).toBe(true);
+    expect(planFn).toHaveBeenCalledOnce();
+
+    const first = requests[0];
+    if (first === undefined) throw new Error("first plan was not dispatched");
+    first.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await first.promise;
+
+    expect(planFn).toHaveBeenCalledTimes(2);
+    expect(planFn.mock.calls[1]?.[1]).toBe(newcomer);
+    const second = requests[1];
+    if (second === undefined) throw new Error("newcomer plan was not dispatched");
+    second.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await second.promise;
+  });
+
+  it("consumes a crossing suppressed by cooldown without repeatedly triggering", async () => {
+    const engine = createTestEngine();
+    const agent = getAgent(engine, 0);
+    agent.hunger = HUNGER_EAT_THRESHOLD;
+    const requests: DeferredPlan[] = [];
+    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
+      const request = createDeferredPlan();
+      requests.push(request);
+      return request.promise;
+    });
+    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+
+    broker.onTick();
+    const initial = requests[0];
+    if (initial === undefined) throw new Error("initial plan was not dispatched");
+    initial.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await initial.promise;
+
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+    engine.world.tick += 1;
+    broker.onTick();
+    engine.world.tick += THINK_COOLDOWN_TICKS;
+    broker.onTick();
+
+    expect(planFn).toHaveBeenCalledOnce();
   });
 });

@@ -1,9 +1,18 @@
 import {
   type AgentState,
+  DAYS_PER_SEASON,
+  dayOfTick,
+  foodDaysRemaining,
+  HOUSE_CAPACITY,
+  HOUSE_WOOD_COST,
   MAX_PLAN_TASKS,
   type ResourceKind,
+  SEASONS,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
+  seasonOfTick,
+  TICKS_PER_DAY,
+  WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 
@@ -53,22 +62,61 @@ function formatCarrying(agent: AgentState): string {
   return agent.carrying === null ? "nothing" : `${agent.carrying.kind} ${agent.carrying.amount}`;
 }
 
+function daysUntilWinter(tick: number): number {
+  if (seasonOfTick(tick) === "winter") return 0;
+  const ticksPerYear = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY;
+  const winterStartTick = DAYS_PER_SEASON * (SEASONS.length - 1) * TICKS_PER_DAY;
+  const tickInYear = tick % ticksPerYear;
+  return Math.ceil((winterStartTick - tickInYear) / TICKS_PER_DAY);
+}
+
+function completedHousingCapacity(world: WorldState): number {
+  return world.buildings.filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+}
+
+function futureWinterBurnDays(tick: number): number {
+  if (seasonOfTick(tick) !== "winter") return DAYS_PER_SEASON;
+  const dayIndexInSeason = (dayOfTick(tick) - 1) % DAYS_PER_SEASON;
+  return DAYS_PER_SEASON - dayIndexInSeason - 1;
+}
+
+function burnDayLabel(days: number): string {
+  return `${days} future burn ${days === 1 ? "day" : "days"}`;
+}
+
 export function buildPlanPrompt(world: WorldState, agent: AgentState): string {
-  const persona = `${agent.name}, a diligent forester who worries about winter`;
+  const persona = `${agent.name}, a diligent forester who worries about winter; you must survive the winter`;
+  const winterBurnDays = futureWinterBurnDays(world.tick);
+  const winterWoodNeed = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * winterBurnDays;
   const taskSchema =
     '[{"kind":"moveTo","dest":{"x":0,"y":0}} | ' +
     '{"kind":"gather","resource":"wood"|"food","target":{"x":0,"y":0}} | ' +
+    '{"kind":"eat"} | ' +
+    '{"kind":"forage","target":{"x":0,"y":0}} | ' +
+    '{"kind":"build","pos":{"x":0,"y":0}} | ' +
+    '{"kind":"rest"} | ' +
     '{"kind":"deposit"}]';
 
   return [
     `Agent: ${persona}`,
+    `calendar: day ${dayOfTick(world.tick)}, season ${seasonOfTick(world.tick)}, ${daysUntilWinter(world.tick)} days until winter`,
     `position: (${agent.pos.x},${agent.pos.y})`,
     `carrying: ${formatCarrying(agent)}`,
+    `needs: hunger=${agent.hunger}, fatigue=${agent.fatigue}, health=${agent.health}`,
+    `population: ${world.agents.length} / completed-house capacity ${completedHousingCapacity(world)}`,
     `stockpile position: (${world.stockpile.pos.x},${world.stockpile.pos.y})`,
     `wood: ${world.stockpile.wood} / target ${STOCKPILE_TARGET_WOOD}`,
     `food: ${world.stockpile.food} / target ${STOCKPILE_TARGET_FOOD}`,
+    `wood: ${world.stockpile.wood} stored / ${winterWoodNeed} needed for remaining winter (${burnDayLabel(winterBurnDays)})`,
+    `food: ${world.stockpile.food} stored, ${foodDaysRemaining(world).toFixed(2)} days remaining`,
     formatResourceTiles(world, agent, "wood"),
     formatResourceTiles(world, agent, "food"),
+    "Action guidance:",
+    `- eat: when hunger is low and the stockpile has enough food; it navigates to the stockpile and consumes a meal.`,
+    `- forage: when hungry and stored food cannot provide a meal; target a live food tile and eat there.`,
+    `- build: choose the house site only; this action navigates adjacent and builds. It costs ${HOUSE_WOOD_COST} wood for a new house; never add moveTo onto a build site.`,
+    `- rest: when fatigue is low; it navigates to a completed house or the stockpile.`,
+    `- deposit: use an explicit moveTo to the stockpile first, then deposit while beside it.`,
     "Reply with ONLY a JSON object and no prose or code fences:",
     `{"reasoning": "<one short sentence>", "plan": ${taskSchema}}`,
     `The plan must contain 1..${MAX_PLAN_TASKS} tasks.`,

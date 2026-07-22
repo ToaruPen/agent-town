@@ -1,8 +1,9 @@
 import { createServer, type Server as HttpServer } from "node:http";
-import { AGENT_NAMES, encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
+import { encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
 import WebSocket, { WebSocketServer } from "ws";
 
 import { CliClaudeRunner } from "../llm/claudeRunner.js";
+import { llmAgentIdsForWorld, parseLlmAgentSelection } from "../llm/llmAgentSelection.js";
 import { LlmPlanner } from "../llm/llmPlanner.js";
 import { ThoughtBroker } from "../llm/thoughtBroker.js";
 import { createEngine, type Engine } from "../sim/engine.js";
@@ -21,6 +22,7 @@ interface ServerOptions {
   port: number;
   seed: number;
   llmPlannerEnabled?: boolean;
+  llmAgents?: string;
   staticDir?: string;
 }
 
@@ -99,14 +101,14 @@ function createThoughtBroker(
   engine: Engine,
   fallback: FakePlanner,
   rng: () => number,
+  llmAgents: string | undefined,
 ): ThoughtBroker | undefined {
   if (!enabled) return undefined;
-  const llmAgent = engine.world.agents.find(({ name }) => name === AGENT_NAMES[0]);
-  if (llmAgent === undefined) throw new Error(`missing LLM agent ${AGENT_NAMES[0]}`);
   const planner = new LlmPlanner(new CliClaudeRunner(), fallback, rng);
+  const selection = parseLlmAgentSelection(llmAgents, engine.world.agents);
   return new ThoughtBroker({
     engine,
-    llmAgentIds: [llmAgent.id],
+    llmAgentIds: () => llmAgentIdsForWorld(selection, engine.world.agents),
     planFn: (world, agent) => planner.planAsync(world, agent),
   });
 }
@@ -115,7 +117,13 @@ export function startServer(opts: ServerOptions): ServerHandle {
   const rng = createRng(opts.seed);
   const fallback = new FakePlanner(rng);
   const engine = createEngine(generateWorld(opts.seed), fallback, rng);
-  const broker = createThoughtBroker(opts.llmPlannerEnabled === true, engine, fallback, rng);
+  const broker = createThoughtBroker(
+    opts.llmPlannerEnabled === true,
+    engine,
+    fallback,
+    rng,
+    opts.llmAgents,
+  );
   const httpServer = createServer(createStaticHandler(opts.staticDir));
   const socketServer = createWebSocketServer(httpServer, WEBSOCKET_PATH);
 
