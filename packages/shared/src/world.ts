@@ -6,6 +6,8 @@ export interface Tile {
   terrain: Terrain;
   /** Remaining harvestable amount; only > 0 on forest (wood) or plains berry tiles (food). */
   resource: { kind: ResourceKind; amount: number } | null;
+  /** Original renewable resource kind; remains present after the resource is depleted. */
+  readonly resourceOrigin?: ResourceKind;
 }
 
 // biome-ignore format: Preserve the contract's verbatim one-line declaration.

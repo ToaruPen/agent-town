@@ -1,5 +1,18 @@
-import { MAP_HEIGHT, MAP_WIDTH, type WorldState } from "@agent-town/shared";
-import { Application, Assets, Container, type FederatedPointerEvent, TextureStyle } from "pixi.js";
+import {
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  type Position,
+  type ResourceKind,
+  type WorldState,
+} from "@agent-town/shared";
+import {
+  Application,
+  Assets,
+  Container,
+  type FederatedPointerEvent,
+  Graphics,
+  TextureStyle,
+} from "pixi.js";
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
@@ -8,12 +21,32 @@ import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
-import { createWorldViewport } from "./render/worldViewport.js";
+import { createDoubleTapHistory, createWorldViewport } from "./render/worldViewport.js";
+import {
+  bubbleText,
+  buildInfoBubbleViewModel,
+  createInfoBubbleGesture,
+  createInfoBubbleRenderGate,
+  type InfoBubblePointer,
+  type InfoBubbleTarget,
+  isTapGesture,
+  mapInfoBubblePlacementToScreen,
+  preserveInfoBubbleInvalidation,
+  renderInfoBubble,
+  resolveHoveredAgentAtScreen,
+  resolveInfoBubbleTarget,
+  type TapPoint,
+} from "./ui/infoBubble.js";
 import {
   createInspectPanel,
   createThoughtBubbleSchedule,
   updateThoughtBubbleSchedule,
 } from "./ui/inspectPanel.js";
+import {
+  keyboardActivationAction,
+  moveTileCursor,
+  resolveKeyboardTarget,
+} from "./ui/keyboardNavigation.js";
 import {
   createDeathEventSchedule,
   type DeathEventSchedule,
@@ -24,14 +57,11 @@ import {
 const HUD_PADDING = 16;
 const NARROW_SCREEN_MAX_WIDTH = 520;
 const TICKER_HUD_GAP = 6;
-const MAX_GROUND_TAP_DISTANCE = 12;
-const MAX_GROUND_TAP_DURATION_MS = 300;
+const KEYBOARD_CURSOR_COLOR = 0xfff176;
+const CANVAS_LABEL =
+  "Agent Town world. Use arrow keys to move the tile cursor, Enter or Space to inspect, and Escape to close.";
 
-interface GroundTapCandidate {
-  x: number;
-  y: number;
-  startedAt: number;
-}
+type TapCandidate = TapPoint;
 
 TextureStyle.defaultOptions.scaleMode = "nearest";
 await Assets.load([...SPRITE_PATHS]);
@@ -43,54 +73,161 @@ await app.init({
 });
 
 document.body.appendChild(app.canvas);
+app.canvas.tabIndex = 0;
+app.canvas.setAttribute("role", "application");
+app.canvas.setAttribute("aria-label", CANVAS_LABEL);
+app.canvas.setAttribute("aria-describedby", "world-instructions world-status");
 
 const inspectPanelRoot = document.querySelector<HTMLElement>("#inspect-panel");
 if (inspectPanelRoot === null) throw new Error("Missing #inspect-panel root");
+const worldStatusElement = document.querySelector<HTMLElement>("#world-status");
+if (worldStatusElement === null) throw new Error("Missing #world-status root");
+const worldStatusRoot: HTMLElement = worldStatusElement;
 
 let selectedAgentId: string | null = null;
+let hoveredAgentId: string | null = null;
+let activeInfoTarget: InfoBubbleTarget | null = null;
+let agentsDirty = false;
+let infoBubbleDirty = false;
 const inspectPanel = createInspectPanel(inspectPanelRoot, closeInspectPanel);
-const groundTapCandidates = new Map<number, GroundTapCandidate>();
+const tapCandidates = new Map<number, TapCandidate>();
+const knownResourceKinds = new Map<number, ResourceKind>();
+const mainTapHistory = createDoubleTapHistory();
+let infoBubbleRenderGate = createInfoBubbleRenderGate();
+let infoBubbleGesture = createInfoBubbleGesture();
+let lastPointerScreenPosition: Position | null = null;
+let keyboardCursorPosition: Position = { x: 0, y: 0 };
+let keyboardFocused = false;
+let keyboardWorldInitialized = false;
+
+const world = new Container();
+const groundLayer = new Container();
+const objectLayer = new Container();
+const infoBubbleLayer = new Container();
+const hudLayer = new Container();
+const tickerLayer = new Container();
+const keyboardCursor = new Graphics()
+  .rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2)
+  .stroke({ color: KEYBOARD_CURSOR_COLOR, width: 1 });
+world.sortableChildren = true;
+objectLayer.sortableChildren = true;
+groundLayer.zIndex = 0;
+objectLayer.zIndex = 1;
+keyboardCursor.zIndex = 2;
+keyboardCursor.eventMode = "none";
+keyboardCursor.visible = false;
+world.addChild(groundLayer, objectLayer, keyboardCursor);
+hudLayer.position.set(HUD_PADDING, HUD_PADDING);
+app.stage.addChild(world, infoBubbleLayer, hudLayer, tickerLayer);
 
 function closeInspectPanel(): void {
   selectedAgentId = null;
   inspectPanel.close();
+  agentsDirty = true;
 }
 
-function startGroundTap(event: FederatedPointerEvent): void {
+function closeInfoBubble(): void {
+  activeInfoTarget = null;
+  infoBubbleDirty = true;
+  infoBubbleRenderGate.cancel();
+  infoBubbleGesture.cancel();
+  agentsDirty = true;
+}
+
+function clearGestureHistories(): void {
+  tapCandidates.clear();
+  mainTapHistory.clear();
+  viewport.clearTapHistory();
+}
+
+function startTap(event: FederatedPointerEvent): void {
   if (event.pointerType === "mouse" && event.button !== 0) return;
-  groundTapCandidates.set(event.pointerId, {
+  updateHoveredAgentAt(event);
+  tapCandidates.set(event.pointerId, {
     x: event.global.x,
     y: event.global.y,
-    startedAt: event.timeStamp,
+    at: event.timeStamp,
   });
-  if (groundTapCandidates.size > 1) groundTapCandidates.clear();
+  if (tapCandidates.size <= 1) return;
+  tapCandidates.clear();
+  mainTapHistory.clear();
+  closeInfoBubble();
 }
 
-function trackGroundTap(event: FederatedPointerEvent): void {
-  const candidate = groundTapCandidates.get(event.pointerId);
+function trackTap(event: FederatedPointerEvent): void {
+  updateHoveredAgentAt(event);
+  if (infoBubbleGesture.move(infoBubblePointer(event)) === "invalid") closeInfoBubble();
+  const candidate = tapCandidates.get(event.pointerId);
   if (candidate === undefined) return;
-  const distance = Math.hypot(event.global.x - candidate.x, event.global.y - candidate.y);
-  if (distance > MAX_GROUND_TAP_DISTANCE) groundTapCandidates.delete(event.pointerId);
+  const distanceOnlyEnd = { x: event.global.x, y: event.global.y, at: candidate.at };
+  if (isTapGesture(candidate, distanceOnlyEnd)) return;
+  tapCandidates.delete(event.pointerId);
+  mainTapHistory.clear();
+  closeInfoBubble();
 }
 
-function closeOnGroundTap(event: FederatedPointerEvent): void {
-  const candidate = groundTapCandidates.get(event.pointerId);
-  groundTapCandidates.delete(event.pointerId);
-  if (candidate === undefined || event.target !== app.stage) return;
-  const duration = event.timeStamp - candidate.startedAt;
-  if (duration >= 0 && duration <= MAX_GROUND_TAP_DURATION_MS) closeInspectPanel();
+function infoBubblePointer(event: FederatedPointerEvent): InfoBubblePointer {
+  return {
+    pointerId: event.pointerId,
+    x: event.global.x,
+    y: event.global.y,
+    at: event.timeStamp,
+  };
 }
 
-const world = new Container();
-const mapLayer = new Container();
-const structureLayer = new Container();
-const agentLayer = new Container();
-const deathMarkerLayer = new Container();
-const hudLayer = new Container();
-const tickerLayer = new Container();
-world.addChild(mapLayer, structureLayer, deathMarkerLayer, agentLayer);
-hudLayer.position.set(HUD_PADDING, HUD_PADDING);
-app.stage.addChild(world, hudLayer, tickerLayer);
+function announce(message: string): void {
+  worldStatusRoot.textContent = message;
+}
+
+function targetAnnouncement(target: InfoBubbleTarget): string {
+  if (state === null) return "World data is not available yet.";
+  const viewModel = buildInfoBubbleViewModel(target, state, deathSchedule.events);
+  return viewModel === null ? "The selected object is no longer available." : bubbleText(viewModel);
+}
+
+function selectInfoTarget(target: InfoBubbleTarget): void {
+  closeInspectPanel();
+  activeInfoTarget = target;
+  infoBubbleDirty = true;
+  agentsDirty = true;
+  announce(targetAnnouncement(target));
+}
+
+function endTap(event: FederatedPointerEvent): void {
+  const candidate = tapCandidates.get(event.pointerId);
+  tapCandidates.delete(event.pointerId);
+  if (candidate === undefined) return;
+  const end = { x: event.global.x, y: event.global.y, at: event.timeStamp };
+  if (!isTapGesture(candidate, end)) {
+    closeInfoBubble();
+    return;
+  }
+  if (mainTapHistory.register(end)) {
+    closeInfoBubble();
+    return;
+  }
+  if (state === null) {
+    closeInfoBubble();
+    return;
+  }
+  const target = resolveInfoBubbleTarget(
+    state,
+    deathSchedule.events,
+    knownResourceKinds,
+    world.toLocal(event.global),
+  );
+  if (target === null) {
+    closeInspectPanel();
+    closeInfoBubble();
+    return;
+  }
+  selectInfoTarget(target);
+}
+
+function cancelTap(event: FederatedPointerEvent): void {
+  tapCandidates.delete(event.pointerId);
+  mainTapHistory.clear();
+}
 
 function positionTicker(width: number): void {
   const y =
@@ -110,20 +247,24 @@ const viewport = createWorldViewport(
 );
 app.renderer.on("resize", (width, height) => {
   viewport.resize(width, height);
+  closeInfoBubble();
   positionTicker(width);
 });
-app.stage.on("pointerdown", startGroundTap);
-app.stage.on("globalpointermove", trackGroundTap);
-app.stage.on("pointertap", closeOnGroundTap);
-app.stage.on("pointerupoutside", (event) => groundTapCandidates.delete(event.pointerId));
-app.stage.on("pointercancel", (event) => groundTapCandidates.delete(event.pointerId));
+app.stage.on("pointerdown", startTap);
+app.stage.on("globalpointermove", trackTap);
+app.stage.on("pointerup", endTap);
+app.stage.on("pointerupoutside", cancelTap);
+app.stage.on("pointercancel", cancelTap);
+app.stage.on("wheel", () => {
+  mainTapHistory.clear();
+  closeInfoBubble();
+});
 
 let state: WorldState | null = null;
 let bubbleSchedule = createThoughtBubbleSchedule();
 let deathSchedule: DeathEventSchedule = { observedDeaths: 0, events: [] };
 let mapDirty = false;
 let structuresDirty = false;
-let agentsDirty = false;
 let deathsDirty = false;
 let tickerDirty = false;
 let hudDirty = false;
@@ -144,6 +285,129 @@ function openInspectPanel(agentId: string): void {
   if (agent === undefined) return;
   selectedAgentId = agentId;
   inspectPanel.show(agent);
+  agentsDirty = true;
+  announce(`Opened full details for ${agent.name}.`);
+}
+
+function openInspectPanelFromBubble(agentId: string): void {
+  if (activeInfoTarget?.kind !== "agent" || activeInfoTarget.agentId !== agentId) return;
+  openInspectPanel(agentId);
+  closeInfoBubble();
+}
+
+function observeResourceKinds(next: WorldState): void {
+  for (const [index, tile] of next.tiles.entries()) {
+    const resourceKind = tile.resource?.kind ?? tile.resourceOrigin;
+    if (resourceKind !== undefined) knownResourceKinds.set(index, resourceKind);
+  }
+}
+
+function setHoveredAgent(agentId: string | null): void {
+  if (hoveredAgentId === agentId) return;
+  hoveredAgentId = agentId;
+  agentsDirty = true;
+}
+
+function rehitHoveredAgent(): void {
+  const agentId =
+    state === null || lastPointerScreenPosition === null
+      ? null
+      : resolveHoveredAgentAtScreen(
+          state,
+          deathSchedule.events,
+          knownResourceKinds,
+          lastPointerScreenPosition,
+          (point) => world.toLocal(point),
+        );
+  setHoveredAgent(agentId);
+}
+
+function updateHoveredAgentAt(event: FederatedPointerEvent): void {
+  lastPointerScreenPosition = { x: event.global.x, y: event.global.y };
+  rehitHoveredAgent();
+}
+
+function clearHoveredAgent(): void {
+  lastPointerScreenPosition = null;
+  setHoveredAgent(null);
+}
+
+function setKeyboardCursor(position: Position): void {
+  keyboardCursorPosition = position;
+  keyboardCursor.position.set(position.x * TILE_SIZE, position.y * TILE_SIZE);
+}
+
+function keyboardTarget(): InfoBubbleTarget | null {
+  return state === null
+    ? null
+    : resolveKeyboardTarget(
+        state,
+        deathSchedule.events,
+        knownResourceKinds,
+        keyboardCursorPosition,
+      );
+}
+
+function announceKeyboardCursor(): void {
+  const target = keyboardTarget();
+  const coordinates = `Tile ${keyboardCursorPosition.x + 1}, ${keyboardCursorPosition.y + 1}.`;
+  announce(target === null ? coordinates : `${coordinates} ${targetAnnouncement(target)}`);
+}
+
+function moveKeyboardSelection(key: string, currentState: WorldState): void {
+  setKeyboardCursor(
+    moveTileCursor(keyboardCursorPosition, key, currentState.width, currentState.height),
+  );
+  closeInfoBubble();
+  announceKeyboardCursor();
+}
+
+function activateKeyboardSelection(): void {
+  const target = keyboardTarget();
+  if (target === null) {
+    announceKeyboardCursor();
+    return;
+  }
+  if (
+    target.kind === "agent" &&
+    keyboardActivationAction(activeInfoTarget, target) === "open-agent"
+  ) {
+    openInspectPanel(target.agentId);
+    closeInfoBubble();
+    return;
+  }
+  selectInfoTarget(target);
+}
+
+function handleCanvasKeydown(event: KeyboardEvent): void {
+  if (state === null) return;
+  if (event.key.startsWith("Arrow")) {
+    event.preventDefault();
+    moveKeyboardSelection(event.key, state);
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    activateKeyboardSelection();
+    return;
+  }
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  closeInspectPanel();
+  closeInfoBubble();
+  announce("Selection closed.");
+}
+
+function syncKeyboardCursor(next: WorldState): void {
+  if (!keyboardWorldInitialized) {
+    keyboardWorldInitialized = true;
+    setKeyboardCursor(next.stockpile.pos);
+    return;
+  }
+  setKeyboardCursor({
+    x: Math.min(keyboardCursorPosition.x, next.width - 1),
+    y: Math.min(keyboardCursorPosition.y, next.height - 1),
+  });
 }
 
 function replaceState(next: WorldState): void {
@@ -153,7 +417,11 @@ function replaceState(next: WorldState): void {
     performance.now(),
   );
   deathSchedule = createDeathEventSchedule(next);
+  knownResourceKinds.clear();
+  observeResourceKinds(next);
   state = next;
+  syncKeyboardCursor(next);
+  closeInfoBubble();
   viewport.fit(next.width * TILE_SIZE, next.height * TILE_SIZE);
   syncInspectPanel(next);
   mapDirty = true;
@@ -162,6 +430,9 @@ function replaceState(next: WorldState): void {
   deathsDirty = true;
   tickerDirty = true;
   hudDirty = true;
+  infoBubbleDirty = true;
+  rehitHoveredAgent();
+  if (keyboardFocused) announceKeyboardCursor();
 }
 
 function updateState(next: WorldState): void {
@@ -173,45 +444,125 @@ function updateState(next: WorldState): void {
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
   deathSchedule = updateDeathEventSchedule(deathSchedule, state, next);
+  observeResourceKinds(next);
   state = next;
+  rehitHoveredAgent();
   syncInspectPanel(next);
   agentsDirty = true;
   deathsDirty = true;
   tickerDirty = true;
   hudDirty = true;
+  infoBubbleDirty = preserveInfoBubbleInvalidation(infoBubbleDirty, activeInfoTarget);
 }
 
 connect(getWebSocketUrl(window.location), { onWelcome: replaceState, onUpdate: updateState });
 
-app.ticker.add(() => {
-  if (state === null) return;
-  const now = performance.now();
+app.canvas.addEventListener("pointerleave", clearHoveredAgent);
+app.canvas.addEventListener("keydown", handleCanvasKeydown);
+app.canvas.addEventListener("focus", () => {
+  keyboardFocused = true;
+  keyboardCursor.visible = true;
+  announceKeyboardCursor();
+});
+app.canvas.addEventListener("blur", () => {
+  keyboardFocused = false;
+  keyboardCursor.visible = false;
+});
+
+function expireSpeechBubbles(now: number, currentState: WorldState): void {
   if ([...bubbleSchedule.bubbles.values()].some((bubble) => bubble.expiresAt <= now)) {
-    bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, state.agents, now);
+    bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, currentState.agents, now);
     agentsDirty = true;
   }
+}
+
+function renderDirtyWorldLayers(currentState: WorldState): void {
   if (mapDirty) {
-    renderMapLayer(mapLayer, state);
+    renderMapLayer(groundLayer, objectLayer, currentState);
     mapDirty = false;
   }
   if (structuresDirty) {
-    renderStructureLayer(structureLayer, state.buildings);
+    renderStructureLayer(objectLayer, currentState.buildings);
     structuresDirty = false;
   }
   if (agentsDirty) {
-    renderAgentLayer(agentLayer, state.agents, bubbleSchedule.bubbles, openInspectPanel);
+    const bubbleAgentId =
+      activeInfoTarget?.kind === "agent" ? activeInfoTarget.agentId : selectedAgentId;
+    renderAgentLayer(objectLayer, currentState.agents, bubbleSchedule.bubbles, {
+      selectedAgentId: bubbleAgentId,
+      hoveredAgentId,
+    });
     agentsDirty = false;
   }
   if (deathsDirty) {
-    renderDeathMarkerLayer(deathMarkerLayer, deathSchedule.events);
+    renderDeathMarkerLayer(objectLayer, deathSchedule.events);
     deathsDirty = false;
   }
+}
+
+function renderActiveInfoBubble(currentState: WorldState): void {
+  if (infoBubbleRenderGate.shouldRender(infoBubbleDirty)) {
+    infoBubbleRenderGate.cancel();
+    infoBubbleGesture.cancel();
+    infoBubbleRenderGate = createInfoBubbleRenderGate();
+    infoBubbleGesture = createInfoBubbleGesture();
+    const interaction = infoBubbleRenderGate;
+    const gesture = infoBubbleGesture;
+    const viewModel =
+      activeInfoTarget === null
+        ? null
+        : buildInfoBubbleViewModel(activeInfoTarget, currentState, deathSchedule.events);
+    if (activeInfoTarget !== null && viewModel === null) {
+      activeInfoTarget = null;
+      agentsDirty = true;
+    }
+    const screenViewModel =
+      viewModel === null
+        ? null
+        : {
+            ...viewModel,
+            placement: mapInfoBubblePlacementToScreen(viewModel.placement, (point) =>
+              world.toGlobal(point),
+            ),
+          };
+    renderInfoBubble(
+      infoBubbleLayer,
+      screenViewModel,
+      app.screen,
+      openInspectPanelFromBubble,
+      () => {
+        clearGestureHistories();
+      },
+      (event) => {
+        interaction.begin();
+        gesture.start(infoBubblePointer(event));
+      },
+      (event, releasedInside) => {
+        const shouldActivate = gesture.end(infoBubblePointer(event), releasedInside);
+        interaction.end();
+        if (!shouldActivate) closeInfoBubble();
+      },
+      () => interaction.canActivate() && gesture.canActivate(),
+    );
+    infoBubbleDirty = false;
+  }
+}
+
+function renderScreenLayers(currentState: WorldState): void {
   if (tickerDirty) {
     renderDeathTickerLayer(tickerLayer, latestDeathEvent(deathSchedule));
     tickerDirty = false;
   }
   if (hudDirty) {
-    renderHudLayer(hudLayer, state);
+    renderHudLayer(hudLayer, currentState);
     hudDirty = false;
   }
+}
+
+app.ticker.add(() => {
+  if (state === null) return;
+  expireSpeechBubbles(performance.now(), state);
+  renderDirtyWorldLayers(state);
+  renderActiveInfoBubble(state);
+  renderScreenLayers(state);
 });

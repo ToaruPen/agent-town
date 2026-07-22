@@ -14,7 +14,7 @@ describe("wire protocol", () => {
       tick: 0,
       width: 1,
       height: 1,
-      tiles: [{ terrain: "plains", resource: null }],
+      tiles: [{ terrain: "plains", resource: null, resourceOrigin: "food" }],
       agents: [
         {
           id: "agent-1",
@@ -36,8 +36,10 @@ describe("wire protocol", () => {
       deaths: [{ name: "Birch", tick: 7200, cause: "starvation" }],
     };
     const message: ServerMessage = { type: "welcome", state };
+    const decoded = decodeServerMessage(encodeMessage(message));
 
-    expect(decodeServerMessage(encodeMessage(message))).toEqual(message);
+    expect(decoded).toEqual(message);
+    expect(decoded.type === "welcome" ? decoded.state.tiles[0]?.resourceOrigin : null).toBe("food");
   });
 
   it("rejects a server message without a type", () => {

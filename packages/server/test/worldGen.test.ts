@@ -56,6 +56,15 @@ describe("generateWorld", () => {
     expect(forestTiles.length).toBeGreaterThan(0);
     for (const tile of forestTiles) {
       expect(tile.resource?.kind).toBe("wood");
+      expect(tile.resourceOrigin).toBe("wood");
+    }
+  });
+
+  it("records an immutable origin only for generated resource tiles", () => {
+    const world = generateWorld(42);
+
+    for (const tile of world.tiles) {
+      expect(tile.resourceOrigin ?? null).toBe(tile.resource?.kind ?? null);
     }
   });
 

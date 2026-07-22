@@ -1,16 +1,16 @@
 import type { AgentState } from "@agent-town/shared";
-import { Container, type FederatedPointerEvent, Graphics, Rectangle, Sprite, Text } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Text } from "pixi.js";
 
 import type { ThoughtBubble } from "../ui/inspectPanel.js";
 import { AGENT_LABEL_COLOR, CARRY_INDICATOR_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
-import { agentFacingScale, agentSpritePath } from "./sprites.js";
+import { agentDepth, agentFacingScale, agentSpritePath, layoutAgentsOnTiles } from "./sprites.js";
 
 const AGENT_HALF_SIZE = TILE_SIZE / 2;
 const LLM_RING_GAP = 2;
 const LLM_RING_WIDTH = 2;
 const LLM_RING_COLOR = 0xffd700;
-const LABEL_FONT_SIZE = 9;
+const LABEL_FONT_SIZE = 7;
 const THINKING_INDICATOR_OFFSET = LABEL_FONT_SIZE + 2;
 const CARRY_INDICATOR_SIZE = 4;
 const BUBBLE_FONT_SIZE = 8;
@@ -22,8 +22,12 @@ const BUBBLE_TAIL_SIZE = 3;
 const BUBBLE_FILL_COLOR = 0xfff8dc;
 const BUBBLE_STROKE_COLOR = 0x34302a;
 const BUBBLE_TEXT_COLOR = 0x241f1a;
+const AGENT_OBJECT_LABEL = "agent-object";
 
-export type AgentTapHandler = (agentId: string) => void;
+export interface AgentLayerInteractions {
+  selectedAgentId: string | null;
+  hoveredAgentId: string | null;
+}
 
 function createSpeechBubble(bubble: ThoughtBubble): Container {
   const text = new Text({
@@ -63,19 +67,17 @@ function bubbleOffset(agent: AgentState): number {
   return -AGENT_HALF_SIZE - indicatorHeight - 2;
 }
 
-function createAgentContainer(agent: AgentState, onTap: AgentTapHandler): Container {
+function createAgentContainer(agent: AgentState, offset: { x: number; y: number }): Container {
   const container = new Container();
   container.position.set(
-    agent.pos.x * TILE_SIZE + TILE_SIZE / 2,
-    agent.pos.y * TILE_SIZE + TILE_SIZE / 2,
+    agent.pos.x * TILE_SIZE + TILE_SIZE / 2 + offset.x,
+    agent.pos.y * TILE_SIZE + TILE_SIZE / 2 + offset.y,
   );
+  container.label = AGENT_OBJECT_LABEL;
+  container.zIndex = agentDepth(agent.pos.y, offset.y);
   container.eventMode = "static";
   container.hitArea = new Rectangle(-AGENT_HALF_SIZE, -AGENT_HALF_SIZE, TILE_SIZE, TILE_SIZE);
   container.cursor = "pointer";
-  container.on("pointertap", (event: FederatedPointerEvent) => {
-    event.stopPropagation();
-    onTap(agent.id);
-  });
   return container;
 }
 
@@ -83,10 +85,11 @@ function drawAgent(
   layer: Container,
   agent: AgentState,
   index: number,
+  offset: { x: number; y: number },
   bubble: ThoughtBubble | undefined,
-  onTap: AgentTapHandler,
+  interactions: AgentLayerInteractions,
 ): void {
-  const container = createAgentContainer(agent, onTap);
+  const container = createAgentContainer(agent, offset);
   layer.addChild(container);
 
   if (agent.planSource === "llm") {
@@ -109,6 +112,8 @@ function drawAgent(
   });
   label.anchor.set(0.5, 1);
   label.position.set(0, -AGENT_HALF_SIZE - 1);
+  label.visible =
+    interactions.selectedAgentId === agent.id || interactions.hoveredAgentId === agent.id;
   container.addChild(label);
 
   if (agent.thinking) {
@@ -144,10 +149,14 @@ export function renderAgentLayer(
   layer: Container,
   agents: AgentState[],
   bubbles: ReadonlyMap<string, ThoughtBubble>,
-  onTap: AgentTapHandler,
+  interactions: AgentLayerInteractions,
 ): void {
-  for (const child of layer.removeChildren()) child.destroy({ children: true });
-  agents.forEach((agent, index) => {
-    drawAgent(layer, agent, index, bubbles.get(agent.id), onTap);
+  for (const child of [...layer.children]) {
+    if (child.label !== AGENT_OBJECT_LABEL) continue;
+    layer.removeChild(child);
+    child.destroy({ children: true });
+  }
+  layoutAgentsOnTiles(agents).forEach(({ agent, offset }, index) => {
+    drawAgent(layer, agent, index, offset, bubbles.get(agent.id), interactions);
   });
 }

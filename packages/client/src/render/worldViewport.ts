@@ -5,13 +5,14 @@ import {
   Rectangle,
 } from "pixi.js";
 
+import { isTapGesture } from "../ui/infoBubble.js";
+
 const MIN_FIT_SCALE = 0.5;
 const MAX_FIT_SCALE = 4;
 const WHEEL_ZOOM_RATE = 0.001;
 const LINE_HEIGHT = 16;
-const MAX_TAP_DURATION_MS = 300;
 const MAX_DOUBLE_TAP_DELAY_MS = 300;
-const MAX_TAP_DISTANCE = 12;
+const MAX_TAP_DISTANCE = 8;
 const MAX_DOUBLE_TAP_DISTANCE = 24;
 
 interface ScreenPoint {
@@ -31,12 +32,17 @@ interface PinchState {
   midpoint: ScreenPoint;
 }
 
-interface TapState {
+interface TapState extends ScreenPoint {
   at: number;
-  position: ScreenPoint;
+}
+
+export interface DoubleTapHistory {
+  clear(): void;
+  register(tap: TapState): boolean;
 }
 
 export interface WorldViewport {
+  clearTapHistory(): void;
   fit(worldWidth: number, worldHeight: number): void;
   resize(width: number, height: number): void;
 }
@@ -49,12 +55,39 @@ function distance(first: ScreenPoint, second: ScreenPoint): number {
   return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
+export function pointerPanDelta(
+  start: ScreenPoint,
+  previous: ScreenPoint,
+  current: ScreenPoint,
+): ScreenPoint {
+  if (distance(start, current) <= MAX_TAP_DISTANCE) return { x: 0, y: 0 };
+  return { x: current.x - previous.x, y: current.y - previous.y };
+}
+
 function midpoint(first: ScreenPoint, second: ScreenPoint): ScreenPoint {
   return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
+}
+
+export function createDoubleTapHistory(): DoubleTapHistory {
+  let lastTap: TapState | null = null;
+  return {
+    clear(): void {
+      lastTap = null;
+    },
+    register(tap: TapState): boolean {
+      const isDoubleTap =
+        lastTap !== null &&
+        tap.at - lastTap.at >= 0 &&
+        tap.at - lastTap.at <= MAX_DOUBLE_TAP_DELAY_MS &&
+        distance(lastTap, tap) <= MAX_DOUBLE_TAP_DISTANCE;
+      lastTap = isDoubleTap ? null : tap;
+      return isDoubleTap;
+    },
+  };
 }
 
 function getPointerPair(
@@ -91,7 +124,7 @@ export function createWorldViewport(
   let viewportHeight = initialViewportHeight;
   let fitScale = 1;
   let pinchState: PinchState | null = null;
-  let lastTap: TapState | null = null;
+  const tapHistory = createDoubleTapHistory();
 
   function resetToFit(): void {
     fitScale = Math.min(viewportWidth / worldWidth, viewportHeight / worldHeight);
@@ -117,7 +150,7 @@ export function createWorldViewport(
 
   function markPinch(): void {
     for (const pointer of pointers.values()) pointer.canTap = false;
-    lastTap = null;
+    tapHistory.clear();
     pinchState = createPinchState(pointers);
   }
 
@@ -136,17 +169,9 @@ export function createWorldViewport(
   }
 
   function registerTap(position: ScreenPoint, at: number): void {
-    if (
-      lastTap !== null &&
-      at - lastTap.at >= 0 &&
-      at - lastTap.at <= MAX_DOUBLE_TAP_DELAY_MS &&
-      distance(lastTap.position, position) <= MAX_DOUBLE_TAP_DISTANCE
-    ) {
+    if (tapHistory.register({ ...position, at })) {
       resetToFit();
-      lastTap = null;
-      return;
     }
-    lastTap = { at, position };
   }
 
   function handlePointerDown(event: FederatedPointerEvent): void {
@@ -168,36 +193,37 @@ export function createWorldViewport(
     pointer.current = copyPoint(event.global);
     if (distance(pointer.start, pointer.current) > MAX_TAP_DISTANCE) {
       pointer.canTap = false;
-      lastTap = null;
+      tapHistory.clear();
     }
     if (pointers.size >= 2) {
       for (const activePointer of pointers.values()) activePointer.canTap = false;
       updatePinch();
       return;
     }
-    world.position.x += pointer.current.x - previous.x;
-    world.position.y += pointer.current.y - previous.y;
+    const panDelta = pointerPanDelta(pointer.start, previous, pointer.current);
+    world.position.x += panDelta.x;
+    world.position.y += panDelta.y;
   }
 
   function endPointer(event: FederatedPointerEvent, allowTap: boolean): void {
     const pointer = pointers.get(event.pointerId);
     if (pointer === undefined) return;
     const position = copyPoint(event.global);
-    const elapsed = event.timeStamp - pointer.startedAt;
     const wasTap =
       allowTap &&
       pointers.size === 1 &&
       pointer.canTap &&
-      elapsed >= 0 &&
-      elapsed <= MAX_TAP_DURATION_MS &&
-      distance(pointer.start, position) <= MAX_TAP_DISTANCE;
+      isTapGesture(
+        { ...pointer.start, at: pointer.startedAt },
+        { ...position, at: event.timeStamp },
+      );
     pointers.delete(event.pointerId);
     pinchState = pointers.size >= 2 ? createPinchState(pointers) : null;
     if (wasTap) registerTap(position, event.timeStamp);
   }
 
   function handleWheel(event: FederatedWheelEvent): void {
-    lastTap = null;
+    tapHistory.clear();
     const deltaMultiplier =
       event.deltaMode === FederatedWheelEvent.DOM_DELTA_LINE
         ? LINE_HEIGHT
@@ -211,7 +237,7 @@ export function createWorldViewport(
   function fit(nextWorldWidth: number, nextWorldHeight: number): void {
     worldWidth = nextWorldWidth;
     worldHeight = nextWorldHeight;
-    lastTap = null;
+    tapHistory.clear();
     resetToFit();
   }
 
@@ -219,7 +245,7 @@ export function createWorldViewport(
     viewportWidth = width;
     viewportHeight = height;
     stage.hitArea = new Rectangle(0, 0, width, height);
-    lastTap = null;
+    tapHistory.clear();
     resetToFit();
   }
 
@@ -232,5 +258,5 @@ export function createWorldViewport(
   stage.on("wheel", handleWheel);
   resize(initialViewportWidth, initialViewportHeight);
 
-  return { fit, resize };
+  return { clearTapHistory: tapHistory.clear, fit, resize };
 }
