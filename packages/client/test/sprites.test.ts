@@ -23,6 +23,10 @@ function movingAgent(nextX: number): AgentState {
     tasks: [],
     planSource: "fake",
     thinking: false,
+    lastThought: null,
+    hunger: 100,
+    fatigue: 100,
+    health: 100,
   };
 }
 

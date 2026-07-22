@@ -23,6 +23,10 @@ function createAgent(): AgentState {
     tasks: [],
     planSource: "fake",
     thinking: false,
+    lastThought: null,
+    hunger: 100,
+    fatigue: 100,
+    health: 100,
   };
 }
 
@@ -42,6 +46,7 @@ function createWorld(agent: AgentState): WorldState {
     tiles,
     agents: [agent],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    deaths: [],
   };
 }
 

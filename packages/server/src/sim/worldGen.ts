@@ -1,10 +1,13 @@
 import {
   AGENT_NAMES,
   type AgentState,
+  FATIGUE_MAX,
   FOOD_RESOURCE_MAX,
   FOOD_RESOURCE_MIN,
   FOOD_TILE_CHANCE,
   FOREST_TILE_CHANCE,
+  HEALTH_MAX,
+  HUNGER_MAX,
   MAP_HEIGHT,
   MAP_WIDTH,
   type Position,
@@ -110,6 +113,9 @@ function createAgents(stockpile: Position): AgentState[] {
       planSource: "fake",
       thinking: false,
       lastThought: null,
+      hunger: HUNGER_MAX,
+      fatigue: FATIGUE_MAX,
+      health: HEALTH_MAX,
     };
   });
 }
@@ -137,5 +143,6 @@ export function generateWorld(seed: number): WorldState {
     tiles,
     agents,
     stockpile: { pos: stockpilePosition, wood: 0, food: 0 },
+    deaths: [],
   };
 }

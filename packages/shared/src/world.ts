@@ -28,6 +28,9 @@ export interface AgentState {
   planSource: PlanSource;
   thinking: boolean;
   lastThought: string | null;
+  hunger: number;
+  fatigue: number;
+  health: number;
 }
 
 export type AgentTask =
@@ -42,4 +45,5 @@ export interface WorldState {
   tiles: Tile[]; // row-major, index = y * width + x
   agents: AgentState[];
   stockpile: { pos: Position; wood: number; food: number };
+  deaths: { name: string; tick: number; cause: "starvation" | "cold" }[];
 }

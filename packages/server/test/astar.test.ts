@@ -17,6 +17,7 @@ function createWorld(width: number, height: number, terrainAt: Map<string, Terra
     tiles,
     agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    deaths: [],
   } satisfies WorldState;
 }
 

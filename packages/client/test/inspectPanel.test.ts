@@ -22,6 +22,9 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     planSource: "llm",
     thinking: false,
     lastThought: 'Gather <wood> before dusk.\nThen say "hello".',
+    hunger: 100,
+    fatigue: 100,
+    health: 100,
     ...overrides,
   };
 }

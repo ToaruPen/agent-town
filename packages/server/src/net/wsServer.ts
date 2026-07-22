@@ -36,6 +36,7 @@ function updateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
     tick: engine.world.tick,
     agents: engine.world.agents,
     stockpile: engine.world.stockpile,
+    deaths: engine.world.deaths,
     changedTiles,
   };
 }

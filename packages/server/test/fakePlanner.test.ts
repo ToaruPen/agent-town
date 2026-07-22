@@ -11,6 +11,12 @@ function createAgent(overrides: Partial<AgentState> = {}): AgentState {
     carrying: null,
     activity: { kind: "idle" },
     tasks: [],
+    planSource: "fake",
+    thinking: false,
+    lastThought: null,
+    hunger: 100,
+    fatigue: 100,
+    health: 100,
     ...overrides,
   };
 }
@@ -23,6 +29,7 @@ function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
     tiles,
     agents: [agent],
     stockpile: { pos: { x: tiles.length - 1, y: 0 }, wood: 0, food: 0 },
+    deaths: [],
   };
 }
 

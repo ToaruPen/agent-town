@@ -71,6 +71,7 @@ describe("startServer", () => {
       if (update?.type !== "update") throw new Error("second message was not update");
       expect(update.tick).toBeGreaterThan(welcome.state.tick);
       expect(update.agents[0]).toMatchObject({ planSource: "fake", thinking: false });
+      expect(update.deaths).toEqual(welcome.state.deaths);
 
       const socketClosed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
       await expect(server.close()).resolves.toBeUndefined();

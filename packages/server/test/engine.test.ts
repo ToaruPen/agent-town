@@ -1,12 +1,21 @@
-import { type AgentTask, TICKS_PER_DAY, type WorldState } from "@agent-town/shared";
+import {
+  type AgentTask,
+  FATIGUE_DECAY_PER_DAY,
+  FATIGUE_MAX,
+  HUNGER_DECAY_PER_DAY,
+  HUNGER_MAX,
+  TICKS_PER_DAY,
+  type WorldState,
+} from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createEngine } from "../src/sim/engine.js";
-import { FakePlanner } from "../src/sim/fakePlanner.js";
+import { FakePlanner, type Planner } from "../src/sim/fakePlanner.js";
 import { createRng } from "../src/sim/rng.js";
 import { generateWorld } from "../src/sim/worldGen.js";
 
 const ACCEPTANCE_STEPS = 3000;
+const idlePlanner: Planner = { plan: () => [] };
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,6 +61,43 @@ describe("createEngine", () => {
     expect(engine.isDayBoundary()).toBe(true);
     engine.world.tick = TICKS_PER_DAY + 1;
     expect(engine.isDayBoundary()).toBe(false);
+  });
+
+  it("derives fractional per-tick gauge decay from per-day constants", () => {
+    const engine = createEngine(generateWorld(42), idlePlanner, () => 0);
+
+    engine.step();
+
+    for (const agent of engine.world.agents) {
+      expect(agent.hunger).toBeCloseTo(HUNGER_MAX - HUNGER_DECAY_PER_DAY / TICKS_PER_DAY, 10);
+      expect(agent.fatigue).toBeCloseTo(FATIGUE_MAX - FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY, 10);
+    }
+  });
+
+  it("matches per-day gauge decay after one day within floating-point rounding", () => {
+    const engine = createEngine(generateWorld(42), idlePlanner, () => 0);
+
+    for (let tick = 0; tick < TICKS_PER_DAY; tick += 1) engine.step();
+
+    for (const agent of engine.world.agents) {
+      expect(agent.hunger).toBeCloseTo(HUNGER_MAX - HUNGER_DECAY_PER_DAY, 10);
+      expect(agent.fatigue).toBeCloseTo(FATIGUE_MAX - FATIGUE_DECAY_PER_DAY, 10);
+    }
+  });
+
+  it("clamps survival gauges at zero", () => {
+    const engine = createEngine(generateWorld(42), idlePlanner, () => 0);
+    for (const agent of engine.world.agents) {
+      agent.hunger = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY / 2;
+      agent.fatigue = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY / 2;
+    }
+
+    engine.step();
+
+    for (const agent of engine.world.agents) {
+      expect(agent.hunger).toBe(0);
+      expect(agent.fatigue).toBe(0);
+    }
   });
 
   it("applies a plan by replacing tasks and storing its reasoning", () => {

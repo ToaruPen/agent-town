@@ -1,7 +1,10 @@
 import {
   AGENT_COUNT,
+  FATIGUE_MAX,
   FOOD_RESOURCE_MAX,
   FOOD_RESOURCE_MIN,
+  HEALTH_MAX,
+  HUNGER_MAX,
   MAP_HEIGHT,
   MAP_WIDTH,
   type Position,
@@ -110,6 +113,20 @@ describe("generateWorld", () => {
       expect(agent.thinking).toBe(false);
       expect(agent.lastThought).toBeNull();
     }
+  });
+
+  it("initializes every agent with full survival gauges", () => {
+    const world = generateWorld(42);
+
+    for (const agent of world.agents) {
+      expect(agent.hunger).toBe(HUNGER_MAX);
+      expect(agent.fatigue).toBe(FATIGUE_MAX);
+      expect(agent.health).toBe(HEALTH_MAX);
+    }
+  });
+
+  it("starts with an empty death history", () => {
+    expect(generateWorld(42).deaths).toEqual([]);
   });
 });
 

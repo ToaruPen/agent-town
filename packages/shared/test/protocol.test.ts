@@ -26,9 +26,13 @@ describe("wire protocol", () => {
           planSource: "llm",
           thinking: true,
           lastThought: "Gather nearby wood before winter.",
+          hunger: 42,
+          fatigue: 37,
+          health: 88,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      deaths: [{ name: "Birch", tick: 7200, cause: "starvation" }],
     };
     const message: ServerMessage = { type: "welcome", state };
 
@@ -37,6 +41,18 @@ describe("wire protocol", () => {
 
   it("rejects a server message without a type", () => {
     expect(() => decodeServerMessage("{}")).toThrow("invalid server message");
+  });
+
+  it("rejects an update without death history", () => {
+    const updateWithoutDeaths = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      changedTiles: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutDeaths)).toThrow("invalid server message");
   });
 
   it("decodes a hello client message", () => {

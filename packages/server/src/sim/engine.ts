@@ -1,5 +1,8 @@
 import {
+  type AgentState,
   type AgentTask,
+  FATIGUE_DECAY_PER_DAY,
+  HUNGER_DECAY_PER_DAY,
   type PlanSource,
   TICKS_PER_DAY,
   type Tile,
@@ -8,6 +11,14 @@ import {
 
 import { stepAgent } from "./executor.js";
 import type { Planner } from "./fakePlanner.js";
+
+const HUNGER_DECAY_PER_TICK = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY;
+const FATIGUE_DECAY_PER_TICK = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
+
+function decayNeeds(agent: AgentState): void {
+  agent.hunger = Math.max(0, agent.hunger - HUNGER_DECAY_PER_TICK);
+  agent.fatigue = Math.max(0, agent.fatigue - FATIGUE_DECAY_PER_TICK);
+}
 
 function snapshotResources(tiles: Tile[]): (string | null)[] {
   return tiles.map(({ resource }) =>
@@ -50,6 +61,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
     step(): void {
       const resourcesBefore = snapshotResources(world.tiles);
       for (const agent of world.agents) {
+        decayNeeds(agent);
         if (agent.tasks.length === 0) agent.tasks.push(...planner.plan(world, agent));
         stepAgent(world, agent);
       }
