@@ -1,11 +1,15 @@
 import {
   type CulturalValue,
   type CulturalValueWeight,
+  type HistoricalLandmark,
   type HistoryEffect,
   type HistoryEvent,
   type HistoryEventKind,
+  type LandmarkKind,
   type Polity,
+  type Position,
   type SettlementOrigin,
+  type Tile,
   WORLD_HISTORY_TURN_YEARS,
   WORLD_HISTORY_YEARS,
   WORLD_POLITY_COUNT,
@@ -45,6 +49,13 @@ interface MutablePolity {
   ambition: string;
   governance: string;
   latestEventId: string;
+}
+
+interface HistoryMap {
+  width: number;
+  height: number;
+  tiles: Tile[];
+  stockpile: Position;
 }
 
 const POLITY_TEMPLATES: PolityTemplate[] = [
@@ -450,19 +461,80 @@ function publicPolity(polity: MutablePolity): Polity {
   };
 }
 
-export function generateWorldHistory(seed: number): WorldHistory {
+function manhattanDistance(left: Position, right: Position): number {
+  return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+}
+
+function walkableLandmarkPositions(map: HistoryMap): Position[] {
+  const positions: Position[] = [];
+  for (const [index, tile] of map.tiles.entries()) {
+    if (tile.resource !== null || (tile.terrain !== "plains" && tile.terrain !== "forest"))
+      continue;
+    const pos = { x: index % map.width, y: Math.floor(index / map.width) };
+    if (manhattanDistance(pos, map.stockpile) >= 12) positions.push(pos);
+  }
+  return positions;
+}
+
+function landmarkSourceEvents(events: HistoryEvent[]): HistoryEvent[] {
+  const anomaly = events.find(({ kind }) => kind === "anomaly");
+  const wars = events.filter(({ kind }) => kind === "war").slice(-2);
+  return anomaly === undefined ? wars : [anomaly, ...wars];
+}
+
+function landmarkKind(event: HistoryEvent, index: number): LandmarkKind {
+  if (event.kind === "anomaly") return "standingStone";
+  return index % 2 === 0 ? "borderFort" : "ruin";
+}
+
+function landmarkName(kind: LandmarkKind, adjective: string): string {
+  if (kind === "standingStone") return "The Sealed Violet Stone";
+  if (kind === "borderFort") return `Old ${adjective} Border Keep`;
+  return `The Fallen ${adjective} Watch`;
+}
+
+function createLandmarks(
+  rng: () => number,
+  map: HistoryMap | undefined,
+  polities: MutablePolity[],
+  events: HistoryEvent[],
+): HistoricalLandmark[] {
+  if (map === undefined) return [];
+  const positions = shuffled(rng, walkableLandmarkPositions(map));
+  return landmarkSourceEvents(events).flatMap((event, index) => {
+    const pos = positions[index];
+    const polityId = event.polityIds[0];
+    if (pos === undefined || polityId === undefined) return [];
+    const polity = polities.find(({ id }) => id === polityId);
+    if (polity === undefined) return [];
+    const kind = landmarkKind(event, index);
+    const landmark: HistoricalLandmark = {
+      id: `landmark-${index + 1}`,
+      kind,
+      name: landmarkName(kind, polity.adjective),
+      pos,
+      polityId,
+      foundedByEventId: event.id,
+    };
+    event.effects.push({ kind: "landmark", targetId: landmark.id, landmarkKind: kind });
+    return [landmark];
+  });
+}
+
+export function generateWorldHistory(seed: number, map?: HistoryMap): WorldHistory {
   const rng = createRng(seed ^ 0x5f3759df);
   const polities = createPolities(rng);
   const events = createFoundingEvents(polities);
   simulateTurns(rng, polities, events);
   const settlementOrigin = createDeparture(rng, polities, events);
+  const landmarks = createLandmarks(rng, map, polities, events);
 
   return {
     startYear: -WORLD_HISTORY_YEARS,
     currentYear: 0,
     polities: polities.map(publicPolity),
     events,
-    landmarks: [],
+    landmarks,
     settlementOrigin,
   };
 }

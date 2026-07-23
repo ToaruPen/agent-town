@@ -199,6 +199,25 @@ describe("generateWorld", () => {
       );
     }
   });
+
+  it("anchors old-world landmarks on distinct walkable tiles away from the stockpile", () => {
+    const world = generateWorld(42);
+    const positions = new Set<string>();
+
+    expect(world.history.landmarks.length).toBeGreaterThan(0);
+    for (const landmark of world.history.landmarks) {
+      const key = `${landmark.pos.x},${landmark.pos.y}`;
+      const distance =
+        Math.abs(landmark.pos.x - world.stockpile.pos.x) +
+        Math.abs(landmark.pos.y - world.stockpile.pos.y);
+
+      expect(positions.has(key)).toBe(false);
+      expect(distance).toBeGreaterThanOrEqual(12);
+      expect(["plains", "forest"]).toContain(tileAt(world.tiles, landmark.pos)?.terrain);
+      expect(tileAt(world.tiles, landmark.pos)?.resource).toBeNull();
+      positions.add(key);
+    }
+  });
 });
 
 describe("createRng", () => {
