@@ -2,6 +2,7 @@ import {
   type AgentState,
   type AgentTask,
   HUNGER_EAT_THRESHOLD,
+  type LlmProvider,
   type PlanSource,
   THINK_COOLDOWN_TICKS,
   type WorldState,
@@ -12,9 +13,11 @@ import type { Engine } from "../sim/engine.js";
 interface ThoughtBrokerOptions {
   engine: Engine;
   llmAgentIds: string[] | (() => string[]);
+  providerForAgent(agent: AgentState): LlmProvider;
   planFn: (
     world: WorldState,
     agent: AgentState,
+    provider: LlmProvider,
   ) => Promise<{ tasks: AgentTask[]; source: PlanSource; reasoning?: string }>;
 }
 
@@ -27,7 +30,10 @@ export class ThoughtBroker {
   constructor(private readonly opts: ThoughtBrokerOptions) {
     for (const agentId of this.currentLlmAgentIds()) {
       const agent = this.managedAgent(agentId);
-      if (agent !== undefined) this.observedHunger.set(agentId, agent.hunger);
+      if (agent !== undefined) {
+        this.assignProvider(agent);
+        this.observedHunger.set(agentId, agent.hunger);
+      }
     }
   }
 
@@ -39,6 +45,12 @@ export class ThoughtBroker {
 
   private managedAgent(agentId: string): AgentState | undefined {
     return this.opts.engine.world.agents.find(({ id }) => id === agentId);
+  }
+
+  private assignProvider(agent: AgentState): LlmProvider {
+    const provider = this.opts.providerForAgent(agent);
+    agent.llmProvider = provider;
+    return provider;
   }
 
   private cooldownElapsed(agent: AgentState): boolean {
@@ -81,9 +93,10 @@ export class ThoughtBroker {
       return;
     }
 
+    const provider = this.assignProvider(agent);
     this.requestInFlight = true;
     void this.opts
-      .planFn(this.opts.engine.world, agent)
+      .planFn(this.opts.engine.world, agent, provider)
       .then((result) => this.finishRequest(agentId, result));
   }
 
@@ -94,6 +107,7 @@ export class ThoughtBroker {
         this.observedHunger.delete(agentId);
         continue;
       }
+      this.assignProvider(agent);
       const hungerCrossed = this.observeHungerCrossing(agent);
       if (!this.shouldQueue(agent, hungerCrossed)) continue;
       agent.thinking = true;

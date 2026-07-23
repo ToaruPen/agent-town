@@ -1,10 +1,13 @@
 import { createServer, type Server as HttpServer } from "node:http";
-import { encodeMessage, type ServerMessage, TICK_RATE } from "@agent-town/shared";
+import { encodeMessage, type LlmProvider, type ServerMessage, TICK_RATE } from "@agent-town/shared";
 import WebSocket, { WebSocketServer } from "ws";
 
 import { CliClaudeRunner } from "../llm/claudeRunner.js";
+import { CliCodexRunner } from "../llm/codexRunner.js";
 import { llmAgentIdsForWorld, parseLlmAgentSelection } from "../llm/llmAgentSelection.js";
 import { LlmPlanner } from "../llm/llmPlanner.js";
+import { llmProviderForAgent, parseLlmProviderRoutes } from "../llm/llmProviderRouting.js";
+import type { LlmRunner } from "../llm/llmRunner.js";
 import { ThoughtBroker } from "../llm/thoughtBroker.js";
 import { createEngine, type Engine } from "../sim/engine.js";
 import { FakePlanner } from "../sim/fakePlanner.js";
@@ -23,7 +26,19 @@ interface ServerOptions {
   seed: number;
   llmPlannerEnabled?: boolean;
   llmAgents?: string;
+  llmRoutes?: string;
   staticDir?: string;
+}
+
+type LlmRunnerRegistry = Readonly<Record<LlmProvider, LlmRunner>>;
+
+interface ThoughtBrokerFactoryOptions {
+  enabled: boolean;
+  engine: Engine;
+  fallback: FakePlanner;
+  llmAgents?: string;
+  llmRoutes?: string;
+  runners?: LlmRunnerRegistry;
 }
 
 export function createUpdateMessage(engine: ReturnType<typeof createEngine>): ServerMessage {
@@ -96,19 +111,24 @@ function createWebSocketServer(httpServer: HttpServer, path: string): WebSocketS
   return socketServer;
 }
 
-function createThoughtBroker(
-  enabled: boolean,
-  engine: Engine,
-  fallback: FakePlanner,
-  llmAgents: string | undefined,
-): ThoughtBroker | undefined {
-  if (!enabled) return undefined;
-  const planner = new LlmPlanner("claude", new CliClaudeRunner(), fallback);
-  const selection = parseLlmAgentSelection(llmAgents, engine.world.agents);
+export function createThoughtBroker(opts: ThoughtBrokerFactoryOptions): ThoughtBroker | undefined {
+  if (!opts.enabled) return undefined;
+  const selection = parseLlmAgentSelection(opts.llmAgents, opts.engine.world.agents);
+  const routes = parseLlmProviderRoutes(opts.llmRoutes, opts.engine.world.agents, selection);
+  const runners: LlmRunnerRegistry = opts.runners ?? {
+    claude: new CliClaudeRunner(),
+    codex: new CliCodexRunner(),
+  };
+  const planners: Readonly<Record<LlmProvider, LlmPlanner>> = {
+    claude: new LlmPlanner("claude", runners.claude, opts.fallback),
+    codex: new LlmPlanner("codex", runners.codex, opts.fallback),
+  };
+
   return new ThoughtBroker({
-    engine,
-    llmAgentIds: () => llmAgentIdsForWorld(selection, engine.world.agents),
-    planFn: (world, agent) => planner.planAsync(world, agent),
+    engine: opts.engine,
+    llmAgentIds: () => llmAgentIdsForWorld(selection, opts.engine.world.agents),
+    providerForAgent: (agent) => llmProviderForAgent(routes, agent),
+    planFn: (world, agent, provider) => planners[provider].planAsync(world, agent),
   });
 }
 
@@ -116,12 +136,13 @@ export function startServer(opts: ServerOptions): ServerHandle {
   const rng = createRng(opts.seed);
   const fallback = new FakePlanner(rng);
   const engine = createEngine(generateWorld(opts.seed), fallback, rng);
-  const broker = createThoughtBroker(
-    opts.llmPlannerEnabled === true,
+  const broker = createThoughtBroker({
+    enabled: opts.llmPlannerEnabled === true,
     engine,
     fallback,
-    opts.llmAgents,
-  );
+    ...(opts.llmAgents === undefined ? {} : { llmAgents: opts.llmAgents }),
+    ...(opts.llmRoutes === undefined ? {} : { llmRoutes: opts.llmRoutes }),
+  });
   const httpServer = createServer(createStaticHandler(opts.staticDir));
   const socketServer = createWebSocketServer(httpServer, WEBSOCKET_PATH);
 

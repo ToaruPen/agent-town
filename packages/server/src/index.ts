@@ -10,6 +10,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
 }
 const staticDir = process.env.STATIC_DIR;
 const llmAgents = process.env.LLM_AGENTS;
+const llmRoutes = process.env.LLM_ROUTES;
 
 startServer({
   port,
@@ -17,4 +18,5 @@ startServer({
   llmPlannerEnabled,
   ...(staticDir === undefined ? {} : { staticDir }),
   ...(llmAgents === undefined ? {} : { llmAgents }),
+  ...(llmRoutes === undefined ? {} : { llmRoutes }),
 });

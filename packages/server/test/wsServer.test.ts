@@ -105,12 +105,20 @@ describe("startServer", () => {
       if (welcome?.type !== "welcome") throw new Error("first message was not welcome");
       expect(welcome.state.tiles).toHaveLength(MAP_WIDTH * MAP_HEIGHT);
       expect(welcome.state.agents).toHaveLength(3);
-      expect(welcome.state.agents[0]).toMatchObject({ planSource: "fake", thinking: false });
+      expect(welcome.state.agents[0]).toMatchObject({
+        planSource: "fake",
+        llmProvider: null,
+        thinking: false,
+      });
 
       expect(update?.type).toBe("update");
       if (update?.type !== "update") throw new Error("second message was not update");
       expect(update.tick).toBeGreaterThan(welcome.state.tick);
-      expect(update.agents[0]).toMatchObject({ planSource: "fake", thinking: false });
+      expect(update.agents[0]).toMatchObject({
+        planSource: "fake",
+        llmProvider: null,
+        thinking: false,
+      });
       expect(update.buildings).toEqual(welcome.state.buildings);
       expect(update.deaths).toEqual(welcome.state.deaths);
 

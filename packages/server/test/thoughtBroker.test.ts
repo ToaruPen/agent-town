@@ -7,6 +7,7 @@ import {
   HOUSE_BUILD_TICKS,
   HUNGER_EAT_THRESHOLD,
   IMMIGRANT_NAMES,
+  type LlmProvider,
   type PlanSource,
   SEASONS,
   THINK_COOLDOWN_TICKS,
@@ -63,15 +64,22 @@ describe("ThoughtBroker", () => {
     const agent = getAgent(engine, 0);
     const pending = createDeferredPlan();
     const planFn = vi.fn(
-      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        pending.promise,
     );
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
     const tasks: AgentTask[] = [{ kind: "deposit" }];
 
     broker.onTick();
 
     expect(planFn).toHaveBeenCalledOnce();
-    expect(planFn).toHaveBeenCalledWith(engine.world, agent);
+    expect(planFn).toHaveBeenCalledWith(engine.world, agent, "claude");
+    expect(agent.llmProvider).toBe("claude");
     expect(agent.thinking).toBe(true);
     expect(broker.inFlightCount()).toBe(1);
 
@@ -92,9 +100,15 @@ describe("ThoughtBroker", () => {
     engine.world.tick = TICKS_PER_DAY;
     const pending = createDeferredPlan();
     const planFn = vi.fn(
-      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        pending.promise,
     );
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
 
     broker.onTick();
 
@@ -118,9 +132,15 @@ describe("ThoughtBroker", () => {
     engine.world.tick = winterStart - 1;
     const pending = createDeferredPlan();
     const planFn = vi.fn(
-      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        pending.promise,
     );
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [observer.id], planFn });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [observer.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
 
     engine.step();
     broker.onTick();
@@ -155,9 +175,15 @@ describe("ThoughtBroker", () => {
     engine.world.tick = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY - 1;
     const pending = createDeferredPlan();
     const planFn = vi.fn(
-      (_world: WorldState, _agent: AgentState): Promise<PlanResult> => pending.promise,
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        pending.promise,
     );
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
 
     engine.step();
     broker.onTick();
@@ -176,12 +202,19 @@ describe("ThoughtBroker", () => {
     const agent = getAgent(engine, 0);
     engine.world.tick = 10;
     const requests: DeferredPlan[] = [];
-    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
-      const request = createDeferredPlan();
-      requests.push(request);
-      return request.promise;
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
     });
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
 
     broker.onTick();
     const first = requests[0];
@@ -209,14 +242,17 @@ describe("ThoughtBroker", () => {
     const firstAgent = getAgent(engine, 0);
     const secondAgent = getAgent(engine, 1);
     const requests: DeferredPlan[] = [];
-    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
-      const request = createDeferredPlan();
-      requests.push(request);
-      return request.promise;
-    });
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
     const broker = new ThoughtBroker({
       engine,
       llmAgentIds: [firstAgent.id, secondAgent.id],
+      providerForAgent: () => "claude",
       planFn,
     });
 
@@ -251,12 +287,19 @@ describe("ThoughtBroker", () => {
     agent.tasks = [{ kind: "deposit" }];
     agent.hunger = HUNGER_EAT_THRESHOLD;
     const requests: DeferredPlan[] = [];
-    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
-      const request = createDeferredPlan();
-      requests.push(request);
-      return request.promise;
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
     });
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
 
     broker.onTick();
     expect(planFn).not.toHaveBeenCalled();
@@ -277,8 +320,19 @@ describe("ThoughtBroker", () => {
   it("does not trigger for an agent first observed below the threshold", () => {
     const engine = createTestEngine();
     const missingId = "future-agent";
-    const planFn = vi.fn(async (): Promise<PlanResult> => ({ tasks: [], source: "llm" }));
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [missingId], planFn });
+    const planFn = vi.fn(
+      async (
+        _world: WorldState,
+        _agent: AgentState,
+        _provider: LlmProvider,
+      ): Promise<PlanResult> => ({ tasks: [], source: "llm" }),
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [missingId],
+      providerForAgent: () => "claude",
+      planFn,
+    });
     const newcomer = { ...getAgent(engine, 0), id: missingId, tasks: [{ kind: "deposit" }] };
     newcomer.hunger = HUNGER_EAT_THRESHOLD - 1;
     engine.world.agents.push(newcomer);
@@ -293,14 +347,17 @@ describe("ThoughtBroker", () => {
     const firstAgent = getAgent(engine, 0);
     engine.world.agents = [firstAgent];
     const requests: DeferredPlan[] = [];
-    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
-      const request = createDeferredPlan();
-      requests.push(request);
-      return request.promise;
-    });
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
     const broker = new ThoughtBroker({
       engine,
       llmAgentIds: () => engine.world.agents.map(({ id }) => id),
+      providerForAgent: (agent) => (agent.name === "Dahlia" ? "codex" : "claude"),
       planFn,
     });
 
@@ -316,6 +373,7 @@ describe("ThoughtBroker", () => {
     };
     engine.world.agents.push(newcomer);
     broker.onTick();
+    expect(newcomer.llmProvider).toBe("codex");
     expect(newcomer.thinking).toBe(false);
     expect(planFn).toHaveBeenCalledOnce();
 
@@ -331,6 +389,7 @@ describe("ThoughtBroker", () => {
 
     expect(planFn).toHaveBeenCalledTimes(2);
     expect(planFn.mock.calls[1]?.[1]).toBe(newcomer);
+    expect(planFn.mock.calls[1]?.[2]).toBe("codex");
     const second = requests[1];
     if (second === undefined) throw new Error("newcomer plan was not dispatched");
     second.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
@@ -342,12 +401,19 @@ describe("ThoughtBroker", () => {
     const agent = getAgent(engine, 0);
     agent.hunger = HUNGER_EAT_THRESHOLD;
     const requests: DeferredPlan[] = [];
-    const planFn = vi.fn((_world: WorldState, _agent: AgentState): Promise<PlanResult> => {
-      const request = createDeferredPlan();
-      requests.push(request);
-      return request.promise;
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
     });
-    const broker = new ThoughtBroker({ engine, llmAgentIds: [agent.id], planFn });
 
     broker.onTick();
     const initial = requests[0];
