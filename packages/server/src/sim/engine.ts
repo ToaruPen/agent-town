@@ -34,6 +34,7 @@ import {
 import { findNearestReachable } from "./astar.js";
 import { stepAgent } from "./executor.js";
 import type { Planner } from "./fakePlanner.js";
+import { updateFoodSecurityDesires } from "./foodAnxiety.js";
 
 const HUNGER_DECAY_PER_TICK = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY;
 const FATIGUE_DECAY_PER_TICK = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
@@ -61,10 +62,10 @@ function findNearestFood(world: WorldState, from: Position): Position | null {
   return findNearestReachable(world, from, candidates);
 }
 
-function maybeInterruptForHunger(world: WorldState, agent: AgentState): void {
+function maybeInterruptForHunger(world: WorldState, agent: AgentState): boolean {
   const head = agent.tasks[0];
   if (agent.hunger >= HUNGER_EAT_THRESHOLD || head?.kind === "eat" || head?.kind === "forage") {
-    return;
+    return false;
   }
 
   let foodTask: AgentTask | undefined;
@@ -74,10 +75,11 @@ function maybeInterruptForHunger(world: WorldState, agent: AgentState): void {
     const target = findNearestFood(world, agent.pos);
     if (target !== null) foodTask = { kind: "forage", target };
   }
-  if (foodTask === undefined) return;
+  if (foodTask === undefined) return false;
 
   agent.tasks.unshift(foodTask);
   agent.activity = { kind: "idle" };
+  return true;
 }
 
 function snapshotResources(tiles: Tile[]): (string | null)[] {
@@ -259,7 +261,9 @@ function advanceAgent(world: WorldState, agent: AgentState, planner: Planner): v
   decayNeeds(agent);
   applyStarvation(agent);
   if (removeIfDead(world, agent, "starvation")) return;
-  maybeInterruptForHunger(world, agent);
+  if (maybeInterruptForHunger(world, agent)) {
+    agent.lastHungerInterruptTick = world.tick;
+  }
   if (agent.tasks.length === 0) agent.tasks.push(...planner.plan(world, agent));
   const speed = agent.fatigue < FATIGUE_REST_THRESHOLD ? FATIGUE_SLOWDOWN : 1;
   stepAgent(world, agent, speed);
@@ -278,6 +282,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
         advanceAgent(world, agent, planner);
       }
       world.tick += 1;
+      updateFoodSecurityDesires(world);
       if (isPositiveDayBoundary(world.tick)) runDailyHooks(world, berryCaps);
       markDirtyTiles(world.tiles, resourcesBefore, dirtyTileIndexes);
     },

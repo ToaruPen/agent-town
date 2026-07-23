@@ -11,6 +11,8 @@ import {
   FATIGUE_REST_THRESHOLD,
   FATIGUE_SLOWDOWN,
   FOOD_PER_MEAL,
+  FOOD_SECURITY_MAX_CHANGE_PER_UPDATE,
+  FOOD_SECURITY_UPDATE_INTERVAL_TICKS,
   HEALTH_MAX,
   HOUSE_BUILD_TICKS,
   HOUSE_CAPACITY,
@@ -438,6 +440,61 @@ describe("createEngine", () => {
     expect(agent.tasks).toEqual([{ kind: "eat" }, { kind: "deposit" }]);
   });
 
+  it("records the current tick when a hunger interrupt inserts an eat task", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    world.stockpile.food = FOOD_PER_MEAL;
+    world.tick = 7;
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+    agent.tasks = [{ kind: "deposit" }];
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+
+    expect(agent.tasks[0]).toEqual({ kind: "eat" });
+    expect(agent.lastHungerInterruptTick).toBe(7);
+  });
+
+  it("does not refresh the hunger interrupt tick while the inserted task remains active", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    world.stockpile.food = FOOD_PER_MEAL;
+    world.tick = 7;
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+    agent.tasks = [{ kind: "deposit" }];
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    engine.step();
+    engine.step();
+
+    expect(agent.tasks[0]).toEqual({ kind: "eat" });
+    expect(agent.lastHungerInterruptTick).toBe(7);
+  });
+
+  it("updates food-security desire only on configured tick boundaries", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    world.stockpile.food = 0;
+    agent.desires.foodSecurity = 0;
+    const engine = createEngine(world, idlePlanner, () => 0);
+
+    for (let tick = 1; tick < FOOD_SECURITY_UPDATE_INTERVAL_TICKS; tick += 1) {
+      engine.step();
+      expect(agent.desires.foodSecurity).toBe(0);
+    }
+
+    engine.step();
+
+    expect(world.tick).toBe(FOOD_SECURITY_UPDATE_INTERVAL_TICKS);
+    expect(agent.desires.foodSecurity).toBe(FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
+  });
+
   it("prepends forage for the first nearest food tile when the stockpile is short", () => {
     const world = generateWorld(42);
     const agent = world.agents[0];
@@ -783,6 +840,8 @@ describe("createEngine", () => {
     expect(world.agents).toHaveLength(2);
     const immigrant = world.agents.find(({ name }) => name === IMMIGRANT_NAMES[0]);
     expect(immigrant?.llmProvider).toBeNull();
+    expect(immigrant?.desires).toEqual({ foodSecurity: 0 });
+    expect(immigrant?.lastHungerInterruptTick).toBeNull();
     expect(world.agents[1]).toEqual({
       id: "agent-2",
       name: IMMIGRANT_NAMES[0],

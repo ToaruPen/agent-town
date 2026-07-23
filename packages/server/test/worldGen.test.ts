@@ -145,6 +145,15 @@ describe("generateWorld", () => {
     }
   });
 
+  it("initializes every agent without food anxiety or hunger-interrupt history", () => {
+    const world = generateWorld(42);
+
+    for (const agent of world.agents) {
+      expect(agent.desires).toEqual({ foodSecurity: 0 });
+      expect(agent.lastHungerInterruptTick).toBeNull();
+    }
+  });
+
   it("initializes every agent with full survival gauges", () => {
     const world = generateWorld(42);
 
