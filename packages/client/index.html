@@ -120,8 +120,46 @@
       }
 
       .inspect-panel__activity,
-      .inspect-panel__empty {
+      .inspect-panel__empty,
+      .inspect-panel__food-security {
         margin: 0;
+      }
+
+      .inspect-panel__food-security {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .inspect-panel__society-list {
+        display: grid;
+        gap: 0.55rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .inspect-panel__society-row {
+        padding-left: 0.65rem;
+        border-left: 2px solid var(--world-verdigris);
+      }
+
+      .inspect-panel__society-name {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        font-size: 0.9rem;
+      }
+
+      .inspect-panel__society-detail,
+      .inspect-panel__society-people {
+        margin: 0.18rem 0 0;
+        font-family: system-ui, sans-serif;
+        font-size: 0.76rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .inspect-panel__society-detail {
+        color: #b9c8cd;
       }
 
       .inspect-panel__needs {

@@ -16,12 +16,13 @@ import {
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
-import { renderDeathMarkerLayer, renderDeathTickerLayer } from "./render/deathLayer.js";
+import { renderDeathMarkerLayer } from "./render/deathLayer.js";
 import { renderHistoryLayer } from "./render/historyLayer.js";
 import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
+import { renderTickerLayer } from "./render/tickerLayer.js";
 import { createDoubleTapHistory, createWorldViewport } from "./render/worldViewport.js";
 import {
   bubbleText,
@@ -48,6 +49,12 @@ import {
   moveTileCursor,
   resolveKeyboardTarget,
 } from "./ui/keyboardNavigation.js";
+import {
+  createSocialMilestoneSchedule,
+  currentSocialMilestone,
+  type SocialMilestoneSchedule,
+  updateSocialMilestoneSchedule,
+} from "./ui/societyViewModel.js";
 import {
   createDeathEventSchedule,
   type DeathEventSchedule,
@@ -283,6 +290,7 @@ app.stage.on("wheel", () => {
 let state: WorldState | null = null;
 let bubbleSchedule = createThoughtBubbleSchedule();
 let deathSchedule: DeathEventSchedule = { observedDeaths: 0, events: [] };
+let socialSchedule: SocialMilestoneSchedule | null = null;
 let mapDirty = false;
 let structuresDirty = false;
 let deathsDirty = false;
@@ -297,7 +305,7 @@ function syncInspectPanel(next: WorldState): void {
     closeInspectPanel();
     return;
   }
-  inspectPanel.show(selectedAgent);
+  inspectPanel.show(selectedAgent, next);
 }
 
 function openInspectPanel(agentId: string): void {
@@ -306,7 +314,7 @@ function openInspectPanel(agentId: string): void {
   if (agent === undefined) return;
   closeWorldChronicle();
   selectedAgentId = agentId;
-  inspectPanel.show(agent);
+  inspectPanel.show(agent, state);
   agentsDirty = true;
   announce(`${agent.name}の詳細を開きました。`);
 }
@@ -444,6 +452,7 @@ function replaceState(next: WorldState): void {
     performance.now(),
   );
   deathSchedule = createDeathEventSchedule(next);
+  socialSchedule = createSocialMilestoneSchedule(next);
   knownResourceKinds.clear();
   observeResourceKinds(next);
   state = next;
@@ -473,14 +482,29 @@ function updateState(next: WorldState): void {
   mapDirty = mapDirty || next.tiles !== state.tiles;
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
+  const previousSocialMilestone =
+    socialSchedule === null ? null : currentSocialMilestone(socialSchedule, state.tick);
+  const previousSocialEventIds = socialSchedule?.events.map((event) => event.id) ?? [];
+  const previousDeathEventId = latestDeathEvent(deathSchedule)?.id ?? null;
   deathSchedule = updateDeathEventSchedule(deathSchedule, state, next);
+  socialSchedule = updateSocialMilestoneSchedule(
+    socialSchedule ?? createSocialMilestoneSchedule(state),
+    state,
+    next,
+  );
+  const socialMilestone = currentSocialMilestone(socialSchedule, next.tick);
+  const socialQueueChanged =
+    previousSocialEventIds.join("\n") !== socialSchedule.events.map((event) => event.id).join("\n");
+  const activeSocialWindowChanged = previousSocialMilestone?.id !== socialMilestone?.id;
+  const deathTickerChanged = previousDeathEventId !== (latestDeathEvent(deathSchedule)?.id ?? null);
   observeResourceKinds(next);
   state = next;
   rehitHoveredAgent();
   syncInspectPanel(next);
   agentsDirty = true;
   deathsDirty = true;
-  tickerDirty = true;
+  tickerDirty =
+    tickerDirty || socialQueueChanged || activeSocialWindowChanged || deathTickerChanged;
   hudDirty = true;
   infoBubbleDirty = preserveInfoBubbleInvalidation(infoBubbleDirty, activeInfoTarget);
 }
@@ -600,7 +624,16 @@ function renderActiveInfoBubble(currentState: WorldState): void {
 
 function renderScreenLayers(currentState: WorldState): void {
   if (tickerDirty) {
-    renderDeathTickerLayer(tickerLayer, latestDeathEvent(deathSchedule));
+    const socialMilestone =
+      socialSchedule === null ? null : currentSocialMilestone(socialSchedule, currentState.tick);
+    const deathEvent = latestDeathEvent(deathSchedule);
+    const tickerMessage =
+      socialMilestone === null
+        ? deathEvent === null
+          ? null
+          : { text: deathEvent.text, tone: "death" as const }
+        : { text: socialMilestone.text, tone: "social" as const };
+    renderTickerLayer(tickerLayer, tickerMessage);
     tickerDirty = false;
   }
   if (hudDirty) {

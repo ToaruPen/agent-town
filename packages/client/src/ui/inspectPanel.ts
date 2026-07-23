@@ -1,7 +1,8 @@
-import type { AgentState, AgentTask } from "@agent-town/shared";
+import type { AgentState, AgentTask, WorldState } from "@agent-town/shared";
 
 import { activityLabel, taskLabel } from "./displayText.js";
 import { buildProviderBadge, type ProviderBadge } from "./providerBadge.js";
+import { buildSocietyViewModel, type SocietyViewModel } from "./societyViewModel.js";
 import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
 
 export const THOUGHT_BUBBLE_DURATION_MS = 6_000;
@@ -30,11 +31,13 @@ export interface InspectPanelViewModel {
   activityLabel: string;
   tasks: InspectTaskViewModel[];
   needs: NeedViewModel[];
+  foodSecurity: string;
+  society: SocietyViewModel;
   lastThought: string | null;
 }
 
 export interface InspectPanelController {
-  show(agent: AgentState): void;
+  show(agent: AgentState, world: WorldState): void;
   close(): void;
 }
 
@@ -50,7 +53,10 @@ function taskTarget(task: AgentTask): string | null {
   return null;
 }
 
-export function buildInspectPanelViewModel(agent: AgentState): InspectPanelViewModel {
+export function buildInspectPanelViewModel(
+  agent: AgentState,
+  world: WorldState,
+): InspectPanelViewModel {
   return {
     name: agent.name,
     providerBadge: buildProviderBadge(agent),
@@ -62,6 +68,8 @@ export function buildInspectPanelViewModel(agent: AgentState): InspectPanelViewM
       target: taskTarget(task),
     })),
     needs: buildNeedsViewModel(agent),
+    foodSecurity: `${Math.round(agent.desires.foodSecurity * 100)}%`,
+    society: buildSocietyViewModel(world),
     lastThought: agent.lastThought,
   };
 }
@@ -148,6 +156,56 @@ function createNeedsList(needs: NeedViewModel[]): HTMLElement {
   return list;
 }
 
+function createCollectiveList(collectives: SocietyViewModel["collectives"]): HTMLElement {
+  if (collectives.length === 0) {
+    return createElement("p", "inspect-panel__empty", "結成された集団はありません。");
+  }
+
+  const list = createElement("ul", "inspect-panel__society-list");
+  for (const collective of collectives) {
+    const item = createElement("li", "inspect-panel__society-row");
+    const name = createElement("h4", "inspect-panel__society-name", collective.name);
+    const detail = createElement(
+      "p",
+      "inspect-panel__society-detail",
+      `代表：${collective.representative}・結束：${collective.cohesion}`,
+    );
+    const supporters = createElement(
+      "p",
+      "inspect-panel__society-people",
+      `支持者：${collective.supporters.join("、")}`,
+    );
+    item.append(name, detail, supporters);
+    list.append(item);
+  }
+  return list;
+}
+
+function createInstitutionList(institutions: SocietyViewModel["institutions"]): HTMLElement {
+  if (institutions.length === 0) {
+    return createElement("p", "inspect-panel__empty", "成立した制度はありません。");
+  }
+
+  const list = createElement("ul", "inspect-panel__society-list");
+  for (const institution of institutions) {
+    const item = createElement("li", "inspect-panel__society-row");
+    const name = createElement("h4", "inspect-panel__society-name", institution.name);
+    const supporters = createElement(
+      "p",
+      "inspect-panel__society-people",
+      `支持者：${institution.supporters.join("、")}`,
+    );
+    const opponents = createElement(
+      "p",
+      "inspect-panel__society-people",
+      `反対者：${institution.opponents.join("、")}`,
+    );
+    item.append(name, supporters, opponents);
+    list.append(item);
+  }
+  return list;
+}
+
 function renderPanel(
   root: HTMLElement,
   viewModel: InspectPanelViewModel,
@@ -168,6 +226,14 @@ function renderPanel(
   header.append(name, badge, closeButton);
 
   const needsHeading = createElement("h3", "inspect-panel__section-title", "状態");
+  const foodSecurityHeading = createElement(
+    "h3",
+    "inspect-panel__section-title",
+    "食料安定への関心",
+  );
+  const foodSecurity = createElement("p", "inspect-panel__food-security", viewModel.foodSecurity);
+  const collectivesHeading = createElement("h3", "inspect-panel__section-title", "集団");
+  const institutionsHeading = createElement("h3", "inspect-panel__section-title", "制度");
   const activityHeading = createElement("h3", "inspect-panel__section-title", "現在の行動");
   const activity = createElement("p", "inspect-panel__activity", viewModel.activityLabel);
   const queueHeading = createElement("h3", "inspect-panel__section-title", "予定");
@@ -182,6 +248,12 @@ function renderPanel(
     header,
     needsHeading,
     createNeedsList(viewModel.needs),
+    foodSecurityHeading,
+    foodSecurity,
+    collectivesHeading,
+    createCollectiveList(viewModel.society.collectives),
+    institutionsHeading,
+    createInstitutionList(viewModel.society.institutions),
     activityHeading,
     activity,
     queueHeading,
@@ -192,8 +264,8 @@ function renderPanel(
 }
 
 export function createInspectPanel(root: HTMLElement, onClose: () => void): InspectPanelController {
-  function show(agent: AgentState): void {
-    renderPanel(root, buildInspectPanelViewModel(agent), onClose);
+  function show(agent: AgentState, world: WorldState): void {
+    renderPanel(root, buildInspectPanelViewModel(agent, world), onClose);
     root.hidden = false;
   }
 
