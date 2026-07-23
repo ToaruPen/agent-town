@@ -2,7 +2,7 @@ import type { AgentState, LlmProvider } from "@agent-town/shared";
 
 import type { LlmAgentSelection } from "./llmAgentSelection.js";
 
-const DEFAULT_ROUTES = "*:claude";
+const DEFAULT_ROUTES = "*:codex";
 
 export interface LlmProviderRoutes {
   readonly exact: ReadonlyMap<string, LlmProvider>;
