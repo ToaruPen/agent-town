@@ -4,6 +4,7 @@ import {
   BERRY_REGROWTH_PER_DAY,
   CARRY_CAPACITY,
   COLD_HEALTH_PER_DAY,
+  COLLECTIVE_FORMATION_TICKS,
   DAYS_PER_SEASON,
   EAT_TICKS,
   FATIGUE_DECAY_PER_DAY,
@@ -25,6 +26,7 @@ import {
   MAX_POPULATION,
   MOVE_TICKS_PER_TILE,
   SEASONS,
+  SOCIETY_UPDATE_INTERVAL_TICKS,
   STARVATION_HEALTH_PER_DAY,
   TICKS_PER_DAY,
   TREE_REGROWTH_CAP,
@@ -493,6 +495,50 @@ describe("createEngine", () => {
 
     expect(world.tick).toBe(FOOD_SECURITY_UPDATE_INTERVAL_TICKS);
     expect(agent.desires.foodSecurity).toBe(FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
+  });
+
+  it("replays social outcomes deterministically from the same seed and state", () => {
+    const makeEngine = () => {
+      const world = generateWorld(42);
+      const homelandId = world.history.settlementOrigin?.homelandPolityId;
+      const homeland = world.history.polities.find(({ id }) => id === homelandId);
+      if (homeland === undefined) throw new Error("missing homeland polity");
+      homeland.values = [{ value: "mutualAid", weight: 1, changedByEventIds: [] }];
+      world.stockpile.food = 0;
+      const rng = createRng(42);
+      return createEngine(world, idlePlanner, rng);
+    };
+    const first = makeEngine();
+    const second = makeEngine();
+
+    for (
+      let tick = 0;
+      tick < SOCIETY_UPDATE_INTERVAL_TICKS + COLLECTIVE_FORMATION_TICKS;
+      tick += 1
+    ) {
+      first.step();
+      second.step();
+    }
+
+    expect({
+      agents: first.world.agents.map(({ id, desires, lastHungerInterruptTick }) => ({
+        id,
+        desires,
+        lastHungerInterruptTick,
+      })),
+      collectives: first.world.collectives,
+      institutions: first.world.institutions,
+    }).toEqual({
+      agents: second.world.agents.map(({ id, desires, lastHungerInterruptTick }) => ({
+        id,
+        desires,
+        lastHungerInterruptTick,
+      })),
+      collectives: second.world.collectives,
+      institutions: second.world.institutions,
+    });
+    expect(first.world.collectives.length).toBeGreaterThan(0);
+    expect(first.world.institutions.length).toBeGreaterThan(0);
   });
 
   it("prepends forage for the first nearest food tile when the stockpile is short", () => {

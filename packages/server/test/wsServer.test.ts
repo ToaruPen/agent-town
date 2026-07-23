@@ -120,6 +120,11 @@ describe("startServer", () => {
     engine.step();
     const update = createUpdateMessage(engine);
 
+    expect(update).toMatchObject({
+      type: "update",
+      collectives: world.collectives,
+      institutions: world.institutions,
+    });
     expect(update.type).toBe("update");
     if (update.type !== "update") throw new Error("expected update message");
     expect(update.agents.map(({ name }) => name)).toEqual(["トネリコ", IMMIGRANT_NAMES[0]]);

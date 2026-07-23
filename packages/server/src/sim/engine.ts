@@ -35,6 +35,7 @@ import { findNearestReachable } from "./astar.js";
 import { stepAgent } from "./executor.js";
 import type { Planner } from "./fakePlanner.js";
 import { updateFoodSecurityDesires } from "./foodAnxiety.js";
+import { advanceSociety, createSocietyMemory } from "./society.js";
 
 const HUNGER_DECAY_PER_TICK = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY;
 const FATIGUE_DECAY_PER_TICK = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
@@ -273,6 +274,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
   void rng;
   const dirtyTileIndexes = new Set<number>();
   const berryCaps = captureBerryCaps(world.tiles);
+  const societyMemory = createSocietyMemory();
 
   return {
     world,
@@ -283,6 +285,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       }
       world.tick += 1;
       updateFoodSecurityDesires(world);
+      advanceSociety(world, societyMemory);
       if (isPositiveDayBoundary(world.tick)) runDailyHooks(world, berryCaps);
       markDirtyTiles(world.tiles, resourcesBefore, dirtyTileIndexes);
     },
