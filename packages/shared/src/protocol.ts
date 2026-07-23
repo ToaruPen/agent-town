@@ -40,7 +40,9 @@ function hasRequiredKeys(value: Record<string, unknown>, keys: string[]): boolea
 
 function isServerMessage(value: unknown): value is ServerMessage {
   if (!isRecord(value)) return false;
-  if (value.type === "welcome") return hasRequiredKeys(value, ["state"]);
+  if (value.type === "welcome") {
+    return isRecord(value.state) && hasRequiredKeys(value.state, ["history"]);
+  }
   if (value.type === "update") {
     return hasRequiredKeys(value, [
       "tick",

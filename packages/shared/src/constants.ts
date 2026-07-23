@@ -59,3 +59,6 @@ export const WOOD_RESOURCE_MIN = 20;
 export const WOOD_RESOURCE_MAX = 50;
 export const FOOD_RESOURCE_MIN = 10;
 export const FOOD_RESOURCE_MAX = 30;
+export const WORLD_HISTORY_YEARS = 200;
+export const WORLD_HISTORY_TURN_YEARS = 20;
+export const WORLD_POLITY_COUNT = 4;

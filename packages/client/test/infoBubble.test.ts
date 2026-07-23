@@ -60,6 +60,14 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     stockpile: { pos: { x: 0, y: 0 }, wood: 8, food: 25 },
     buildings: [],
     deaths: [],
+    history: {
+      startYear: 0,
+      currentYear: 0,
+      polities: [],
+      events: [],
+      landmarks: [],
+      settlementOrigin: null,
+    },
     ...overrides,
   };
 }

@@ -1,3 +1,5 @@
+import type { WorldHistory } from "./history.js";
+
 export type Terrain = "plains" | "forest" | "water" | "rock";
 export type ResourceKind = "wood" | "food";
 export type PlanSource = "fake" | "llm";
@@ -66,4 +68,5 @@ export interface WorldState {
   stockpile: { pos: Position; wood: number; food: number };
   buildings: House[];
   deaths: { name: string; tick: number; cause: "starvation" | "cold" }[];
+  history: WorldHistory;
 }

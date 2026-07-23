@@ -148,5 +148,13 @@ export function generateWorld(seed: number): WorldState {
     stockpile: { pos: stockpilePosition, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
+    history: {
+      startYear: 0,
+      currentYear: 0,
+      polities: [],
+      events: [],
+      landmarks: [],
+      settlementOrigin: null,
+    },
   };
 }

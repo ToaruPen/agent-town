@@ -59,6 +59,14 @@ function createWorld(agent: AgentState): WorldState {
       },
     ],
     deaths: [],
+    history: {
+      startYear: 0,
+      currentYear: 0,
+      polities: [],
+      events: [],
+      landmarks: [],
+      settlementOrigin: null,
+    },
   };
 }
 
