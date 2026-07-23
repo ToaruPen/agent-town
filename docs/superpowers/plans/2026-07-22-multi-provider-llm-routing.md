@@ -787,6 +787,30 @@ git add packages/server/src/llm/codexRunner.ts packages/server/test/codexRunner.
 git commit -m "feat(llm): add isolated codex cli runner"
 ```
 
+## Security hardening addendum: provider計画境界をactionなしに揃える
+
+Task 4の独立セキュリティレビューで、`read-only`は書込みを制限するだけで、
+host読取りやprovider側hosted actionの境界にはならないことが確認された。
+Task 5へ進む前に、次の追加TDDを完了する。
+
+**Files:**
+- Modify: `packages/server/src/llm/claudeRunner.ts`
+- Modify: `packages/server/src/llm/codexRunner.ts`
+- Modify: `packages/server/src/llm/planSchema.ts`
+- Modify: `packages/shared/src/constants.ts`
+- Modify: 対応するrunnerとschemaのtest
+
+- [x] Claudeは`--safe-mode`、`--tools ""`、strictな空MCP設定、skills/Chrome/session無効で起動する。
+- [x] Codexはshell、plugins/apps、multi-agent、image generation、browser、computer、web searchを起動時に無効化する。
+- [x] 両CLIの子プロセス環境をprovider別allowlistへ制限する。
+- [x] stdout、stderr、最終messageをUTF-8 byte数で制限し、超過時はfail-closedで停止する。
+- [x] timeout後はSIGTERM、SIGKILL、最終reap期限の順に処理し、永久pendingを残さない。
+- [x] `reasoning`を永続化前に最大512 Unicode code pointsへ制限する。
+- [x] mock失敗diffが実際の認証値やproxy値を展開しないよう、argvとenvのassertionを分離する。
+- [x] 実機否定スモークでClaudeのshellとCodexのshell/web/image generation/browser/computer actionが利用不能であることを確認する。
+
+レビューで追加されたこのtaskも、実装担当、仕様レビュー、品質レビュー、セキュリティ再レビューを分離して完了させる。
+
 ## Task 5: `LlmPlanner`へプロバイダー識別と完全な結果ログを追加する
 
 **Files:**
