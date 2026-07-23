@@ -1,4 +1,10 @@
-import type { HistoryEvent, Position, Tile } from "@agent-town/shared";
+import {
+  type HistoryEvent,
+  type Position,
+  type Tile,
+  WORLD_MAP_HEIGHT,
+  WORLD_MAP_WIDTH,
+} from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { generateWorldHistory } from "../src/sim/historyGen.js";
@@ -79,6 +85,14 @@ function playerFacingHistoryStrings(history: ReturnType<typeof generateWorldHist
 }
 
 describe("generateWorldHistory", () => {
+  it("attaches the same seeded world map to the completed history", () => {
+    const first = generateWorldHistory(42);
+    const second = generateWorldHistory(42);
+
+    expect(first.worldMap).toEqual(second.worldMap);
+    expect(first.worldMap.cells).toHaveLength(WORLD_MAP_WIDTH * WORLD_MAP_HEIGHT);
+  });
+
   it("generates every player-facing history field in Japanese", () => {
     const history = generateWorldHistory(42, smallWalkableMap());
 

@@ -15,6 +15,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { buildPlanPrompt } from "../src/llm/planPrompt.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -79,6 +80,7 @@ function createWorld(agent: AgentState): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

@@ -6,6 +6,7 @@ import {
   createThoughtBubbleSchedule,
   updateThoughtBubbleSchedule,
 } from "../src/ui/inspectPanel.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -82,6 +83,7 @@ function makeWorld(agents: AgentState[]): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

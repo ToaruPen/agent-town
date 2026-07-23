@@ -6,6 +6,7 @@ import {
   buildWorldChronicleViewModel,
   createWorldChronicle,
 } from "../src/ui/worldChronicle.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 let focusedElement: FakeElement | null = null;
 
@@ -148,6 +149,7 @@ function historyFixture(): WorldHistory {
       reason: "国境戦争の後、最後の穀倉が尽きた。",
       inheritedValues: ["mutualAid", "order"],
     },
+    worldMap: makeWorldMapFixture(),
   };
 }
 

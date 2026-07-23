@@ -12,6 +12,7 @@ import {
   currentSocialMilestone,
   updateSocialMilestoneSchedule,
 } from "../src/ui/societyViewModel.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(id: string, name: string, foodSecurity = 0): AgentState {
   return {
@@ -56,6 +57,7 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
     ...overrides,
   };

@@ -19,6 +19,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { stepAgent } from "../src/sim/executor.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 interface TileOverride {
   pos: { x: number; y: number };
@@ -83,6 +84,7 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

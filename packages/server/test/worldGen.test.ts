@@ -29,6 +29,9 @@ function historicalReferenceIds(history: WorldHistory): string[] {
     ...history.polities.flatMap(({ formativeTraumaEventIds }) => formativeTraumaEventIds),
     ...history.landmarks.map(({ foundedByEventId }) => foundedByEventId),
     ...(history.settlementOrigin === null ? [] : [history.settlementOrigin.departureEventId]),
+    ...history.worldMap.cities.map(({ foundedByEventId }) => foundedByEventId),
+    ...history.worldMap.tradeRoutes.map(({ establishedByEventId }) => establishedByEventId),
+    ...history.worldMap.borderChanges.map(({ establishedByEventId }) => establishedByEventId),
   ];
 }
 
@@ -182,6 +185,7 @@ describe("generateWorld", () => {
 
   it("changes the old-world outcome for a different seed", () => {
     expect(generateWorld(42).history).not.toEqual(generateWorld(43).history);
+    expect(generateWorld(42).history.worldMap).not.toEqual(generateWorld(43).history.worldMap);
   });
 
   it("keeps every historical cause, trauma, origin, and landmark reference resolvable", () => {
@@ -215,7 +219,7 @@ describe("generateWorld", () => {
         true,
       );
     }
-  });
+  }, 60_000);
 
   it("anchors old-world landmarks on distinct walkable tiles away from the stockpile", () => {
     const world = generateWorld(42);

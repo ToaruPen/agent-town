@@ -2,6 +2,7 @@ import type { Terrain, WorldState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { filterReachable, findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createWorld(width: number, height: number, terrainAt: Map<string, Terrain> = new Map()) {
   const tiles = Array.from({ length: width * height }, (_, index) => {
@@ -28,6 +29,7 @@ function createWorld(width: number, height: number, terrainAt: Map<string, Terra
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   } satisfies WorldState;
 }

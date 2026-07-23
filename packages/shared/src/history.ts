@@ -1,4 +1,5 @@
 import type { Position } from "./world.js";
+import type { WorldMap } from "./worldMap.js";
 
 export type CulturalValue =
   | "commerce"
@@ -73,4 +74,5 @@ export interface WorldHistory {
   events: HistoryEvent[];
   landmarks: HistoricalLandmark[];
   settlementOrigin: SettlementOrigin | null;
+  worldMap: WorldMap;
 }

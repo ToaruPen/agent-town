@@ -15,6 +15,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { FakePlanner } from "../src/sim/fakePlanner.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -56,6 +57,7 @@ function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

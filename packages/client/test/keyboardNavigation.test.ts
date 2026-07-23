@@ -7,6 +7,7 @@ import {
   resolveKeyboardTarget,
 } from "../src/ui/keyboardNavigation.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeWorld(): WorldState {
   return {
@@ -50,6 +51,7 @@ function makeWorld(): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

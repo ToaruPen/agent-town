@@ -2,6 +2,7 @@ import type { ServerMessage, WorldState } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { connect, getWebSocketUrl, type WebSocketLike } from "../src/net/wsClient.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 class MockWebSocket implements WebSocketLike {
   onmessage: ((event: { data: string }) => void) | null = null;
@@ -65,6 +66,7 @@ function makeWorld(): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }
@@ -139,8 +141,12 @@ describe("connect", () => {
       changedTiles: [{ index: 1, tile: { terrain: "forest", resource: null } }],
     });
 
+    const welcomedState = onWelcome.mock.calls[0]?.[0];
+    const updatedState = onUpdate.mock.calls[0]?.[0];
     expect(factory).toHaveBeenCalledWith("ws://example.test");
     expect(onWelcome).toHaveBeenCalledWith(expect.objectContaining({ tick: 0 }));
+    expect(updatedState?.history).toBe(welcomedState?.history);
+    expect(updatedState?.history.worldMap).toEqual(makeWorld().history.worldMap);
     expect(onUpdate).toHaveBeenCalledWith({
       ...makeWorld(),
       tick: 4,

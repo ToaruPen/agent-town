@@ -10,6 +10,8 @@ import {
   SEASONS,
   type ServerMessage,
   TICKS_PER_DAY,
+  WORLD_MAP_HEIGHT,
+  WORLD_MAP_WIDTH,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 import WebSocket, { type RawData } from "ws";
@@ -150,9 +152,12 @@ describe("startServer", () => {
         llmProvider: null,
         thinking: false,
       });
+      expect(welcome.state.history.worldMap.cells).toHaveLength(WORLD_MAP_WIDTH * WORLD_MAP_HEIGHT);
 
       expect(update?.type).toBe("update");
       if (update?.type !== "update") throw new Error("second message was not update");
+      expect("history" in update).toBe(false);
+      expect("worldMap" in update).toBe(false);
       expect(update.tick).toBeGreaterThan(welcome.state.tick);
       expect(update.agents[0]).toMatchObject({
         planSource: "fake",

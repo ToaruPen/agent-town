@@ -40,12 +40,32 @@ function hasRequiredKeys(value: Record<string, unknown>, keys: string[]): boolea
   return keys.every((key) => key in value);
 }
 
+function hasWorldMap(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasRequiredKeys(value, [
+      "width",
+      "height",
+      "cells",
+      "cities",
+      "tradeRoutes",
+      "borderChanges",
+      "settlementFrontierPos",
+    ])
+  );
+}
+
+function hasWorldHistory(value: unknown): boolean {
+  return isRecord(value) && hasWorldMap(value.worldMap);
+}
+
 function isServerMessage(value: unknown): value is ServerMessage {
   if (!isRecord(value)) return false;
   if (value.type === "welcome") {
     return (
       isRecord(value.state) &&
-      hasRequiredKeys(value.state, ["history", "collectives", "institutions"])
+      hasRequiredKeys(value.state, ["history", "collectives", "institutions"]) &&
+      hasWorldHistory(value.state.history)
     );
   }
   if (value.type === "update") {

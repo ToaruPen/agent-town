@@ -31,6 +31,7 @@ import {
   resolveScreenBubblePlacement,
 } from "../src/ui/infoBubble.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -72,6 +73,7 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
     ...overrides,
   };
@@ -280,6 +282,7 @@ describe("resolveInfoBubbleTarget", () => {
           },
         ],
         settlementOrigin: null,
+        worldMap: makeWorldMapFixture(),
       },
     });
     expect(resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 })).toEqual({
