@@ -438,6 +438,7 @@ function pressureForDeparture(homeland: MutablePolity, events: HistoryEvent[]): 
   if (trauma !== undefined) return trauma;
 
   const id = eventId(events);
+  const populationChange = populationDelta("scarcity");
   const pressure: HistoryEvent = {
     id,
     year: -2,
@@ -447,10 +448,12 @@ function pressureForDeparture(homeland: MutablePolity, events: HistoryEvent[]): 
     polityIds: [homeland.id],
     causeIds: [homeland.latestEventId],
     effects: [
-      { kind: "population", targetId: homeland.id, delta: -7 },
+      { kind: "population", targetId: homeland.id, delta: populationChange },
       { kind: "culture", targetId: homeland.id, value: "mutualAid", delta: 0.08 },
     ],
   };
+  homeland.population = Math.max(10, homeland.population + populationChange);
+  updateValue(homeland, "mutualAid", id);
   homeland.latestEventId = id;
   homeland.traumaIds.push(id);
   events.push(pressure);

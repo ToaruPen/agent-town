@@ -82,4 +82,29 @@ describe("generateWorldHistory", () => {
       expect(distance).toBeGreaterThanOrEqual(6);
     }
   });
+
+  it("applies a generated last-harvest pressure to the homeland culture", () => {
+    const history = generateWorldHistory(298);
+    const departure = history.events.find(
+      ({ id }) => id === history.settlementOrigin?.departureEventId,
+    );
+    const pressure = history.events.find(({ id }) => id === departure?.causeIds[0]);
+    const homeland = history.polities.find(
+      ({ id }) => id === history.settlementOrigin?.homelandPolityId,
+    );
+    expect(pressure).toBeDefined();
+    expect(homeland).toBeDefined();
+    if (pressure === undefined || homeland === undefined)
+      throw new Error("missing departure cause");
+    const mutualAid = homeland.values.find(({ value }) => value === "mutualAid");
+
+    expect(pressure.title).toMatch(/^The Last /);
+    expect(pressure.effects).toContainEqual({
+      kind: "culture",
+      targetId: homeland.id,
+      value: "mutualAid",
+      delta: 0.08,
+    });
+    expect(mutualAid?.changedByEventIds ?? []).toContain(pressure.id);
+  });
 });
