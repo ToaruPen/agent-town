@@ -66,11 +66,20 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
 
 describe("info bubble text builders", () => {
   it("formats an agent badge, activity, compact needs, and first thought line", () => {
-    expect(buildAgentBubbleText(makeAgent())).toEqual({
+    expect(buildAgentBubbleText(makeAgent({ llmProvider: "codex" }))).toEqual({
       title: "Ash",
-      badge: "LLM",
+      badge: "CODEX",
       lines: ["moving · H 21 · F 43 · HP 88", "Gather wood before dusk."],
     });
+  });
+
+  it("labels provider fallback and unmanaged fake plans", () => {
+    expect(
+      buildAgentBubbleText(makeAgent({ planSource: "fake", llmProvider: "claude" })).badge,
+    ).toBe("CLAUDE → FAKE");
+    expect(buildAgentBubbleText(makeAgent({ planSource: "fake", llmProvider: null })).badge).toBe(
+      "FAKE",
+    );
   });
 
   it("formats live tree and berry resources", () => {

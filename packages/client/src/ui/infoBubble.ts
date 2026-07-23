@@ -14,6 +14,7 @@ import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from
 
 import { TILE_SIZE } from "../render/mapLayer.js";
 import { layoutAgentsFrontToBack, layoutAgentsOnTiles } from "../render/sprites.js";
+import { buildProviderBadge } from "./providerBadge.js";
 import type { DeathEvent } from "./survivalViewModel.js";
 import { buildSurvivalHudViewModel } from "./survivalViewModel.js";
 
@@ -113,7 +114,7 @@ function firstThoughtLine(thought: string | null): string {
 export function buildAgentBubbleText(agent: AgentState): AgentBubbleText {
   return {
     title: agent.name,
-    badge: agent.planSource.toUpperCase(),
+    badge: buildProviderBadge(agent).label,
     lines: [
       `${agent.activity.kind} · H ${Math.round(agent.hunger)} · F ${Math.round(agent.fatigue)} · HP ${Math.round(agent.health)}`,
       firstThoughtLine(agent.lastThought),

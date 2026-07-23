@@ -46,7 +46,7 @@ describe("buildInspectPanelViewModel", () => {
       ),
     ).toEqual({
       name: "Ash",
-      planSource: "llm",
+      providerBadge: { label: "CLAUDE", tone: "llm" },
       activityKind: "moving",
       tasks: [
         { kind: "moveTo", target: "(4, 5)" },

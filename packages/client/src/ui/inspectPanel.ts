@@ -1,5 +1,6 @@
 import type { AgentState, AgentTask } from "@agent-town/shared";
 
+import { buildProviderBadge, type ProviderBadge } from "./providerBadge.js";
 import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
 
 export const THOUGHT_BUBBLE_DURATION_MS = 6_000;
@@ -22,7 +23,7 @@ export interface InspectTaskViewModel {
 
 export interface InspectPanelViewModel {
   name: string;
-  planSource: AgentState["planSource"];
+  providerBadge: ProviderBadge;
   activityKind: AgentState["activity"]["kind"];
   tasks: InspectTaskViewModel[];
   needs: NeedViewModel[];
@@ -49,7 +50,7 @@ function taskTarget(task: AgentTask): string | null {
 export function buildInspectPanelViewModel(agent: AgentState): InspectPanelViewModel {
   return {
     name: agent.name,
-    planSource: agent.planSource,
+    providerBadge: buildProviderBadge(agent),
     activityKind: agent.activity.kind,
     tasks: agent.tasks.map((task) => ({ kind: task.kind, target: taskTarget(task) })),
     needs: buildNeedsViewModel(agent),
@@ -147,8 +148,8 @@ function renderPanel(
   name.id = "inspect-panel-name";
   const badge = createElement(
     "span",
-    `inspect-panel__badge inspect-panel__badge--${viewModel.planSource}`,
-    viewModel.planSource,
+    `inspect-panel__badge inspect-panel__badge--${viewModel.providerBadge.tone}`,
+    viewModel.providerBadge.label,
   );
   const closeButton = createElement("button", "inspect-panel__close", "×");
   closeButton.type = "button";
