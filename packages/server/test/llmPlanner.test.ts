@@ -71,7 +71,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({
       tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }, gather],
@@ -95,7 +95,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("codex", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({
       tasks,
@@ -106,7 +106,13 @@ describe("LlmPlanner", () => {
     expect(fallback.plan).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(
-      JSON.stringify({ at: "llmPlanner", agent: agent.id, outcome: "llm" }),
+      JSON.stringify({
+        at: "llmPlanner",
+        agent: agent.id,
+        provider: "codex",
+        attempt: 1,
+        outcome: "llm",
+      }),
     );
   });
 
@@ -128,7 +134,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({
       tasks: [
@@ -154,7 +160,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(run).toHaveBeenCalledWith(expect.stringContaining("Ash"));
   });
@@ -169,16 +175,37 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: fallbackPlan };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
     expect(run).toHaveBeenCalledTimes(2);
     expect(fallbackPlan).toHaveBeenCalledOnce();
-    expect(log).toHaveBeenCalledTimes(2);
-    for (const [line] of log.mock.calls) {
-      expect(line).toContain('"outcome":"error"');
-      expect(line).toContain('"error":');
-    }
+    expect(log).toHaveBeenCalledTimes(3);
+    expect(log).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        at: "llmPlanner",
+        agent: agent.id,
+        provider: "claude",
+        attempt: 1,
+        outcome: "error",
+        error: "response has no balanced JSON object",
+      }),
+    );
+    expect(log).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        at: "llmPlanner",
+        agent: agent.id,
+        provider: "claude",
+        attempt: 2,
+        outcome: "error",
+        error: "response has no balanced JSON object",
+      }),
+    );
+    expect(log).toHaveBeenLastCalledWith(
+      JSON.stringify({ at: "llmPlanner", agent: agent.id, provider: "claude", outcome: "fake" }),
+    );
   });
 
   it("returns LLM tasks when garbage is followed by a valid response", async () => {
@@ -195,7 +222,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: fallbackPlan };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({
       tasks,
@@ -205,8 +232,27 @@ describe("LlmPlanner", () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(fallbackPlan).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledTimes(2);
-    expect(log.mock.calls[0]?.[0]).toContain('"outcome":"error"');
-    expect(log.mock.calls[1]?.[0]).toContain('"outcome":"llm"');
+    expect(log).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        at: "llmPlanner",
+        agent: agent.id,
+        provider: "claude",
+        attempt: 1,
+        outcome: "error",
+        error: "response has no balanced JSON object",
+      }),
+    );
+    expect(log).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        at: "llmPlanner",
+        agent: agent.id,
+        provider: "claude",
+        attempt: 2,
+        outcome: "llm",
+      }),
+    );
   });
 
   it("retries unexecutable plans before falling back", async () => {
@@ -222,7 +268,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => fallbackTasks) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
     expect(run).toHaveBeenCalledTimes(2);
@@ -240,12 +286,15 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => fallbackTasks) };
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
     expect(run).toHaveBeenCalledTimes(2);
-    expect(log).toHaveBeenCalledTimes(2);
-    for (const [line] of log.mock.calls) expect(line).toContain("unreachable");
+    expect(log).toHaveBeenCalledTimes(3);
+    for (const [line] of log.mock.calls.slice(0, 2)) expect(line).toContain("unreachable");
+    expect(log).toHaveBeenLastCalledWith(
+      JSON.stringify({ at: "llmPlanner", agent: agent.id, provider: "claude", outcome: "fake" }),
+    );
   });
 
   it("accepts MAX_PLAN_TASKS authored actions when normalization inserts extra movement", async () => {
@@ -265,7 +314,7 @@ describe("LlmPlanner", () => {
     const fallback: Planner = { plan: vi.fn((): AgentTask[] => [{ kind: "deposit" }]) };
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    const result = await new LlmPlanner(runner, fallback, () => 0).planAsync(world, agent);
+    const result = await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
     expect(result.source).toBe("llm");
     expect(result.tasks.filter(({ kind }) => kind === "forage")).toHaveLength(MAX_PLAN_TASKS);

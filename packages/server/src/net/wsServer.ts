@@ -100,11 +100,10 @@ function createThoughtBroker(
   enabled: boolean,
   engine: Engine,
   fallback: FakePlanner,
-  rng: () => number,
   llmAgents: string | undefined,
 ): ThoughtBroker | undefined {
   if (!enabled) return undefined;
-  const planner = new LlmPlanner(new CliClaudeRunner(), fallback, rng);
+  const planner = new LlmPlanner("claude", new CliClaudeRunner(), fallback);
   const selection = parseLlmAgentSelection(llmAgents, engine.world.agents);
   return new ThoughtBroker({
     engine,
@@ -121,7 +120,6 @@ export function startServer(opts: ServerOptions): ServerHandle {
     opts.llmPlannerEnabled === true,
     engine,
     fallback,
-    rng,
     opts.llmAgents,
   );
   const httpServer = createServer(createStaticHandler(opts.staticDir));
