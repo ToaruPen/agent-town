@@ -1,13 +1,20 @@
 import type { AgentState, Terrain, Tile } from "@agent-town/shared";
 
-export type WorldObjectKind = "resource" | "stockpile" | "house" | "tombstone" | "agent";
+export type WorldObjectKind =
+  | "resource"
+  | "stockpile"
+  | "house"
+  | "landmark"
+  | "tombstone"
+  | "agent";
 
 const OBJECT_DEPTHS: Record<WorldObjectKind, number> = {
   resource: 0,
   stockpile: 1,
   house: 2,
-  tombstone: 3,
-  agent: 4,
+  landmark: 3,
+  tombstone: 4,
+  agent: 5,
 };
 const DEPTHS_PER_ROW = 10;
 

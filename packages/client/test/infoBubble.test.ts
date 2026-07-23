@@ -226,6 +226,71 @@ describe("resolveInfoBubbleTarget", () => {
       agentId: "agent-3",
     });
   });
+
+  it("selects a landmark and explains the event that left it behind", async () => {
+    const world = makeWorld({
+      agents: [],
+      stockpile: { pos: { x: 1, y: 1 }, wood: 0, food: 0 },
+      history: {
+        startYear: -200,
+        currentYear: 0,
+        polities: [
+          {
+            id: "polity-1",
+            name: "The Sable March",
+            adjective: "Sable",
+            color: 0x6f7f88,
+            values: [],
+            foundingMyth: "The wardens shared one fire.",
+            formativeTraumaEventIds: ["event-war"],
+            taboo: "Leaving the dead unburied.",
+            ambition: "Secure every pass.",
+            governance: "Wardens and village moots.",
+          },
+        ],
+        events: [
+          {
+            id: "event-war",
+            year: -80,
+            kind: "war",
+            title: "The Ashen Border War",
+            summary: "The border farms burned.",
+            polityIds: ["polity-1"],
+            causeIds: [],
+            effects: [
+              {
+                kind: "landmark",
+                targetId: "landmark-1",
+                landmarkKind: "borderFort",
+              },
+            ],
+          },
+        ],
+        landmarks: [
+          {
+            id: "landmark-1",
+            kind: "borderFort",
+            name: "Old Border Keep",
+            pos: { x: 0, y: 0 },
+            polityId: "polity-1",
+            foundedByEventId: "event-war",
+          },
+        ],
+        settlementOrigin: null,
+      },
+    });
+    const module = await import("../src/ui/infoBubble.js");
+    const builder = Reflect.get(module, "buildLandmarkBubbleText");
+
+    expect(resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 })).toEqual({
+      kind: "landmark",
+      landmarkId: "landmark-1",
+    });
+    expect(typeof builder).toBe("function");
+    expect(builder(world.history.landmarks[0], world.history)).toBe(
+      "Old Border Keep — raised after The Ashen Border War, year -80",
+    );
+  });
 });
 
 describe("resolveHoveredAgentId", () => {
