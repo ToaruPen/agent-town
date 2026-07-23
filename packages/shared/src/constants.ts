@@ -35,15 +35,15 @@ export const MAX_POPULATION = 10;
 export const MAP_WIDTH = 64;
 export const MAP_HEIGHT = 48;
 export const AGENT_COUNT = 3;
-export const AGENT_NAMES = ["Ash", "Birch", "Cedar"] as const;
+export const AGENT_NAMES = ["トネリコ", "シラカバ", "スギ"] as const;
 export const IMMIGRANT_NAMES = [
-  "Dahlia",
-  "Elm",
-  "Fern",
-  "Gorse",
-  "Hazel",
-  "Iris",
-  "Juniper",
+  "ダリア",
+  "ニレ",
+  "シダ",
+  "ハリエニシダ",
+  "ハシバミ",
+  "アヤメ",
+  "ネズ",
 ] as const;
 export const MOVE_TICKS_PER_TILE = 3;
 export const GATHER_TICKS = 20;

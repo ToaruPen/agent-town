@@ -30,7 +30,7 @@ interface TileOverride {
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 0, y: 0 },
     carrying: null,
     activity: { kind: "idle" },
@@ -404,7 +404,7 @@ describe("stepAgent", () => {
     const world = createWorld(4, 1);
     world.stockpile.wood = HOUSE_WOOD_COST;
     const builder = createAgent({ tasks: [{ kind: "build", pos: site }] });
-    const occupant = createAgent({ id: "agent-2", name: "Birch", pos: { x: 2, y: 0 } });
+    const occupant = createAgent({ id: "agent-2", name: "シラカバ", pos: { x: 2, y: 0 } });
     world.agents.push(builder, occupant);
 
     stepAgent(world, builder);

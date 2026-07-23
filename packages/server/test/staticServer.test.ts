@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { get } from "node:http";
 import { createServer } from "node:net";
@@ -7,6 +8,11 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { type ServerHandle, startServer } from "../src/net/wsServer.js";
+
+const staticServerSource = readFileSync(
+  new URL("../src/net/staticServer.ts", import.meta.url),
+  "utf8",
+);
 
 interface HttpResponse {
   body: string;
@@ -105,11 +111,17 @@ describe("static production serving", () => {
     const response = await request(port, "/missing.js");
 
     expect(response.statusCode).toBe(404);
+    expect(response.body).toBe("見つかりません");
   });
 
   it("rejects path traversal", async () => {
     const response = await request(port, "/../etc/passwd");
 
     expect(response.statusCode).toBe(404);
+    expect(response.body).toBe("見つかりません");
+  });
+
+  it("uses a Japanese response body for an internal server error", () => {
+    expect(staticServerSource).toContain('response.end("サーバー内部エラー")');
   });
 });

@@ -43,13 +43,13 @@ describe("CliClaudeRunner", () => {
     });
 
     const runner: LlmRunner = new CliClaudeRunner({ spawnFn });
-    const resultPromise = runner.run("Plan Ash's day.");
-    child.stdout.write(JSON.stringify({ result: '{"reasoning":"Work.","plan":[]}' }));
+    const resultPromise = runner.run("Plan トネリコ's day.");
+    child.stdout.write(JSON.stringify({ result: '{"reasoning":"働く。","plan":[]}' }));
     child.emit("close", 0);
 
     await expect(resultPromise).resolves.toEqual({
       ok: true,
-      text: '{"reasoning":"Work.","plan":[]}',
+      text: '{"reasoning":"働く。","plan":[]}',
     });
     expect(spawnMock).toHaveBeenCalledOnce();
     const spawnCall = spawnMock.mock.calls[0];
@@ -73,7 +73,7 @@ describe("CliClaudeRunner", () => {
     const spawnOptions = spawnCall?.[2];
     expect(spawnOptions?.cwd).toBeUndefined();
     expect(typeof spawnOptions?.env).toBe("object");
-    expect(stdin).toBe("Plan Ash's day.");
+    expect(stdin).toBe("Plan トネリコ's day.");
   });
 
   it("passes the configured model to claude", async () => {
@@ -180,7 +180,7 @@ describe("CliClaudeRunner", () => {
     const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
 
     const runner: LlmRunner = new CliClaudeRunner({ spawnFn });
-    const resultPromise = runner.run("Plan Ash's day.");
+    const resultPromise = runner.run("Plan トネリコ's day.");
     child.stdout.write(JSON.stringify({ result: "valid despite the exit status" }));
     child.stderr.write("authentication failed");
     child.emit("close", 1);
@@ -198,7 +198,7 @@ describe("CliClaudeRunner", () => {
       const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
 
       const runner: LlmRunner = new CliClaudeRunner({ spawnFn, timeoutMs: 25 });
-      const resultPromise = runner.run("Plan Ash's day.");
+      const resultPromise = runner.run("Plan トネリコ's day.");
       await vi.advanceTimersByTimeAsync(25);
 
       expect(child.kill).toHaveBeenCalledWith("SIGTERM");

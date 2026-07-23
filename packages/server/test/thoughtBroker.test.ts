@@ -83,13 +83,13 @@ describe("ThoughtBroker", () => {
     expect(agent.thinking).toBe(true);
     expect(broker.inFlightCount()).toBe(1);
 
-    pending.resolve({ tasks, source: "llm", reasoning: "Return the gathered supplies." });
+    pending.resolve({ tasks, source: "llm", reasoning: "集めた資材を持ち帰る。" });
     await pending.promise;
 
     expect(agent.tasks).toEqual(tasks);
     expect(agent.planSource).toBe("llm");
     expect(agent.thinking).toBe(false);
-    expect(agent.lastThought).toBe("Return the gathered supplies.");
+    expect(agent.lastThought).toBe("集めた資材を持ち帰る。");
     expect(broker.inFlightCount()).toBe(0);
   });
 
@@ -189,7 +189,7 @@ describe("ThoughtBroker", () => {
     broker.onTick();
 
     expect(planFn.mock.calls[0]?.[0].agents.map(({ name }) => name)).toEqual([
-      "Ash",
+      "トネリコ",
       IMMIGRANT_NAMES[0],
     ]);
 
@@ -592,7 +592,7 @@ describe("ThoughtBroker", () => {
     const broker = new ThoughtBroker({
       engine,
       llmAgentIds: () => engine.world.agents.map(({ id }) => id),
-      providerForAgent: (agent) => (agent.name === "Dahlia" ? "codex" : "claude"),
+      providerForAgent: (agent) => (agent.name === "ダリア" ? "codex" : "claude"),
       planFn,
     });
 
@@ -602,7 +602,7 @@ describe("ThoughtBroker", () => {
     const newcomer = {
       ...getAgent(createTestEngine(), 0),
       id: "agent-new",
-      name: "Dahlia",
+      name: "ダリア",
       hunger: HUNGER_EAT_THRESHOLD - 1,
       tasks: [{ kind: "deposit" } as const],
     };

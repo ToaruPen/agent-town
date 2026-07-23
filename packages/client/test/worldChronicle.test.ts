@@ -66,34 +66,34 @@ function historyFixture(): WorldHistory {
     polities: [
       {
         id: "polity-1",
-        name: "The Sable March",
-        adjective: "Sable",
+        name: "黒貂辺境国",
+        adjective: "黒貂",
         color: 0x6f7f88,
         values: [
           { value: "mutualAid", weight: 0.9, changedByEventIds: ["event-war"] },
           { value: "order", weight: 0.8, changedByEventIds: ["event-trade"] },
           { value: "valor", weight: 0.4, changedByEventIds: ["event-war"] },
         ],
-        foundingMyth: "The first wardens shared one fire through a winter siege.",
+        foundingMyth: "冬の包囲戦で、最初の守人たちはひとつの火を分かち合った。",
         formativeTraumaEventIds: ["event-war", "event-war-repeat"],
-        taboo: "Leaving a neighbor unburied.",
-        ambition: "Secure every western pass.",
-        governance: "Wardens bargain with village moot speakers.",
+        taboo: "隣人の亡骸を葬らずに放置すること。",
+        ambition: "西の峠をすべて守り固める。",
+        governance: "守人たちが村会の代表と合議する。",
       },
       {
         id: "polity-2",
-        name: "The Auric League",
-        adjective: "Auric",
+        name: "金環盟約国",
+        adjective: "金環",
         color: 0xc49a4b,
         values: [
           { value: "commerce", weight: 0.85, changedByEventIds: [] },
           { value: "knowledge", weight: 0.7, changedByEventIds: [] },
         ],
-        foundingMyth: "Seven markets agreed on one set of weights.",
+        foundingMyth: "七つの市がひと組の分銅を共有して和平を結んだ。",
         formativeTraumaEventIds: [],
-        taboo: "Breaking a witnessed contract.",
-        ambition: "Reopen the eastern road.",
-        governance: "Guilds elect a rotating speaker.",
+        taboo: "証人のいる契約を破ること。",
+        ambition: "東の街道を再び開く。",
+        governance: "組合が持ち回りの代表を選ぶ。",
       },
     ],
     events: [
@@ -101,8 +101,8 @@ function historyFixture(): WorldHistory {
         id: "event-departure",
         year: -1,
         kind: "migration",
-        title: "The Sable Departure",
-        summary: "Several households left the old border.",
+        title: "黒貂の旅立ち",
+        summary: "いくつかの家族が古い辺境を離れた。",
         polityIds: ["polity-1"],
         causeIds: ["event-war"],
         effects: [{ kind: "population", targetId: "polity-1", delta: -3 }],
@@ -111,8 +111,8 @@ function historyFixture(): WorldHistory {
         id: "event-war",
         year: -80,
         kind: "war",
-        title: "The Ashen Border War",
-        summary: "The border farms burned.",
+        title: "黒貂・金環国境戦争",
+        summary: "国境の農地が焼け落ちた。",
         polityIds: ["polity-1", "polity-2"],
         causeIds: [],
         effects: [
@@ -124,8 +124,8 @@ function historyFixture(): WorldHistory {
         id: "event-war-repeat",
         year: -60,
         kind: "war",
-        title: "The Ashen Border War",
-        summary: "The same disputed line burned again.",
+        title: "黒貂・金環国境戦争",
+        summary: "争いの絶えない境界が再び炎に包まれた。",
         polityIds: ["polity-1", "polity-2"],
         causeIds: ["event-war"],
         effects: [{ kind: "population", targetId: "polity-1", delta: -4 }],
@@ -134,8 +134,8 @@ function historyFixture(): WorldHistory {
         id: "event-trade",
         year: -40,
         kind: "trade",
-        title: "The Sable-Auric Compact",
-        summary: "Merchants reopened a minor road.",
+        title: "黒貂・金環盟約",
+        summary: "商人たちが脇街道を再び開いた。",
         polityIds: ["polity-1", "polity-2"],
         causeIds: [],
         effects: [{ kind: "population", targetId: "polity-1", delta: 2 }],
@@ -145,7 +145,7 @@ function historyFixture(): WorldHistory {
     settlementOrigin: {
       homelandPolityId: "polity-1",
       departureEventId: "event-departure",
-      reason: "The last granaries failed after the border war.",
+      reason: "国境戦争の後、最後の穀倉が尽きた。",
       inheritedValues: ["mutualAid", "order"],
     },
   };
@@ -155,40 +155,40 @@ describe("buildWorldChronicleViewModel", () => {
   it("resolves the homeland, inherited values, trauma titles, and event causes", () => {
     const view = buildWorldChronicleViewModel(historyFixture());
 
-    expect(view.eraLabel).toBe("200 years before settlement");
+    expect(view.eraLabel).toBe("開拓以前の200年間");
     expect(view.origin).toEqual({
-      homelandName: "The Sable March",
-      reason: "The last granaries failed after the border war.",
-      inheritedValues: ["Mutual aid", "Order"],
+      homelandName: "黒貂辺境国",
+      reason: "国境戦争の後、最後の穀倉が尽きた。",
+      inheritedValues: ["相互扶助", "秩序"],
     });
     expect(view.polities[0]).toEqual(
       expect.objectContaining({
-        name: "The Sable March",
+        name: "黒貂辺境国",
         isHomeland: true,
         values: [
           {
-            label: "Mutual aid",
-            strengthenedBy: [{ year: -80, title: "The Ashen Border War" }],
+            label: "相互扶助",
+            strengthenedBy: [{ year: -80, title: "黒貂・金環国境戦争" }],
           },
           {
-            label: "Order",
-            strengthenedBy: [{ year: -40, title: "The Sable-Auric Compact" }],
+            label: "秩序",
+            strengthenedBy: [{ year: -40, title: "黒貂・金環盟約" }],
           },
           {
-            label: "Valor",
-            strengthenedBy: [{ year: -80, title: "The Ashen Border War" }],
+            label: "武勇",
+            strengthenedBy: [{ year: -80, title: "黒貂・金環国境戦争" }],
           },
         ],
-        traumaTitles: ["The Ashen Border War"],
+        traumaTitles: ["黒貂・金環国境戦争"],
       }),
     );
     expect(view.events.at(-1)).toEqual(
       expect.objectContaining({
         kind: "migration",
-        causes: ["The Ashen Border War"],
+        causes: ["黒貂・金環国境戦争"],
       }),
     );
-    expect(view.events.some(({ title }) => title === "The Sable-Auric Compact")).toBe(true);
+    expect(view.events.some(({ title }) => title === "黒貂・金環盟約")).toBe(true);
   });
 });
 
@@ -220,9 +220,10 @@ describe("createWorldChronicle", () => {
     expect(controller.isOpen()).toBe(true);
     expect(root.hidden).toBe(false);
     expect(focusedElement).toBe(root.findByClass("world-chronicle__close"));
-    expect(root.allText()).toContain("The Sable March");
-    expect(root.allText()).toContain("The Ashen Border War");
-    expect(root.allText()).toContain("Strengthened by −40 · The Sable-Auric Compact");
+    expect(root.allText()).toContain("黒貂辺境国");
+    expect(root.allText()).toContain("黒貂・金環国境戦争");
+    expect(root.allText()).toContain("影響 −40 · 黒貂・金環盟約");
+    expect(root.allText()).not.toMatch(/[A-Za-z]/);
 
     const release = bindWorldChronicleEscape(controller, () => controller.close());
     let prevented = 0;

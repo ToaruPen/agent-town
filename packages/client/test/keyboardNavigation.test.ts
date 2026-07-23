@@ -22,7 +22,7 @@ function makeWorld(): WorldState {
     agents: [
       {
         id: "ash",
-        name: "Ash",
+        name: "トネリコ",
         pos: { x: 0, y: 0 },
         carrying: null,
         activity: { kind: "idle" },
@@ -52,12 +52,12 @@ function makeWorld(): WorldState {
 
 const death: DeathEvent = {
   id: "death",
-  name: "Birch",
+  name: "シラカバ",
   pos: { x: 0, y: 0 },
   cause: "starvation",
   deathTick: TICKS_PER_DAY,
   expiresAtTick: TICKS_PER_DAY * 2,
-  text: "Birch starved",
+  text: "シラカバが餓死 — 1日目",
 };
 
 describe("moveTileCursor", () => {

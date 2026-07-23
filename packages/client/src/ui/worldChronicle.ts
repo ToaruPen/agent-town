@@ -1,14 +1,14 @@
 import type { CulturalValue, HistoryEventKind, Polity, WorldHistory } from "@agent-town/shared";
 
 const CULTURAL_VALUE_LABELS: Record<CulturalValue, string> = {
-  commerce: "Commerce",
-  faith: "Faith",
-  knowledge: "Knowledge",
-  kinship: "Kinship",
-  mutualAid: "Mutual aid",
-  order: "Order",
-  stewardship: "Stewardship",
-  valor: "Valor",
+  commerce: "交易",
+  faith: "信仰",
+  knowledge: "知識",
+  kinship: "血縁",
+  mutualAid: "相互扶助",
+  order: "秩序",
+  stewardship: "保全",
+  valor: "武勇",
 };
 
 export interface ChronicleOriginViewModel {
@@ -157,7 +157,7 @@ export function buildWorldChronicleViewModel(history: WorldHistory): WorldChroni
     .map(({ id }) => id);
 
   return {
-    eraLabel: `${history.currentYear - history.startYear} years before settlement`,
+    eraLabel: `開拓以前の${history.currentYear - history.startYear}年間`,
     origin: originView(history),
     polities: history.polities.map((polity) => polityView(history, polity)),
     events: sortedEventIds.flatMap((id) => {
@@ -189,15 +189,15 @@ function labelledText(label: string, value: string): HTMLElement {
 
 function originSection(origin: ChronicleOriginViewModel | null): HTMLElement {
   const section = element("section", "world-chronicle__origin");
-  section.append(element("h3", "world-chronicle__section-title", "The departure"));
+  section.append(element("h3", "world-chronicle__section-title", "旅立ち"));
   if (origin === null) {
-    section.append(element("p", "world-chronicle__empty", "No settlement origin is recorded."));
+    section.append(element("p", "world-chronicle__empty", "開拓の由来は記録されていません。"));
     return section;
   }
   section.append(
     element("p", "world-chronicle__homeland", origin.homelandName),
     element("p", "world-chronicle__origin-reason", origin.reason),
-    labelledText("Inherited values", origin.inheritedValues.join(" · ")),
+    labelledText("受け継いだ価値観", origin.inheritedValues.join(" · ")),
   );
   return section;
 }
@@ -211,13 +211,13 @@ function polityCard(polity: ChroniclePolityViewModel): HTMLElement {
   card.append(
     element("h4", "world-chronicle__polity-name", polity.name),
     culturalValueList(polity.values),
-    labelledText("Founding account", polity.foundingMyth),
-    labelledText("Government", polity.governance),
-    labelledText("Taboo", polity.taboo),
-    labelledText("Ambition", polity.ambition),
+    labelledText("建国譚", polity.foundingMyth),
+    labelledText("統治", polity.governance),
+    labelledText("禁忌", polity.taboo),
+    labelledText("悲願", polity.ambition),
   );
   if (polity.traumaTitles.length > 0) {
-    card.append(labelledText("Formative wounds", polity.traumaTitles.join(" · ")));
+    card.append(labelledText("刻まれた傷", polity.traumaTitles.join(" · ")));
   }
   return card;
 }
@@ -240,7 +240,7 @@ function culturalValueList(values: ChronicleValueViewModel[]): HTMLElement {
         element(
           "span",
           "world-chronicle__value-cause",
-          `Strengthened by ${valueCauseText(value.strengthenedBy)}`,
+          `影響 ${valueCauseText(value.strengthenedBy)}`,
         ),
       );
     }
@@ -251,7 +251,7 @@ function culturalValueList(values: ChronicleValueViewModel[]): HTMLElement {
 
 function politySection(polities: ChroniclePolityViewModel[]): HTMLElement {
   const section = element("section", "world-chronicle__polities");
-  section.append(element("h3", "world-chronicle__section-title", "Powers of the old world"));
+  section.append(element("h3", "world-chronicle__section-title", "旧世界の勢力"));
   const grid = element("div", "world-chronicle__polity-grid");
   grid.append(...polities.map(polityCard));
   section.append(grid);
@@ -262,17 +262,17 @@ function eventItem(event: ChronicleEventViewModel): HTMLElement {
   const item = element("li", `world-chronicle__event world-chronicle__event--${event.kind}`);
   const heading = element("div", "world-chronicle__event-heading");
   heading.append(
-    element("time", "world-chronicle__event-year", String(event.year)),
+    element("time", "world-chronicle__event-year", `${historicalYear(event.year)}年`),
     element("h4", "world-chronicle__event-title", event.title),
   );
   item.append(heading, element("p", "world-chronicle__event-summary", event.summary));
-  if (event.causes.length > 0) item.append(labelledText("Caused by", event.causes.join(" · ")));
+  if (event.causes.length > 0) item.append(labelledText("原因", event.causes.join(" · ")));
   return item;
 }
 
 function eventSection(events: ChronicleEventViewModel[]): HTMLElement {
   const section = element("section", "world-chronicle__timeline");
-  section.append(element("h3", "world-chronicle__section-title", "Recorded centuries"));
+  section.append(element("h3", "world-chronicle__section-title", "記録された時代"));
   const list = element("ol", "world-chronicle__events");
   list.append(...events.map(eventItem));
   section.append(list);
@@ -286,9 +286,9 @@ interface ChronicleHeader {
 
 function chronicleHeader(view: WorldChronicleViewModel, onClose: () => void): ChronicleHeader {
   const header = element("header", "world-chronicle__header");
-  const title = element("h2", "world-chronicle__title", "Frontier chronicle");
+  const title = element("h2", "world-chronicle__title", "辺境年代記");
   title.id = "world-chronicle-title";
-  const close = element("button", "world-chronicle__close", "Close");
+  const close = element("button", "world-chronicle__close", "閉じる");
   close.type = "button";
   close.addEventListener("click", onClose);
   header.append(title, element("p", "world-chronicle__era", view.eraLabel), close);

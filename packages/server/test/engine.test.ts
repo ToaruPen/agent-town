@@ -493,10 +493,10 @@ describe("createEngine", () => {
     expect(agent.tasks).toEqual([{ kind: "forage", target: { x: 0, y: 3 } }, { kind: "deposit" }]);
   });
 
-  it("selects Birch's reachable forage target in generated seed 6761", () => {
+  it("selects シラカバ's reachable forage target in generated seed 6761", () => {
     const world = generateWorld(6761);
-    const agent = world.agents.find(({ name }) => name === "Birch");
-    if (agent === undefined) throw new Error("missing Birch");
+    const agent = world.agents.find(({ name }) => name === "シラカバ");
+    if (agent === undefined) throw new Error("missing シラカバ");
     world.agents = [agent];
     world.stockpile.food = 0;
     agent.hunger = HUNGER_EAT_THRESHOLD;
@@ -865,7 +865,7 @@ describe("createEngine", () => {
 
   it("requires strictly free completed housing capacity", () => {
     const equalCapacity = immigrationWorld();
-    const second = { ...equalCapacity.agents[0], id: "agent-2", name: "Birch" };
+    const second = { ...equalCapacity.agents[0], id: "agent-2", name: "シラカバ" };
     equalCapacity.agents.push(second);
     setFoodDays(equalCapacity, IMMIGRATION_FOOD_DAYS_MIN);
     expect(HOUSE_CAPACITY).toBe(equalCapacity.agents.length);
@@ -972,7 +972,7 @@ describe("createEngine", () => {
     createEngine(world, idlePlanner, () => 0).step();
 
     expect(world.agents).toHaveLength(8);
-    expect(world.agents[7]?.name).toBe("Dahlia 2");
+    expect(world.agents[7]?.name).toBe("ダリア 2");
   });
 
   it("spawns at most one immigrant at each yearly boundary", () => {
@@ -986,13 +986,13 @@ describe("createEngine", () => {
     const engine = createEngine(world, idlePlanner, () => 0);
 
     engine.step();
-    expect(world.agents.map(({ name }) => name)).toEqual(["Ash", IMMIGRANT_NAMES[0]]);
+    expect(world.agents.map(({ name }) => name)).toEqual(["トネリコ", IMMIGRANT_NAMES[0]]);
 
     world.tick = 2 * TICKS_PER_YEAR - 1;
     setFoodDays(world, IMMIGRATION_FOOD_DAYS_MIN);
     engine.step();
     expect(world.agents.map(({ name }) => name)).toEqual([
-      "Ash",
+      "トネリコ",
       IMMIGRANT_NAMES[0],
       IMMIGRANT_NAMES[1],
     ]);

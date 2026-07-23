@@ -262,7 +262,7 @@ with `isServerMessage` / `isClientMessage` structural guards (check `type` field
 - Test: `packages/server/test/worldGen.test.ts`
 
 **Interfaces:**
-- Produces: `createRng(seed: number): () => number` (mulberry32; returns float in [0,1)). `generateWorld(seed: number): WorldState` — deterministic; ~25% forest tiles with `{kind:"wood", amount: 20..50}`, ~8% plains tiles with `{kind:"food", amount: 10..30}`, water/rock impassable patches, stockpile on a central walkable plains tile, `AGENT_COUNT` agents named "Ash", "Birch", "Cedar" spawned on distinct walkable tiles adjacent to the stockpile, all `activity: {kind:"idle"}`, empty task queues, tick 0.
+- Produces: `createRng(seed: number): () => number` (mulberry32; returns float in [0,1)). `generateWorld(seed: number): WorldState` — deterministic; ~25% forest tiles with `{kind:"wood", amount: 20..50}`, ~8% plains tiles with `{kind:"food", amount: 10..30}`, water/rock impassable patches, stockpile on a central walkable plains tile, `AGENT_COUNT` agents named "トネリコ", "シラカバ", "スギ" spawned on distinct walkable tiles adjacent to the stockpile, all `activity: {kind:"idle"}`, empty task queues, tick 0.
 - Consumes: types/constants from `@agent-town/shared`.
 
 **Steps:**

@@ -8,23 +8,23 @@ type ProviderState = Pick<AgentState, "planSource" | "llmProvider">;
 const cases: [ProviderState, ProviderBadge][] = [
   [
     { planSource: "fake", llmProvider: null },
-    { label: "FAKE", tone: "fake" },
+    { label: "自律", tone: "fake" },
   ],
   [
     { planSource: "llm", llmProvider: "claude" },
-    { label: "CLAUDE", tone: "llm" },
+    { label: "クロード", tone: "llm" },
   ],
   [
     { planSource: "llm", llmProvider: "codex" },
-    { label: "CODEX", tone: "llm" },
+    { label: "コーデックス", tone: "llm" },
   ],
   [
     { planSource: "fake", llmProvider: "claude" },
-    { label: "CLAUDE → FAKE", tone: "fake" },
+    { label: "クロード → 自律", tone: "fake" },
   ],
   [
     { planSource: "fake", llmProvider: "codex" },
-    { label: "CODEX → FAKE", tone: "fake" },
+    { label: "コーデックス → 自律", tone: "fake" },
   ],
 ];
 

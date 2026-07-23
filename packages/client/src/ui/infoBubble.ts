@@ -16,9 +16,13 @@ import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from
 
 import { TILE_SIZE } from "../render/mapLayer.js";
 import { layoutAgentsFrontToBack, layoutAgentsOnTiles } from "../render/sprites.js";
+import { activityLabel, resourceLabel, terrainLabel } from "./displayText.js";
 import { buildProviderBadge } from "./providerBadge.js";
-import type { DeathEvent } from "./survivalViewModel.js";
-import { buildSurvivalHudViewModel } from "./survivalViewModel.js";
+import {
+  buildSurvivalHudViewModel,
+  type DeathEvent,
+  deathCauseLabel,
+} from "./survivalViewModel.js";
 
 const MAX_TAP_DISTANCE = 8;
 const MAX_TAP_DURATION_MS = 300;
@@ -111,8 +115,8 @@ const HIT_PRIORITIES: Record<InfoBubbleTarget["kind"], number> = {
 };
 
 function firstThoughtLine(thought: string | null): string {
-  if (thought === null) return "No thought recorded.";
-  return thought.split(/\r?\n/, 1)[0] ?? "No thought recorded.";
+  if (thought === null) return "思考の記録なし。";
+  return thought.split(/\r?\n/, 1)[0] ?? "思考の記録なし。";
 }
 
 export function buildAgentBubbleText(agent: AgentState): AgentBubbleText {
@@ -120,7 +124,7 @@ export function buildAgentBubbleText(agent: AgentState): AgentBubbleText {
     title: agent.name,
     badge: buildProviderBadge(agent).label,
     lines: [
-      `${agent.activity.kind} · H ${Math.round(agent.hunger)} · F ${Math.round(agent.fatigue)} · HP ${Math.round(agent.health)}`,
+      `${activityLabel(agent.activity.kind)} · 空腹 ${Math.round(agent.hunger)} · 疲労 ${Math.round(agent.fatigue)} · 健康 ${Math.round(agent.health)}`,
       firstThoughtLine(agent.lastThought),
     ],
   };
@@ -131,28 +135,28 @@ export function buildResourceBubbleText(
   resourceKind: ResourceKind,
   tick: number,
 ): string {
-  const title = resourceKind === "wood" ? "Tree" : "Berries";
+  const title = resourceKind === "wood" ? "木" : "木の実";
   const resource = tile.resource?.kind === resourceKind ? tile.resource : null;
   if (resource !== null && resource.amount > 0) {
-    return `${title} — ${resourceKind} ${resource.amount} remaining`;
+    return `${title} — ${resourceLabel(resourceKind)} 残り${resource.amount}`;
   }
-  const dormancy = isWinter(tick) ? " (dormant in winter)" : "";
-  return `${title} — depleted; regrows daily${dormancy}`;
+  const dormancy = isWinter(tick) ? "（冬は休眠）" : "";
+  return `${title} — 枯渇・毎日再生${dormancy}`;
 }
 
 export function buildHouseBubbleText(house: House): string {
-  if (house.complete) return `House — capacity ${HOUSE_CAPACITY}`;
+  if (house.complete) return `家 — 定員${HOUSE_CAPACITY}人`;
   const percentage = Math.round((Math.max(0, house.progress) / HOUSE_BUILD_TICKS) * 100);
-  return `House — under construction ${Math.min(percentage, 100)}%`;
+  return `家 — 建設中 ${Math.min(percentage, 100)}%`;
 }
 
 export function buildStockpileBubbleText(world: WorldState): string {
   const forecast = buildSurvivalHudViewModel(world);
-  return `Stockpile — wood ${world.stockpile.wood} · food ${world.stockpile.food} · ${forecast.foodDays} food-days`;
+  return `貯蔵庫 — 木材${world.stockpile.wood} · 食料${world.stockpile.food} · ${forecast.foodDays}日分`;
 }
 
 export function buildTombstoneBubbleText(event: DeathEvent): string {
-  return `Here lies ${event.name} — died day ${dayOfTick(event.deathTick)} of ${event.cause}`;
+  return `${event.name}の墓 — ${dayOfTick(event.deathTick)}日目に${deathCauseLabel(event.cause)}`;
 }
 
 export function buildLandmarkBubbleText(
@@ -160,19 +164,19 @@ export function buildLandmarkBubbleText(
   history: WorldHistory,
 ): string {
   const event = history.events.find(({ id }) => id === landmark.foundedByEventId);
-  if (event === undefined) return `${landmark.name} — origin unknown`;
+  if (event === undefined) return `${landmark.name} — 由来不明`;
   const relation =
     landmark.kind === "borderFort"
-      ? "raised after"
+      ? "の後に築かれた"
       : landmark.kind === "ruin"
-        ? "left by"
-        : "sealed after";
-  return `${landmark.name} — ${relation} ${event.title}, year ${event.year}`;
+        ? "によって残された"
+        : "の後に封じられた";
+  const year = event.year < 0 ? `−${Math.abs(event.year)}` : String(event.year);
+  return `${landmark.name} — ${event.title}${relation}（${year}年）`;
 }
 
 export function buildTerrainBubbleText(tile: Tile, position: Position): string {
-  const terrain = `${tile.terrain[0]?.toUpperCase() ?? ""}${tile.terrain.slice(1)}`;
-  return `${terrain} — (${position.x}, ${position.y})`;
+  return `${terrainLabel(tile.terrain)} — (${position.x}, ${position.y})`;
 }
 
 export function resolveHitPriority(targets: InfoBubbleTarget[]): InfoBubbleTarget | null {

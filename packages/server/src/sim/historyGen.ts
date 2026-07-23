@@ -63,92 +63,92 @@ type PolityRelations = Map<string, number>;
 
 const POLITY_TEMPLATES: PolityTemplate[] = [
   {
-    name: "The Sable March",
-    adjective: "Sable",
+    name: "黒貂辺境国",
+    adjective: "黒貂",
     color: 0x6f7f88,
     primaryValue: "order",
     secondaryValue: "mutualAid",
-    foundingMyth: "The first wardens shared one fire through a winter siege.",
-    taboo: "Leaving a neighbor unburied beyond the border stones.",
-    ambition: "Secure every western pass.",
-    governance: "Wardens bargain with village moot speakers.",
+    foundingMyth: "冬の包囲戦で、最初の守人たちはひとつの火を分かち合った。",
+    taboo: "境石の外に隣人の亡骸を葬らず放置すること。",
+    ambition: "西の峠をすべて守り固める。",
+    governance: "守人たちが村会の代表と合議する。",
   },
   {
-    name: "The Auric League",
-    adjective: "Auric",
+    name: "金環盟約国",
+    adjective: "金環",
     color: 0xc49a4b,
     primaryValue: "commerce",
     secondaryValue: "knowledge",
-    foundingMyth: "Seven river markets sealed peace with a single set of weights.",
-    taboo: "Breaking a witnessed contract.",
-    ambition: "Reopen the old road to the eastern sea.",
-    governance: "Chartered guilds elect a rotating speaker.",
+    foundingMyth: "七つの川市が、ひと組の分銅を共有して和平を結んだ。",
+    taboo: "証人のいる契約を破ること。",
+    ambition: "東の海へ続く古道を再び開く。",
+    governance: "公認組合が持ち回りの代表を選ぶ。",
   },
   {
-    name: "The Mossward Holds",
-    adjective: "Mossward",
+    name: "苔守諸領",
+    adjective: "苔守",
     color: 0x708c5a,
     primaryValue: "stewardship",
     secondaryValue: "kinship",
-    foundingMyth: "The hill clans survived by promising the forest a seventh share.",
-    taboo: "Cutting a marked elder tree.",
-    ambition: "Restore the watersheds above the old mines.",
-    governance: "Clan elders meet beneath a neutral grove.",
+    foundingMyth: "丘の氏族は、収穫の七分の一を森へ返す誓いによって生き延びた。",
+    taboo: "印を刻まれた老木を切ること。",
+    ambition: "古い鉱山の上流に水源をよみがえらせる。",
+    governance: "氏族の長老たちが中立の森で評議する。",
   },
   {
-    name: "The River Crown",
-    adjective: "River",
+    name: "河冠王国",
+    adjective: "河冠",
     color: 0x5d8fa3,
     primaryValue: "order",
     secondaryValue: "commerce",
-    foundingMyth: "A ferryman ended the flood wars by measuring the river fairly.",
-    taboo: "Damming a common channel for private gain.",
-    ambition: "Bind the inland rivers under one law.",
-    governance: "Magistrates serve at the pleasure of the crowned ferryman.",
+    foundingMyth: "ひとりの渡し守が公平に川を測り、洪水戦争を終わらせた。",
+    taboo: "私益のために共同水路をせき止めること。",
+    ambition: "内陸の川々をひとつの法で結ぶ。",
+    governance: "冠を戴く渡し守が任命した判官たちが治める。",
   },
   {
-    name: "The Ivory Reach",
-    adjective: "Ivory",
+    name: "象牙境国",
+    adjective: "象牙",
     color: 0xc6bfa2,
     primaryValue: "knowledge",
     secondaryValue: "faith",
-    foundingMyth: "Keepers carried the last observatory tablets out of a burning city.",
-    taboo: "Destroying a written testimony.",
-    ambition: "Recover the instruments buried beneath the northern ruins.",
-    governance: "Archivists nominate judges from tested households.",
+    foundingMyth: "守蔵人たちが、燃える都から最後の天文台石板を運び出した。",
+    taboo: "書き残された証言を破棄すること。",
+    ambition: "北の廃墟に埋もれた観測器を取り戻す。",
+    governance: "記録官たちが試練を経た家々から判官を指名する。",
   },
   {
-    name: "The Cinder Abbeys",
-    adjective: "Cinder",
+    name: "灰燼修道領",
+    adjective: "灰燼",
     color: 0xa65f45,
     primaryValue: "faith",
     secondaryValue: "mutualAid",
-    foundingMyth: "Three hospices kept their doors open during the ash plague.",
-    taboo: "Refusing water to a traveler at dusk.",
-    ambition: "Unite the scattered roadside sanctuaries.",
-    governance: "Abbesses rule locally and gather for a yearly chapter.",
+    foundingMyth: "灰の疫病のさなか、三つの施療院は門を閉ざさなかった。",
+    taboo: "夕暮れに旅人へ水を与えないこと。",
+    ambition: "街道沿いに散らばる聖所をひとつに結ぶ。",
+    governance: "各地を修道院長が治め、年に一度の宗会へ集う。",
   },
   {
-    name: "The Thorn Compact",
-    adjective: "Thorn",
+    name: "茨盟約国",
+    adjective: "茨",
     color: 0x8b6b72,
     primaryValue: "valor",
     secondaryValue: "kinship",
-    foundingMyth: "Border families swore that no farm would face raiders alone.",
-    taboo: "Claiming another household's defense debt.",
-    ambition: "Drive the steppe hosts beyond the red hills.",
-    governance: "Household captains choose a war leader only in crisis.",
+    foundingMyth: "辺境の家々は、どの農場も単独で略奪者に立ち向かわせないと誓った。",
+    taboo: "他家の防衛の恩を自らのものとして取り立てること。",
+    ambition: "草原の軍勢を赤い丘の彼方へ退ける。",
+    governance: "危機の時に限り、家々の長が戦大将を選ぶ。",
   },
   {
-    name: "The Saltmere Clans",
-    adjective: "Saltmere",
+    name: "塩湖諸族",
+    adjective: "塩湖",
     color: 0x879a92,
     primaryValue: "kinship",
     secondaryValue: "commerce",
-    foundingMyth: "Tide villages lashed their boats together during the black storm.",
-    taboo: "Selling fresh water during a shipwreck.",
-    ambition: "Control the salt road without surrendering clan rights.",
-    governance: "Ship-owning families settle disputes through hostages and gifts.",
+    foundingMyth: "黒い嵐の夜、潮辺の村々は舟を互いに結び合わせた。",
+    taboo: "難破のさなかに真水を売ること。",
+    ambition: "氏族の権利を守りながら塩の道を掌握する。",
+    governance: "舟を持つ家々が人質と贈り物によって争いを収める。",
   },
 ];
 
@@ -250,7 +250,7 @@ function foundingEvent(polity: MutablePolity, events: HistoryEvent[]): HistoryEv
     id,
     year: -WORLD_HISTORY_YEARS,
     kind: "founding",
-    title: `Founding of ${polity.name}`,
+    title: `${polity.name}建国`,
     summary: polity.foundingMyth,
     polityIds: [polity.id],
     causeIds: [],
@@ -293,10 +293,10 @@ function eventTitle(
   actor: MutablePolity,
   neighbor: MutablePolity,
 ): string {
-  if (kind === "scarcity") return `The ${actor.adjective} Lean Years`;
-  if (kind === "trade") return `The ${actor.adjective}-${neighbor.adjective} Compact`;
-  if (kind === "war") return `The ${actor.adjective}-${neighbor.adjective} Border War`;
-  return "The Violet Hollow";
+  if (kind === "scarcity") return `${actor.adjective}凶作年`;
+  if (kind === "trade") return `${actor.adjective}・${neighbor.adjective}盟約`;
+  if (kind === "war") return `${actor.adjective}・${neighbor.adjective}国境戦争`;
+  return "紫晶窪地";
 }
 
 function eventSummary(
@@ -305,15 +305,15 @@ function eventSummary(
   neighbor: MutablePolity,
 ): string {
   if (kind === "scarcity") {
-    return `Failed harvests forced ${actor.name} to ration seed grain and bind villages together.`;
+    return `不作に見舞われた${actor.name}は種籾を配給制とし、村々を結束させた。`;
   }
   if (kind === "trade") {
-    return `${actor.name} and ${neighbor.name} exchanged safe passage for grain and worked iron.`;
+    return `${actor.name}と${neighbor.name}は、安全な通行と引き換えに穀物と鍛鉄を融通した。`;
   }
   if (kind === "war") {
-    return `${actor.name} and ${neighbor.name} fought over farms and crossings along an uncertain border.`;
+    return `${actor.name}と${neighbor.name}は、曖昧な国境沿いの農地と渡河地をめぐって争った。`;
   }
-  return `A violet seep yielded glassy ore, but those who worked it sickened and the hollow was sealed.`;
+  return "紫色の湧出地から玻璃のような鉱石が採れたが、作業者が病に倒れ、窪地は封印された。";
 }
 
 function populationDelta(kind: Exclude<HistoryEventKind, "founding" | "migration">): number {
@@ -443,8 +443,8 @@ function pressureForDeparture(homeland: MutablePolity, events: HistoryEvent[]): 
     id,
     year: -2,
     kind: "scarcity",
-    title: `The Last ${homeland.adjective} Harvest`,
-    summary: `A final crop failure exhausted the reserves of ${homeland.name}.`,
+    title: `${homeland.adjective}最後の収穫`,
+    summary: `最後の凶作によって、${homeland.name}の蓄えは尽きた。`,
     polityIds: [homeland.id],
     causeIds: [homeland.latestEventId],
     effects: [
@@ -461,11 +461,11 @@ function pressureForDeparture(homeland: MutablePolity, events: HistoryEvent[]): 
 }
 
 function departureReason(pressure: HistoryEvent): string {
-  if (pressure.kind === "war") return "Border war consumed the farms meant for a new generation.";
+  if (pressure.kind === "war") return "国境戦争が、次代へ継ぐはずの農地を呑み込んだ。";
   if (pressure.kind === "anomaly") {
-    return "The sealed hollow poisoned wells and made the old boundary unsafe.";
+    return "封じられた窪地が井戸を汚し、古い境界は住めない土地になった。";
   }
-  return "The last granaries failed after years of scarcity.";
+  return "幾年もの凶作の末、最後の穀倉が尽きた。";
 }
 
 function strongestValues(polity: MutablePolity): CulturalValue[] {
@@ -488,8 +488,8 @@ function createDeparture(
     id,
     year: -1,
     kind: "migration",
-    title: `The ${homeland.adjective} Departure`,
-    summary: `Several households left ${homeland.name} to found a settlement beyond the old roads.`,
+    title: `${homeland.adjective}の旅立ち`,
+    summary: `いくつかの家族が${homeland.name}を離れ、古道の彼方に集落を築こうと旅立った。`,
     polityIds: [homeland.id],
     causeIds: [pressure.id],
     effects: [{ kind: "population", targetId: homeland.id, delta: -3 }],
@@ -566,9 +566,9 @@ function landmarkKind(event: HistoryEvent, index: number): LandmarkKind {
 }
 
 function landmarkName(kind: LandmarkKind, adjective: string): string {
-  if (kind === "standingStone") return "The Sealed Violet Stone";
-  if (kind === "borderFort") return `Old ${adjective} Border Keep`;
-  return `The Fallen ${adjective} Watch`;
+  if (kind === "standingStone") return "封じられた紫晶石";
+  if (kind === "borderFort") return `古き${adjective}国境砦`;
+  return `崩れた${adjective}見張り台`;
 }
 
 function createLandmarks(

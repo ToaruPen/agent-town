@@ -19,7 +19,7 @@ import { buildPlanPrompt } from "../src/llm/planPrompt.js";
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 3, y: 1 },
     carrying: null,
     activity: { kind: "idle" },
@@ -85,7 +85,7 @@ describe("buildPlanPrompt", () => {
 
     const prompt = buildPlanPrompt(createWorld(agent), agent);
 
-    expect(prompt).toContain("Ash, a diligent forester who worries about winter");
+    expect(prompt).toContain("トネリコ, a diligent forester who worries about winter");
     expect(prompt).toContain("you must survive the winter");
     expect(prompt).toContain("position: (3,1)");
     expect(prompt).toContain("carrying: wood 2");
@@ -97,7 +97,7 @@ describe("buildPlanPrompt", () => {
   it("includes calendar, survival forecasts, needs, and completed housing capacity", () => {
     const agent = createAgent({ hunger: 39, fatigue: 24, health: 75 });
     const world = createWorld(agent);
-    const secondAgent = createAgent({ id: "agent-2", name: "Birch" });
+    const secondAgent = createAgent({ id: "agent-2", name: "シラカバ" });
     world.agents.push(secondAgent);
     world.tick = 4 * TICKS_PER_DAY;
     world.stockpile.food = FOOD_PER_MEAL * 2;
@@ -177,7 +177,10 @@ describe("buildPlanPrompt", () => {
     const prompt = buildPlanPrompt(createWorld(agent), agent);
 
     expect(prompt).toContain("Reply with ONLY a JSON object");
-    expect(prompt).toContain('"reasoning": "<one short sentence>"');
+    expect(prompt).toContain(
+      "Write the reasoning field in natural Japanese because it is shown to the player.",
+    );
+    expect(prompt).toContain('"reasoning": "<one short sentence in natural Japanese>"');
     expect(prompt).toContain('"kind":"moveTo","dest":{"x":0,"y":0}');
     expect(prompt).toContain('"kind":"gather","resource":"wood"|"food"');
     expect(prompt).toContain('{"kind":"deposit"}');

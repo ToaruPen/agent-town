@@ -89,7 +89,7 @@ describe("startServer", () => {
 
     expect(update.type).toBe("update");
     if (update.type !== "update") throw new Error("expected update message");
-    expect(update.agents.map(({ name }) => name)).toEqual(["Ash", IMMIGRANT_NAMES[0]]);
+    expect(update.agents.map(({ name }) => name)).toEqual(["トネリコ", IMMIGRANT_NAMES[0]]);
   });
 
   it("accepts /ws upgrades, sends updates, and closes cleanly", async () => {

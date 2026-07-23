@@ -18,7 +18,7 @@ describe("wire protocol", () => {
       agents: [
         {
           id: "agent-1",
-          name: "Ash",
+          name: "トネリコ",
           pos: { x: 0, y: 0 },
           carrying: null,
           activity: { kind: "idle" },
@@ -34,7 +34,7 @@ describe("wire protocol", () => {
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
       buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
-      deaths: [{ name: "Birch", tick: 7200, cause: "starvation" }],
+      deaths: [{ name: "シラカバ", tick: 7200, cause: "starvation" }],
       history: {
         startYear: -200,
         currentYear: 0,

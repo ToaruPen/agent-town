@@ -60,7 +60,34 @@ function expectBilateralEvent(
   }
 }
 
+function playerFacingHistoryStrings(history: ReturnType<typeof generateWorldHistory>): string[] {
+  return [
+    ...history.polities.flatMap(
+      ({ name, adjective, foundingMyth, taboo, ambition, governance }) => [
+        name,
+        adjective,
+        foundingMyth,
+        taboo,
+        ambition,
+        governance,
+      ],
+    ),
+    ...history.events.flatMap(({ title, summary }) => [title, summary]),
+    ...history.landmarks.map(({ name }) => name),
+    ...(history.settlementOrigin === null ? [] : [history.settlementOrigin.reason]),
+  ];
+}
+
 describe("generateWorldHistory", () => {
+  it("generates every player-facing history field in Japanese", () => {
+    const history = generateWorldHistory(42, smallWalkableMap());
+
+    expect(playerFacingHistoryStrings(history)).not.toHaveLength(0);
+    for (const text of playerFacingHistoryStrings(history)) {
+      expect(text).not.toMatch(/[A-Za-z]/);
+    }
+  });
+
   it("carries bilateral causes and consequences through both participating polities", () => {
     const history = generateWorldHistory(0);
     const latestByPolity = new Map<string, string>();
@@ -98,7 +125,7 @@ describe("generateWorldHistory", () => {
       throw new Error("missing departure cause");
     const mutualAid = homeland.values.find(({ value }) => value === "mutualAid");
 
-    expect(pressure.title).toMatch(/^The Last /);
+    expect(pressure.title).toMatch(/最後の収穫$/);
     expect(pressure.effects).toContainEqual({
       kind: "culture",
       targetId: homeland.id,

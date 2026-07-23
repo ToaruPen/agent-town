@@ -21,7 +21,7 @@ import {
 function createAgent(): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 0, y: 0 },
     carrying: null,
     activity: { kind: "idle" },
@@ -72,7 +72,7 @@ function expectParseFailure(result: PlanParseResult): void {
 
 describe("parsePlanResponse", () => {
   const response = {
-    reasoning: "Gather nearby wood before winter.",
+    reasoning: "冬に備えて近くの木材を集める。",
     plan: [
       { kind: "moveTo", dest: { x: 2, y: 0 } },
       { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
@@ -112,14 +112,14 @@ describe("parsePlanResponse", () => {
 
   it("rejects structurally invalid task kinds", () => {
     expectParseFailure(
-      parsePlanResponse(JSON.stringify({ reasoning: "Sleep.", plan: [{ kind: "sleep" }] })),
+      parsePlanResponse(JSON.stringify({ reasoning: "眠る。", plan: [{ kind: "sleep" }] })),
     );
   });
 
   it("rejects plans longer than MAX_PLAN_TASKS", () => {
     const plan = Array.from({ length: MAX_PLAN_TASKS + 1 }, () => ({ kind: "deposit" }));
 
-    expectParseFailure(parsePlanResponse(JSON.stringify({ reasoning: "Too much.", plan })));
+    expectParseFailure(parsePlanResponse(JSON.stringify({ reasoning: "多すぎる。", plan })));
   });
 
   it("accepts reasoning exactly at the Unicode code point limit", () => {
@@ -149,9 +149,9 @@ describe("parsePlanResponse", () => {
       { kind: "rest" },
     ];
 
-    expect(parsePlanResponse(JSON.stringify({ reasoning: "Survive.", plan }))).toEqual({
+    expect(parsePlanResponse(JSON.stringify({ reasoning: "生き延びる。", plan }))).toEqual({
       ok: true,
-      reasoning: "Survive.",
+      reasoning: "生き延びる。",
       tasks: plan,
     });
   });

@@ -19,10 +19,10 @@ Owner-reported problem: sprites visually overlap into an unreadable mush; owner 
 - Hit priority at tap point: agent > tombstone > house > stockpile > resource tile (tree/bush) > terrain tile.
 - Bubble contents:
   - Agent: name, planSource badge, activity kind, hunger/fatigue/health as compact bars or numbers, current lastThought first line. Tapping the bubble opens the full inspect panel (existing behavior preserved).
-  - Tree tile: "Tree — wood N remaining"; bush: "Berries — food N remaining"; depleted shows regrowth note (and "dormant in winter" during winter).
-  - House: "House — under construction P%" or "House — capacity 2".
+  - Tree tile: "木 — 木材 残りN"; bush: "木の実 — 食料 残りN"; depleted shows "枯渇・毎日再生" (and "冬は休眠" during winter).
+  - House: "家 — 建設中 P%" or "家 — 定員2人".
   - Stockpile: wood/food amounts + food-days forecast (reuse HUD view-model).
-  - Tombstone: "Here lies NAME — died day D of CAUSE".
+  - Tombstone: "NAMEの墓 — D日目にCAUSE".
   - Terrain: terrain kind + coordinates.
 - Tap vs drag: a pointerup within 8px of pointerdown and <300ms is a tap; otherwise it's a pan (existing pan/zoom must not regress).
 - View-model formatting = pure functions with tests (all bubble text builders). Hit-priority resolution = pure function with tests.

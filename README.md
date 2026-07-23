@@ -46,8 +46,8 @@ just dev-llm
 # Every managed resident uses Claude
 LLM_AGENTS=all LLM_ROUTES='*:claude' just dev-llm
 
-# Ash uses Claude; every other current or future resident uses Codex
-LLM_AGENTS=all LLM_ROUTES='Ash:claude,*:codex' just dev-llm
+# トネリコ uses Claude; every other current or future resident uses Codex
+LLM_AGENTS=all LLM_ROUTES='トネリコ:claude,*:codex' just dev-llm
 
 # Explicit equivalent of the Codex default
 LLM_AGENTS=all LLM_ROUTES='*:codex' just dev-llm

@@ -61,7 +61,7 @@ const NARROW_SCREEN_MAX_WIDTH = 520;
 const TICKER_HUD_GAP = 6;
 const KEYBOARD_CURSOR_COLOR = 0xfff176;
 const CANVAS_LABEL =
-  "Agent Town world. Use arrow keys to move the tile cursor, Enter or Space to inspect, and Escape to close.";
+  "エージェント・タウンの世界。矢印キーでタイルを選び、改行キーまたは空白キーで調べ、エスケープキーで閉じます。";
 
 type TapCandidate = TapPoint;
 
@@ -100,7 +100,7 @@ const inspectPanel = createInspectPanel(inspectPanelRoot, closeInspectPanel);
 const chronicle = createWorldChronicle(chronicleRoot, closeWorldChronicle, chronicleToggleRoot);
 bindWorldChronicleEscape(chronicle, () => {
   closeWorldChronicle();
-  announce("Chronicle closed.");
+  announce("年代記を閉じました。");
 });
 const tapCandidates = new Map<number, TapCandidate>();
 const knownResourceKinds = new Map<number, ResourceKind>();
@@ -198,9 +198,9 @@ function announce(message: string): void {
 }
 
 function targetAnnouncement(target: InfoBubbleTarget): string {
-  if (state === null) return "World data is not available yet.";
+  if (state === null) return "世界データはまだ利用できません。";
   const viewModel = buildInfoBubbleViewModel(target, state, deathSchedule.events);
-  return viewModel === null ? "The selected object is no longer available." : bubbleText(viewModel);
+  return viewModel === null ? "選んだ対象はもう存在しません。" : bubbleText(viewModel);
 }
 
 function selectInfoTarget(target: InfoBubbleTarget): void {
@@ -308,7 +308,7 @@ function openInspectPanel(agentId: string): void {
   selectedAgentId = agentId;
   inspectPanel.show(agent);
   agentsDirty = true;
-  announce(`Opened full details for ${agent.name}.`);
+  announce(`${agent.name}の詳細を開きました。`);
 }
 
 function openInspectPanelFromBubble(agentId: string): void {
@@ -372,7 +372,7 @@ function keyboardTarget(): InfoBubbleTarget | null {
 
 function announceKeyboardCursor(): void {
   const target = keyboardTarget();
-  const coordinates = `Tile ${keyboardCursorPosition.x + 1}, ${keyboardCursorPosition.y + 1}.`;
+  const coordinates = `タイル ${keyboardCursorPosition.x + 1}, ${keyboardCursorPosition.y + 1}。`;
   announce(target === null ? coordinates : `${coordinates} ${targetAnnouncement(target)}`);
 }
 
@@ -417,12 +417,12 @@ function handleCanvasKeydown(event: KeyboardEvent): void {
   event.preventDefault();
   if (chronicle.isOpen()) {
     closeWorldChronicle();
-    announce("Chronicle closed.");
+    announce("年代記を閉じました。");
     return;
   }
   closeInspectPanel();
   closeInfoBubble();
-  announce("Selection closed.");
+  announce("選択を閉じました。");
 }
 
 function syncKeyboardCursor(next: WorldState): void {
@@ -493,7 +493,7 @@ function openWorldChronicle(): void {
   closeInfoBubble();
   chronicle.show(state.history);
   chronicleToggleRoot.setAttribute("aria-expanded", "true");
-  announce(`Opened the ${state.history.currentYear - state.history.startYear}-year chronicle.`);
+  announce(`${state.history.currentYear - state.history.startYear}年分の年代記を開きました。`);
 }
 
 chronicleToggleRoot.addEventListener("click", openWorldChronicle);

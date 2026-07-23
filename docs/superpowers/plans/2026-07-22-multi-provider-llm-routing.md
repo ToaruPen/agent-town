@@ -187,7 +187,7 @@ function agent(id: string, name: string): AgentState {
   };
 }
 
-const residents = [agent("agent-1", "Ash"), agent("agent-2", "Birch")];
+const residents = [agent("agent-1", "トネリコ"), agent("agent-2", "シラカバ")];
 
 describe("LLM provider routes", () => {
   it("defaults every managed resident to codex", () => {
@@ -195,22 +195,22 @@ describe("LLM provider routes", () => {
     const routes = parseLlmProviderRoutes(undefined, residents, selection);
 
     expect(llmProviderForAgent(routes, residents[0] as AgentState)).toBe("codex");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Cedar"))).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "スギ"))).toBe("codex");
   });
 
   it("prefers an exact route and applies the wildcard to future residents", () => {
     const selection = parseLlmAgentSelection("all", residents);
-    const routes = parseLlmProviderRoutes(" Ash : claude , * : codex ", residents, selection);
+    const routes = parseLlmProviderRoutes(" トネリコ : claude , * : codex ", residents, selection);
 
     expect(llmProviderForAgent(routes, residents[0] as AgentState)).toBe("claude");
     expect(llmProviderForAgent(routes, residents[1] as AgentState)).toBe("codex");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Cedar"))).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "スギ"))).toBe("codex");
   });
 
   it("allows complete exact routes for a fixed selection", () => {
-    const selection = parseLlmAgentSelection("Ash,Birch", residents);
+    const selection = parseLlmAgentSelection("トネリコ,シラカバ", residents);
     const routes = parseLlmProviderRoutes(
-      "Ash:claude,Birch:codex",
+      "トネリコ:claude,シラカバ:codex",
       residents,
       selection,
     );
@@ -236,24 +236,24 @@ Expected: `llmProviderRouting.js`をresolveできずFAIL。
 ```ts
 it.each([
   ["", "all"],
-  ["Ash", "all"],
+  ["トネリコ", "all"],
   [":claude", "all"],
-  ["Ash:", "all"],
-  ["Ash:openai", "all"],
-  ["Ash:claude,Ash:codex", "all"],
+  ["トネリコ:", "all"],
+  ["トネリコ:openai", "all"],
+  ["トネリコ:claude,トネリコ:codex", "all"],
   ["*:claude,*:codex", "all"],
   ["Unknown:claude,*:codex", "all"],
-  ["Ash:claude", "all"],
-  ["Ash:claude", "Ash,Birch"],
+  ["トネリコ:claude", "all"],
+  ["トネリコ:claude", "トネリコ,シラカバ"],
 ] as const)("rejects invalid routes %j for selection %j", (setting, selected) => {
   const selection = parseLlmAgentSelection(selected, residents);
   expect(() => parseLlmProviderRoutes(setting, residents, selection)).toThrow(/LLM_ROUTES/);
 });
 
 it("allows a route for a known but currently unmanaged resident", () => {
-  const selection = parseLlmAgentSelection("Ash", residents);
+  const selection = parseLlmAgentSelection("トネリコ", residents);
   const routes = parseLlmProviderRoutes(
-    "Ash:claude,Birch:codex",
+    "トネリコ:claude,シラカバ:codex",
     residents,
     selection,
   );
@@ -378,7 +378,7 @@ git commit -m "feat(llm): parse deterministic provider routes"
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 
 const runner: LlmRunner = new CliClaudeRunner({ spawnFn });
-const resultPromise = runner.run("Plan Ash's day.");
+const resultPromise = runner.run("Plan トネリコ's day.");
 ```
 
 - [ ] **Step 2: 型検査がmissing moduleで失敗することを確認する**
@@ -478,7 +478,7 @@ describe("CliCodexRunner", () => {
     const resultPromise = new CliCodexRunner({
       spawnFn,
       workingDirectory: "neutral-codex-cwd",
-    }).run("Plan Birch's day.");
+    }).run("Plan シラカバ's day.");
     child.stdout.write(`${JSON.stringify({ type: "thread.started", thread_id: "thread-1" })}\n`);
     child.stdout.write(
       `${JSON.stringify({
@@ -515,7 +515,7 @@ describe("CliCodexRunner", () => {
       ],
       { cwd: "neutral-codex-cwd" },
     );
-    expect(stdin).toBe("Plan Birch's day.");
+    expect(stdin).toBe("Plan シラカバ's day.");
   });
 });
 ```
@@ -989,7 +989,7 @@ const planFn = vi.fn(
 const broker = new ThoughtBroker({
   engine,
   llmAgentIds: () => engine.world.agents.map(({ id }) => id),
-  providerForAgent: (agent) => (agent.name === "Dahlia" ? "codex" : "claude"),
+  providerForAgent: (agent) => (agent.name === "ダリア" ? "codex" : "claude"),
   planFn,
 });
 
@@ -1080,7 +1080,7 @@ function setup() {
 const validPlan = JSON.stringify({ reasoning: "Observe the town.", plan: [] });
 
 describe("provider routing integration", () => {
-  it("routes Ash only to Claude and Birch only to Codex", async () => {
+  it("routes トネリコ only to Claude and シラカバ only to Codex", async () => {
     const { engine, fallback } = setup();
     const claudeRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
     const codexRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
@@ -1093,7 +1093,7 @@ describe("provider routing integration", () => {
       engine,
       fallback,
       llmAgents: "all",
-      llmRoutes: "Ash:claude,*:codex",
+      llmRoutes: "トネリコ:claude,*:codex",
       runners,
     });
 
@@ -1102,8 +1102,8 @@ describe("provider routing integration", () => {
 
     expect(claudeRun).toHaveBeenCalledOnce();
     expect(codexRun).toHaveBeenCalledOnce();
-    expect(claudeRun.mock.calls[0]?.[0]).toContain("Ash");
-    expect(codexRun.mock.calls[0]?.[0]).toContain("Birch");
+    expect(claudeRun.mock.calls[0]?.[0]).toContain("トネリコ");
+    expect(codexRun.mock.calls[0]?.[0]).toContain("シラカバ");
     expect(engine.world.agents.map(({ llmProvider }) => llmProvider)).toEqual([
       "claude",
       "codex",
@@ -1119,7 +1119,7 @@ describe("provider routing integration", () => {
       engine,
       fallback,
       llmAgents: "all",
-      llmRoutes: "Ash:claude,*:codex",
+      llmRoutes: "トネリコ:claude,*:codex",
       runners: { claude: runner(claudeRun), codex: runner(codexRun) },
     });
 
@@ -1473,8 +1473,8 @@ provider. Exact names win over `*`.
 # All managed residents use Codex (default when LLM_ROUTES is unset)
 just dev-llm
 
-# Ash uses Claude; every other current or future resident uses Codex
-LLM_AGENTS=all LLM_ROUTES='Ash:claude,*:codex' just dev-llm
+# トネリコ uses Claude; every other current or future resident uses Codex
+LLM_AGENTS=all LLM_ROUTES='トネリコ:claude,*:codex' just dev-llm
 
 # Every managed resident uses Claude
 LLM_AGENTS=all LLM_ROUTES='*:claude' just dev-llm
@@ -1594,7 +1594,7 @@ Expected: `provider:"claude"`かつ`outcome:"llm"`のlogがあり、monitor exit
 
 ```sh
 mixed_smoke_dir="$(mktemp -d)"
-PORT=8793 LLM_PLANNER=1 LLM_AGENTS=all LLM_ROUTES='Ash:claude,*:codex' \
+PORT=8793 LLM_PLANNER=1 LLM_AGENTS=all LLM_ROUTES='トネリコ:claude,*:codex' \
   pnpm --filter @agent-town/server exec tsx src/index.ts >"$mixed_smoke_dir/server.log" 2>&1 &
 mixed_smoke_pid=$!
 ```
@@ -1615,10 +1615,10 @@ socket.on("message", (raw) => {
   const message = JSON.parse(raw.toString());
   const agents = message.type === "welcome" ? message.state.agents : message.agents;
   ashUsesClaude ||= agents?.some(
-    (agent) => agent.name === "Ash" && agent.llmProvider === "claude" && agent.planSource === "llm",
+    (agent) => agent.name === "トネリコ" && agent.llmProvider === "claude" && agent.planSource === "llm",
   ) ?? false;
   anotherUsesCodex ||= agents?.some(
-    (agent) => agent.name !== "Ash" && agent.llmProvider === "codex" && agent.planSource === "llm",
+    (agent) => agent.name !== "トネリコ" && agent.llmProvider === "codex" && agent.planSource === "llm",
   ) ?? false;
   if (ashUsesClaude && anotherUsesCodex) {
     clearTimeout(timeout);
@@ -1637,7 +1637,7 @@ kill "$mixed_smoke_pid"
 wait "$mixed_smoke_pid" || true
 ```
 
-Expected: 両条件が180秒以内にtrue。logではAshに`provider:"claude"`、他住民に`provider:"codex"`があり、逆向き送信がない。
+Expected: 両条件が180秒以内にtrue。logではトネリコに`provider:"claude"`、他住民に`provider:"codex"`があり、逆向き送信がない。
 
 - [ ] **Step 6: 設計書statusを実装済みに更新し、文書commitを作る**
 

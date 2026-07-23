@@ -20,7 +20,7 @@ import {
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos,
     carrying: null,
     activity: { kind: "idle" },

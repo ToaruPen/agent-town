@@ -1,5 +1,6 @@
 import type { AgentState, AgentTask } from "@agent-town/shared";
 
+import { activityLabel, taskLabel } from "./displayText.js";
 import { buildProviderBadge, type ProviderBadge } from "./providerBadge.js";
 import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
 
@@ -18,6 +19,7 @@ export interface ThoughtBubbleSchedule {
 
 export interface InspectTaskViewModel {
   kind: AgentTask["kind"];
+  label: string;
   target: string | null;
 }
 
@@ -25,6 +27,7 @@ export interface InspectPanelViewModel {
   name: string;
   providerBadge: ProviderBadge;
   activityKind: AgentState["activity"]["kind"];
+  activityLabel: string;
   tasks: InspectTaskViewModel[];
   needs: NeedViewModel[];
   lastThought: string | null;
@@ -52,7 +55,12 @@ export function buildInspectPanelViewModel(agent: AgentState): InspectPanelViewM
     name: agent.name,
     providerBadge: buildProviderBadge(agent),
     activityKind: agent.activity.kind,
-    tasks: agent.tasks.map((task) => ({ kind: task.kind, target: taskTarget(task) })),
+    activityLabel: activityLabel(agent.activity.kind),
+    tasks: agent.tasks.map((task) => ({
+      kind: task.kind,
+      label: taskLabel(task.kind),
+      target: taskTarget(task),
+    })),
     needs: buildNeedsViewModel(agent),
     lastThought: agent.lastThought,
   };
@@ -111,12 +119,14 @@ function createElement<K extends keyof HTMLElementTagNameMap>(
 }
 
 function createTaskList(tasks: InspectTaskViewModel[]): HTMLElement {
-  if (tasks.length === 0) return createElement("p", "inspect-panel__empty", "No queued tasks.");
+  if (tasks.length === 0) {
+    return createElement("p", "inspect-panel__empty", "予定された行動はありません。");
+  }
 
   const list = createElement("ol", "inspect-panel__tasks");
   for (const task of tasks) {
     const target = task.target === null ? "" : ` ${task.target}`;
-    list.append(createElement("li", "inspect-panel__task", `${task.kind}${target}`));
+    list.append(createElement("li", "inspect-panel__task", `${task.label}${target}`));
   }
   return list;
 }
@@ -130,7 +140,7 @@ function createNeedsList(needs: NeedViewModel[]): HTMLElement {
     meter.max = need.max;
     meter.value = need.value;
     meter.setAttribute("aria-label", need.label);
-    meter.setAttribute("aria-valuetext", `${need.valueLabel} out of ${need.max}`);
+    meter.setAttribute("aria-valuetext", `最大${need.max}中${need.valueLabel}`);
     const value = createElement("span", "inspect-panel__need-value", need.valueLabel);
     row.append(label, meter, value);
     list.append(row);
@@ -153,19 +163,19 @@ function renderPanel(
   );
   const closeButton = createElement("button", "inspect-panel__close", "×");
   closeButton.type = "button";
-  closeButton.setAttribute("aria-label", "Close observation panel");
+  closeButton.setAttribute("aria-label", "観察パネルを閉じる");
   closeButton.addEventListener("click", onClose);
   header.append(name, badge, closeButton);
 
-  const needsHeading = createElement("h3", "inspect-panel__section-title", "Needs");
-  const activityHeading = createElement("h3", "inspect-panel__section-title", "Current activity");
-  const activity = createElement("p", "inspect-panel__activity", viewModel.activityKind);
-  const queueHeading = createElement("h3", "inspect-panel__section-title", "Task queue");
-  const thoughtHeading = createElement("h3", "inspect-panel__section-title", "Last thought");
+  const needsHeading = createElement("h3", "inspect-panel__section-title", "状態");
+  const activityHeading = createElement("h3", "inspect-panel__section-title", "現在の行動");
+  const activity = createElement("p", "inspect-panel__activity", viewModel.activityLabel);
+  const queueHeading = createElement("h3", "inspect-panel__section-title", "予定");
+  const thoughtHeading = createElement("h3", "inspect-panel__section-title", "直前の思考");
   const thought = createElement(
     "blockquote",
     "inspect-panel__thought",
-    viewModel.lastThought ?? "No thought recorded.",
+    viewModel.lastThought ?? "思考の記録なし。",
   );
 
   root.replaceChildren(

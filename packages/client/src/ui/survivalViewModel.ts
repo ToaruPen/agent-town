@@ -18,11 +18,13 @@ export type WoodForecast = "winter-ok" | "short";
 export interface SurvivalHudViewModel {
   day: number;
   season: ReturnType<typeof seasonOfTick>;
+  seasonLabel: string;
   population: number;
   foodStored: number;
   foodDays: string;
   woodStored: number;
   woodForecast: WoodForecast;
+  woodForecastLabel: string;
 }
 
 export interface NeedViewModel {
@@ -62,15 +64,26 @@ function winterWoodNeed(world: WorldState): number {
   return world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * futureWinterBurnDays(world.tick);
 }
 
+const SEASON_LABELS: Record<ReturnType<typeof seasonOfTick>, string> = {
+  autumn: "秋",
+  spring: "春",
+  summer: "夏",
+  winter: "冬",
+};
+
 export function buildSurvivalHudViewModel(world: WorldState): SurvivalHudViewModel {
+  const season = seasonOfTick(world.tick);
+  const woodForecast = world.stockpile.wood >= winterWoodNeed(world) ? "winter-ok" : "short";
   return {
     day: dayOfTick(world.tick),
-    season: seasonOfTick(world.tick),
+    season,
+    seasonLabel: SEASON_LABELS[season],
     population: world.agents.length,
     foodStored: world.stockpile.food,
     foodDays: formatFiniteDecimal(foodDaysRemaining(world)),
     woodStored: world.stockpile.wood,
-    woodForecast: world.stockpile.wood >= winterWoodNeed(world) ? "winter-ok" : "short",
+    woodForecast,
+    woodForecastLabel: woodForecast === "winter-ok" ? "越冬分あり" : "不足",
   };
 }
 
@@ -91,15 +104,18 @@ function need(
 
 export function buildNeedsViewModel(agent: AgentState): NeedViewModel[] {
   return [
-    need("hunger", "Hunger", agent.hunger, HUNGER_MAX),
-    need("fatigue", "Fatigue", agent.fatigue, FATIGUE_MAX),
-    need("health", "Health", agent.health, HEALTH_MAX),
+    need("hunger", "空腹", agent.hunger, HUNGER_MAX),
+    need("fatigue", "疲労", agent.fatigue, FATIGUE_MAX),
+    need("health", "健康", agent.health, HEALTH_MAX),
   ];
 }
 
+export function deathCauseLabel(cause: WorldState["deaths"][number]["cause"]): string {
+  return cause === "starvation" ? "餓死" : "凍死";
+}
+
 function deathText(death: WorldState["deaths"][number]): string {
-  const event = death.cause === "starvation" ? "starved" : "died from cold";
-  return `${death.name} ${event}, day ${dayOfTick(death.tick)}`;
+  return `${death.name}が${deathCauseLabel(death.cause)} — ${dayOfTick(death.tick)}日目`;
 }
 
 function eventFromDeath(

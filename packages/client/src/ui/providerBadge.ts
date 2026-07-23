@@ -1,4 +1,4 @@
-import type { AgentState } from "@agent-town/shared";
+import type { AgentState, LlmProvider } from "@agent-town/shared";
 
 export interface ProviderBadge {
   label: string;
@@ -7,10 +7,15 @@ export interface ProviderBadge {
 
 type ProviderState = Pick<AgentState, "planSource" | "llmProvider">;
 
+const PROVIDER_LABELS: Record<LlmProvider, string> = {
+  claude: "クロード",
+  codex: "コーデックス",
+};
+
 export function buildProviderBadge(agent: ProviderState): ProviderBadge {
-  if (agent.llmProvider === null) return { label: "FAKE", tone: "fake" };
-  const provider = agent.llmProvider.toUpperCase();
+  if (agent.llmProvider === null) return { label: "自律", tone: "fake" };
+  const provider = PROVIDER_LABELS[agent.llmProvider];
   return agent.planSource === "llm"
     ? { label: provider, tone: "llm" }
-    : { label: `${provider} → FAKE`, tone: "fake" };
+    : { label: `${provider} → 自律`, tone: "fake" };
 }

@@ -18,7 +18,7 @@ import {
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: "ash",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 2, y: 3 },
     carrying: null,
     activity: { kind: "idle" },
@@ -40,7 +40,7 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     width: 8,
     height: 8,
     tiles: [],
-    agents: [makeAgent(), makeAgent({ id: "birch", name: "Birch", pos: { x: 3, y: 3 } })],
+    agents: [makeAgent(), makeAgent({ id: "birch", name: "シラカバ", pos: { x: 3, y: 3 } })],
     stockpile: { pos: { x: 4, y: 4 }, wood: 8, food: 25 },
     buildings: [],
     deaths: [],
@@ -61,11 +61,13 @@ describe("buildSurvivalHudViewModel", () => {
     expect(buildSurvivalHudViewModel(makeWorld())).toEqual({
       day: 1,
       season: "spring",
+      seasonLabel: "春",
       population: 2,
       foodStored: 25,
       foodDays: "3.0",
       woodStored: 8,
       woodForecast: "winter-ok",
+      woodForecastLabel: "越冬分あり",
     });
   });
 
@@ -104,9 +106,9 @@ describe("buildSurvivalHudViewModel", () => {
 describe("buildNeedsViewModel", () => {
   it("clamps each gauge and includes a numeric label", () => {
     expect(buildNeedsViewModel(makeAgent({ hunger: -2.4, fatigue: 43.6, health: 120 }))).toEqual([
-      { kind: "hunger", label: "Hunger", value: 0, max: 100, valueLabel: "0" },
-      { kind: "fatigue", label: "Fatigue", value: 43.6, max: 100, valueLabel: "44" },
-      { kind: "health", label: "Health", value: 100, max: 100, valueLabel: "100" },
+      { kind: "hunger", label: "空腹", value: 0, max: 100, valueLabel: "0" },
+      { kind: "fatigue", label: "疲労", value: 43.6, max: 100, valueLabel: "44" },
+      { kind: "health", label: "健康", value: 100, max: 100, valueLabel: "100" },
     ]);
   });
 });
@@ -114,7 +116,7 @@ describe("buildNeedsViewModel", () => {
 describe("death event schedule", () => {
   it("observes welcome history without replaying events", () => {
     const welcome = makeWorld({
-      deaths: [{ name: "Old Ash", tick: 10, cause: "cold" }],
+      deaths: [{ name: "老トネリコ", tick: 10, cause: "cold" }],
     });
 
     expect(createDeathEventSchedule(welcome)).toEqual({ observedDeaths: 1, events: [] });
@@ -125,23 +127,23 @@ describe("death event schedule", () => {
     const previous = makeWorld({ tick: deathTick - 1 });
     const next = makeWorld({
       tick: deathTick,
-      agents: previous.agents.filter((agent) => agent.name !== "Ash"),
-      deaths: [{ name: "Ash", tick: deathTick, cause: "starvation" }],
+      agents: previous.agents.filter((agent) => agent.name !== "トネリコ"),
+      deaths: [{ name: "トネリコ", tick: deathTick, cause: "starvation" }],
     });
     const scheduled = updateDeathEventSchedule(createDeathEventSchedule(previous), previous, next);
 
     expect(scheduled.events).toEqual([
       {
-        id: "0:14400:Ash",
-        name: "Ash",
+        id: "0:14400:トネリコ",
+        name: "トネリコ",
         pos: { x: 2, y: 3 },
         cause: "starvation",
         deathTick,
         expiresAtTick: deathTick + TICKS_PER_DAY,
-        text: "Ash starved, day 7",
+        text: "トネリコが餓死 — 7日目",
       },
     ]);
-    expect(latestDeathEvent(scheduled)?.text).toBe("Ash starved, day 7");
+    expect(latestDeathEvent(scheduled)?.text).toBe("トネリコが餓死 — 7日目");
 
     const beforeExpiry = updateDeathEventSchedule(scheduled, next, {
       ...next,
@@ -157,34 +159,34 @@ describe("death event schedule", () => {
   });
 
   it("keeps same-step deaths distinct and can later schedule a reused name", () => {
-    const dahlia = makeAgent({ id: "dahlia", name: "Dahlia", pos: { x: 5, y: 6 } });
+    const dahlia = makeAgent({ id: "dahlia", name: "ダリア", pos: { x: 5, y: 6 } });
     const previous = makeWorld({ agents: [makeAgent(), dahlia] });
     const next = makeWorld({
       tick: 100,
       agents: [],
       deaths: [
-        { name: "Ash", tick: 100, cause: "cold" },
-        { name: "Dahlia", tick: 100, cause: "starvation" },
+        { name: "トネリコ", tick: 100, cause: "cold" },
+        { name: "ダリア", tick: 100, cause: "starvation" },
       ],
     });
     const first = updateDeathEventSchedule(createDeathEventSchedule(previous), previous, next);
-    expect(first.events.map((event) => event.id)).toEqual(["0:100:Ash", "1:100:Dahlia"]);
-    expect(latestDeathEvent(first)?.text).toBe("Dahlia starved, day 1");
-    expect(first.events[0]?.text).toBe("Ash died from cold, day 1");
+    expect(first.events.map((event) => event.id)).toEqual(["0:100:トネリコ", "1:100:ダリア"]);
+    expect(latestDeathEvent(first)?.text).toBe("ダリアが餓死 — 1日目");
+    expect(first.events[0]?.text).toBe("トネリコが凍死 — 1日目");
 
     const reusedPrevious = {
       ...next,
       tick: 200,
-      agents: [makeAgent({ id: "immigrant-8", name: "Dahlia", pos: { x: 7, y: 1 } })],
+      agents: [makeAgent({ id: "immigrant-8", name: "ダリア", pos: { x: 7, y: 1 } })],
     };
     const reusedNext = {
       ...reusedPrevious,
       tick: 201,
       agents: [],
-      deaths: [...next.deaths, { name: "Dahlia", tick: 201, cause: "cold" as const }],
+      deaths: [...next.deaths, { name: "ダリア", tick: 201, cause: "cold" as const }],
     };
     const reused = updateDeathEventSchedule(first, reusedPrevious, reusedNext);
-    expect(reused.events.at(-1)?.id).toBe("2:201:Dahlia");
+    expect(reused.events.at(-1)?.id).toBe("2:201:ダリア");
     expect(reused.events.at(-1)?.pos).toEqual({ x: 7, y: 1 });
   });
 });

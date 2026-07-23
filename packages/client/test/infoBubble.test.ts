@@ -35,7 +35,7 @@ import type { DeathEvent } from "../src/ui/survivalViewModel.js";
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: "ash",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 2, y: 3 },
     carrying: null,
     activity: { kind: "moving", path: [{ x: 3, y: 3 }], ticksIntoStep: 1 },
@@ -43,7 +43,7 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     planSource: "llm",
     llmProvider: "claude",
     thinking: false,
-    lastThought: "Gather wood before dusk.\nThen return home.",
+    lastThought: "日暮れまでに木材を集める。\nその後、家へ戻る。",
     hunger: 21.2,
     fatigue: 43.4,
     health: 88.1,
@@ -57,7 +57,7 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     width: 2,
     height: 2,
     tiles: Array.from({ length: 4 }, () => ({ terrain: "plains" as const, resource: null })),
-    agents: [makeAgent(), makeAgent({ id: "birch", name: "Birch" })],
+    agents: [makeAgent(), makeAgent({ id: "birch", name: "シラカバ" })],
     stockpile: { pos: { x: 0, y: 0 }, wood: 8, food: 25 },
     buildings: [],
     deaths: [],
@@ -76,18 +76,18 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
 describe("info bubble text builders", () => {
   it("formats an agent badge, activity, compact needs, and first thought line", () => {
     expect(buildAgentBubbleText(makeAgent({ llmProvider: "codex" }))).toEqual({
-      title: "Ash",
-      badge: "CODEX",
-      lines: ["moving · H 21 · F 43 · HP 88", "Gather wood before dusk."],
+      title: "トネリコ",
+      badge: "コーデックス",
+      lines: ["移動中 · 空腹 21 · 疲労 43 · 健康 88", "日暮れまでに木材を集める。"],
     });
   });
 
   it("labels provider fallback and unmanaged fake plans", () => {
     expect(
       buildAgentBubbleText(makeAgent({ planSource: "fake", llmProvider: "claude" })).badge,
-    ).toBe("CLAUDE → FAKE");
+    ).toBe("クロード → 自律");
     expect(buildAgentBubbleText(makeAgent({ planSource: "fake", llmProvider: null })).badge).toBe(
-      "FAKE",
+      "自律",
     );
   });
 
@@ -98,24 +98,24 @@ describe("info bubble text builders", () => {
         "wood",
         0,
       ),
-    ).toBe("Tree — wood 7 remaining");
+    ).toBe("木 — 木材 残り7");
     expect(
       buildResourceBubbleText(
         { terrain: "plains", resource: { kind: "food", amount: 4 } },
         "food",
         0,
       ),
-    ).toBe("Berries — food 4 remaining");
+    ).toBe("木の実 — 食料 残り4");
   });
 
   it("adds regrowth and winter dormancy notes for depleted resources", () => {
     const winterTick = DAYS_PER_SEASON * 3 * TICKS_PER_DAY;
 
     expect(buildResourceBubbleText({ terrain: "forest", resource: null }, "wood", 0)).toBe(
-      "Tree — depleted; regrows daily",
+      "木 — 枯渇・毎日再生",
     );
     expect(buildResourceBubbleText({ terrain: "plains", resource: null }, "food", winterTick)).toBe(
-      "Berries — depleted; regrows daily (dormant in winter)",
+      "木の実 — 枯渇・毎日再生（冬は休眠）",
     );
   });
 
@@ -139,7 +139,7 @@ describe("info bubble text builders", () => {
       resourceKind: "food",
     });
     expect(buildResourceBubbleText(depletedBerry, "food", winterTick)).toBe(
-      "Berries — depleted; regrows daily (dormant in winter)",
+      "木の実 — 枯渇・毎日再生（冬は休眠）",
     );
   });
 
@@ -151,7 +151,7 @@ describe("info bubble text builders", () => {
         progress: HOUSE_BUILD_TICKS / 4,
         complete: false,
       }),
-    ).toBe("House — under construction 25%");
+    ).toBe("家 — 建設中 25%");
     expect(
       buildHouseBubbleText({
         kind: "house",
@@ -159,32 +159,30 @@ describe("info bubble text builders", () => {
         progress: HOUSE_BUILD_TICKS,
         complete: true,
       }),
-    ).toBe("House — capacity 2");
+    ).toBe("家 — 定員2人");
   });
 
   it("reuses the HUD food-days forecast for the stockpile", () => {
-    expect(buildStockpileBubbleText(makeWorld())).toBe(
-      "Stockpile — wood 8 · food 25 · 3.0 food-days",
-    );
+    expect(buildStockpileBubbleText(makeWorld())).toBe("貯蔵庫 — 木材8 · 食料25 · 3.0日分");
   });
 
   it("formats tombstone identity, day, and cause", () => {
     const event: DeathEvent = {
-      id: "0:14400:Ash",
-      name: "Ash",
+      id: "0:14400:トネリコ",
+      name: "トネリコ",
       pos: { x: 1, y: 1 },
       cause: "starvation",
       deathTick: 6 * TICKS_PER_DAY,
       expiresAtTick: 7 * TICKS_PER_DAY,
-      text: "Ash starved, day 7",
+      text: "トネリコが餓死 — 7日目",
     };
 
-    expect(buildTombstoneBubbleText(event)).toBe("Here lies Ash — died day 7 of starvation");
+    expect(buildTombstoneBubbleText(event)).toBe("トネリコの墓 — 7日目に餓死");
   });
 
   it("formats terrain kind and coordinates", () => {
     expect(buildTerrainBubbleText({ terrain: "rock", resource: null }, { x: 4, y: 5 })).toBe(
-      "Rock — (4, 5)",
+      "岩場 — (4, 5)",
     );
   });
 });
@@ -238,15 +236,15 @@ describe("resolveInfoBubbleTarget", () => {
         polities: [
           {
             id: "polity-1",
-            name: "The Sable March",
-            adjective: "Sable",
+            name: "黒貂辺境国",
+            adjective: "黒貂",
             color: 0x6f7f88,
             values: [],
-            foundingMyth: "The wardens shared one fire.",
+            foundingMyth: "守人たちはひとつの火を分かち合った。",
             formativeTraumaEventIds: ["event-war"],
-            taboo: "Leaving the dead unburied.",
-            ambition: "Secure every pass.",
-            governance: "Wardens and village moots.",
+            taboo: "死者を葬らずに放置すること。",
+            ambition: "すべての峠を守り固める。",
+            governance: "守人と村会による合議。",
           },
         ],
         events: [
@@ -254,8 +252,8 @@ describe("resolveInfoBubbleTarget", () => {
             id: "event-war",
             year: -80,
             kind: "war",
-            title: "The Ashen Border War",
-            summary: "The border farms burned.",
+            title: "黒貂・金環国境戦争",
+            summary: "国境の農地が焼け落ちた。",
             polityIds: ["polity-1"],
             causeIds: [],
             effects: [
@@ -271,7 +269,7 @@ describe("resolveInfoBubbleTarget", () => {
           {
             id: "landmark-1",
             kind: "borderFort",
-            name: "Old Border Keep",
+            name: "古き黒貂国境砦",
             pos: { x: 0, y: 0 },
             polityId: "polity-1",
             foundedByEventId: "event-war",
@@ -285,7 +283,7 @@ describe("resolveInfoBubbleTarget", () => {
       landmarkId: "landmark-1",
     });
     expect(buildLandmarkBubbleText(world.history.landmarks[0], world.history)).toBe(
-      "Old Border Keep — raised after The Ashen Border War, year -80",
+      "古き黒貂国境砦 — 黒貂・金環国境戦争の後に築かれた（−80年）",
     );
   });
 });

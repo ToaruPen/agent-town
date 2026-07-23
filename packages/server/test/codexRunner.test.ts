@@ -72,12 +72,12 @@ describe("CliCodexRunner", () => {
       spawnFn,
       workingDirectory: "test-codex-cwd",
     });
-    const resultPromise = runner.run("Plan Ash's day.");
+    const resultPromise = runner.run("Plan トネリコ's day.");
     child.stdout.write(`${JSON.stringify({ type: "thread.started" })}\n`);
     child.stdout.write(
       `${JSON.stringify({
         type: "item.completed",
-        item: { type: "agent_message", text: '{"reasoning":"Work.","plan":[]}' },
+        item: { type: "agent_message", text: '{"reasoning":"働く。","plan":[]}' },
       })}\n`,
     );
     child.stdout.write(`${JSON.stringify({ type: "turn.completed" })}\n`);
@@ -85,7 +85,7 @@ describe("CliCodexRunner", () => {
 
     await expect(resultPromise).resolves.toEqual({
       ok: true,
-      text: '{"reasoning":"Work.","plan":[]}',
+      text: '{"reasoning":"働く。","plan":[]}',
     });
     expect(spawnMock).toHaveBeenCalledOnce();
     const spawnCall = spawnMock.mock.calls[0];
@@ -149,7 +149,7 @@ describe("CliCodexRunner", () => {
     const spawnOptions = spawnCall?.[2];
     expect(spawnOptions?.cwd).toBe("test-codex-cwd");
     expect(typeof spawnOptions?.env).toBe("object");
-    expect(stdin).toBe("Plan Ash's day.");
+    expect(stdin).toBe("Plan トネリコ's day.");
   });
 
   it("passes only allowlisted environment variables to codex", async () => {

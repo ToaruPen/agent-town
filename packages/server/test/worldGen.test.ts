@@ -58,6 +58,14 @@ describe("generateWorld", () => {
     }
   });
 
+  it("uses Japanese resident names", () => {
+    expect(generateWorld(42).agents.map(({ name }) => name)).toEqual([
+      "トネリコ",
+      "シラカバ",
+      "スギ",
+    ]);
+  });
+
   it("creates a complete row-major tile array", () => {
     expect(generateWorld(42).tiles).toHaveLength(MAP_WIDTH * MAP_HEIGHT);
   });

@@ -63,7 +63,7 @@ Derived helpers in shared (`time.ts`): `dayOfTick(tick)`, `seasonOfTick(tick)`, 
 
 ## Task M3a-4: Houses, rest, immigration
 
-**Files:** shared `world.ts` (`WorldState.buildings: {kind:"house"; pos: Position; progress: number; complete: boolean}[]`; AgentTask adds `{kind:"build"; pos: Position}` and `{kind:"rest"}`), executor (build: adjacent, consumes HOUSE_WOOD_COST from stockpile at start — reject if short, progress += per tick, complete at HOUSE_BUILD_TICKS; rest: at any complete house — or stockpile if no house — restores fatigue over time), engine (fatigue < threshold applies FATIGUE_SLOWDOWN to move/gather tick progress; spring day-1 morning: if foodDaysRemaining ≥ IMMIGRATION_FOOD_DAYS_MIN and housing capacity (houses × HOUSE_CAPACITY) > population and population < MAX_POPULATION → spawn one new agent near stockpile with a name from a fixed pool ["Dahlia","Elm","Fern","Gorse","Hazel","Iris","Juniper"] in order), FakePlanner (build a house when wood ≥ cost + winter reserve and capacity ≤ population; rest when tired).
+**Files:** shared `world.ts` (`WorldState.buildings: {kind:"house"; pos: Position; progress: number; complete: boolean}[]`; AgentTask adds `{kind:"build"; pos: Position}` and `{kind:"rest"}`), executor (build: adjacent, consumes HOUSE_WOOD_COST from stockpile at start — reject if short, progress += per tick, complete at HOUSE_BUILD_TICKS; rest: at any complete house — or stockpile if no house — restores fatigue over time), engine (fatigue < threshold applies FATIGUE_SLOWDOWN to move/gather tick progress; spring day-1 morning: if foodDaysRemaining ≥ IMMIGRATION_FOOD_DAYS_MIN and housing capacity (houses × HOUSE_CAPACITY) > population and population < MAX_POPULATION → spawn one new agent near stockpile with a name from a fixed pool ["ダリア","ニレ","シダ","ハリエニシダ","ハシバミ","アヤメ","ネズ"] in order), FakePlanner (build a house when wood ≥ cost + winter reserve and capacity ≤ population; rest when tired).
 **Tests:** build lifecycle incl. insufficient-wood rejection; rest restores; slowdown applies; immigration triggers exactly on the boundary conditions and respects MAX_POPULATION; new agent has full gauges and fake planner state.
 **Branch/commit:** `m3a-4-houses-immigration` / `feat(sim): houses rest and immigration`
 
@@ -75,7 +75,7 @@ Derived helpers in shared (`time.ts`): `dayOfTick(tick)`, `seasonOfTick(tick)`, 
 
 ## Task M3a-6: Survival UI
 
-**Files:** client — HUD adds day/season badge and "food: Nd / wood: winter-ok|short" forecast; inspect panel adds hunger/fatigue/health bars; house sprite (tiny-town building tiles) with construction state (semi-transparent until complete); death: tombstone marker sprite at death position for one day + event line in a minimal top-center ticker ("Ash starved, day 7"); population count in HUD.
+**Files:** client — HUD adds day/season badge and "食料: N · N日分 / 木材: N · 越冬分あり|不足" forecast; inspect panel adds hunger/fatigue/health bars; house sprite (tiny-town building tiles) with construction state (semi-transparent until complete); death: tombstone marker sprite at death position for one day + event line in a minimal top-center ticker ("トネリコが餓死 — 7日目"); population count in HUD.
 **Tests:** view-model formatting for forecasts and bars (pure logic only).
 **Branch/commit:** `m3a-6-survival-ui` / `feat(client): survival hud needs bars houses and death markers`
 

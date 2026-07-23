@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Same regime as M1: one task per worker, TDD mandatory, respect the M1 plan's Global Constraints (they carry over verbatim) plus the additions below. Do NOT dispatch reviewer sub-agents; the supervisor reviews. Commit is part of every task.
 
-**Goal:** One resident (Ash) plans their day with a real LLM (`claude -p`, subscription auth) through the `Planner` seam, asynchronously — the sim never blocks on thinking — with schema validation, one retry, and FakePlanner fallback. The other residents stay rule-based.
+**Goal:** One resident (トネリコ) plans their day with a real LLM (`claude -p`, subscription auth) through the `Planner` seam, asynchronously — the sim never blocks on thinking — with schema validation, one retry, and FakePlanner fallback. The other residents stay rule-based.
 
 **Architecture:** The sim core stays synchronous and deterministic. A new `ThoughtBroker` sits OUTSIDE the engine: it watches trigger conditions (game-day boundary, empty task queue), dispatches async LLM plan requests (concurrency 1, per-agent cooldown), and injects validated results between ticks via `engine.applyPlan()`. LLM I/O lives in `packages/server/src/llm/`, never imported by `sim/` — `sim/` remains pure. CI never calls the real CLI: the runner is injected and mocked in all tests; real-LLM verification is a supervisor-run smoke.
 
@@ -52,7 +52,7 @@ export interface AgentState {
 ```ts
 // planPrompt.ts — pure, deterministic
 export function buildPlanPrompt(world: WorldState, agent: AgentState): string;
-// Includes: agent name + 1-line persona ("Ash, a diligent forester who worries about winter"),
+// Includes: agent name + 1-line persona ("トネリコ, a diligent forester who worries about winter"),
 // agent pos/carrying, stockpile pos + wood/food vs targets, the 5 nearest wood tiles and
 // 5 nearest food tiles with coordinates and amounts (Manhattan-nearest, deterministic
 // tie-break by index), and STRICT output instructions: reply with ONLY a JSON object
@@ -160,7 +160,7 @@ Engine keeps its sync `Planner` for everyone (interim + non-LLM agents); the bro
 ### Task M2-6: Real-LLM smoke (SUPERVISOR-RUN — not delegated)
 
 - `just dev-llm`; watch server stdout for `{"at":"llmPlanner","agent":"<ash-id>","outcome":"llm"}`.
-- Confirm via ws probe that Ash's `planSource` flips to `"llm"` and tasks execute.
+- Confirm via ws probe that トネリコ's `planSource` flips to `"llm"` and tasks execute.
 - Then update `README.md` (short "LLM mode" section: requires logged-in `claude` CLI, `just dev-llm`) and commit `docs: llm planner mode`.
 
 ## Self-Review Notes

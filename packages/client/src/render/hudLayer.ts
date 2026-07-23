@@ -47,7 +47,7 @@ function renderCalendar(viewModel: SurvivalHudViewModel): Container {
     .roundRect(0, 0, 70, 17, 2)
     .fill({ color: SEASON_COLORS[viewModel.season], alpha: 0.22 })
     .stroke({ color: SEASON_COLORS[viewModel.season], alpha: 0.9, width: 1 });
-  const label = text(`${viewModel.season.toUpperCase()} · D${viewModel.day}`, HUD_SMALL_FONT_SIZE);
+  const label = text(`${viewModel.seasonLabel} · ${viewModel.day}日目`, HUD_SMALL_FONT_SIZE);
   label.position.set(4, 0);
   calendar.addChild(badge, label);
   return calendar;
@@ -59,17 +59,17 @@ export function renderHudLayer(layer: Container, state: WorldState): void {
   const calendar = renderCalendar(viewModel);
   calendar.position.set(HUD_INSET, HUD_INSET);
 
-  const population = text(`pop ${viewModel.population}`, HUD_SMALL_FONT_SIZE, HUD_MUTED_COLOR);
+  const population = text(`人口 ${viewModel.population}`, HUD_SMALL_FONT_SIZE, HUD_MUTED_COLOR);
   population.anchor.set(1, 0);
   population.position.set(HUD_WIDTH - HUD_INSET, HUD_INSET);
 
-  const foodDays = viewModel.foodDays === "—" ? viewModel.foodDays : `${viewModel.foodDays}d`;
-  const food = text(`food: ${viewModel.foodStored} · ${foodDays}`);
+  const foodDays = viewModel.foodDays === "—" ? viewModel.foodDays : `${viewModel.foodDays}日分`;
+  const food = text(`食料: ${viewModel.foodStored} · ${foodDays}`);
   food.position.set(HUD_INSET, HUD_INSET + HUD_LINE_HEIGHT + 2);
 
   const woodColor = viewModel.woodForecast === "short" ? HUD_ALERT_COLOR : HUD_TEXT_COLOR;
   const wood = text(
-    `wood: ${viewModel.woodStored} · ${viewModel.woodForecast}`,
+    `木材: ${viewModel.woodStored} · ${viewModel.woodForecastLabel}`,
     HUD_FONT_SIZE,
     woodColor,
   );

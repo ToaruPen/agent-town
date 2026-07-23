@@ -15,7 +15,7 @@ import type { Planner } from "../src/sim/fakePlanner.js";
 function createAgent(): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 0, y: 0 },
     carrying: null,
     activity: { kind: "idle" },
@@ -57,7 +57,7 @@ function createWorld(agent: AgentState): WorldState {
 }
 
 function validResponse(tasks: AgentTask[]): string {
-  return JSON.stringify({ reasoning: "Gather nearby wood.", plan: tasks });
+  return JSON.stringify({ reasoning: "近くの木材を集める。", plan: tasks });
 }
 
 afterEach(() => {
@@ -84,7 +84,7 @@ describe("LlmPlanner", () => {
     expect(result).toEqual({
       tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }, gather],
       source: "llm",
-      reasoning: "Gather nearby wood.",
+      reasoning: "近くの木材を集める。",
     });
     expect(run).toHaveBeenCalledOnce();
     expect(fallback.plan).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe("LlmPlanner", () => {
     expect(result).toEqual({
       tasks,
       source: "llm",
-      reasoning: "Gather nearby wood.",
+      reasoning: "近くの木材を集める。",
     });
     expect(run).toHaveBeenCalledOnce();
     expect(fallback.plan).not.toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe("LlmPlanner", () => {
     const run = vi.fn(async () => ({
       ok: true as const,
       text: JSON.stringify({
-        reasoning: "Move beside the wood and gather it.",
+        reasoning: "木のそばへ移動して採集する。",
         plan: [
           { kind: "moveTo", dest: { x: 1, y: 0, ok: true } },
           { kind: "gather", resource: "wood", target: { x: 2, y: 0, ok: true } },
@@ -150,7 +150,7 @@ describe("LlmPlanner", () => {
         { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
       ],
       source: "llm",
-      reasoning: "Move beside the wood and gather it.",
+      reasoning: "木のそばへ移動して採集する。",
     });
     expect(run).toHaveBeenCalledOnce();
     expect(fallback.plan).not.toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe("LlmPlanner", () => {
 
     await new LlmPlanner("claude", runner, fallback).planAsync(world, agent);
 
-    expect(run).toHaveBeenCalledWith(expect.stringContaining("Ash"));
+    expect(run).toHaveBeenCalledWith(expect.stringContaining("トネリコ"));
   });
 
   it("retries garbage twice before returning fallback tasks with fake source", async () => {
@@ -273,7 +273,7 @@ describe("LlmPlanner", () => {
     expect(result).toEqual({
       tasks,
       source: "llm",
-      reasoning: "Gather nearby wood.",
+      reasoning: "近くの木材を集める。",
     });
     expect(run).toHaveBeenCalledTimes(2);
     expect(fallbackPlan).not.toHaveBeenCalled();

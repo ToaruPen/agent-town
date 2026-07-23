@@ -19,7 +19,7 @@ import { FakePlanner } from "../src/sim/fakePlanner.js";
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: "agent-1",
-    name: "Ash",
+    name: "トネリコ",
     pos: { x: 0, y: 0 },
     carrying: null,
     activity: { kind: "idle" },
@@ -115,7 +115,7 @@ describe("FakePlanner", () => {
       { terrain: "plains", resource: null },
       { terrain: "plains", resource: { kind: "food", amount: 10 } },
     ]);
-    world.agents.push(createAgent({ id: "agent-2", name: "Birch" }));
+    world.agents.push(createAgent({ id: "agent-2", name: "シラカバ" }));
     world.stockpile.wood = STOCKPILE_TARGET_WOOD;
     world.stockpile.food = STOCKPILE_TARGET_FOOD;
 
@@ -134,7 +134,7 @@ describe("FakePlanner", () => {
       { terrain: "plains", resource: null },
       { terrain: "forest", resource: { kind: "wood", amount: 10 } },
     ]);
-    world.agents.push(createAgent({ id: "agent-2", name: "Birch" }));
+    world.agents.push(createAgent({ id: "agent-2", name: "シラカバ" }));
     world.stockpile.food = STOCKPILE_TARGET_FOOD * world.agents.length;
     const winterReserve = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
     const planner = new FakePlanner(() => 0);
@@ -235,7 +235,7 @@ describe("FakePlanner", () => {
       { terrain: "plains", resource: null },
     ]);
     world.buildings = [{ kind: "house", pos: { x: 2, y: 0 }, progress: 1, complete: true }];
-    world.agents.push(createAgent({ id: "agent-2", name: "Birch", pos: { x: 3, y: 0 } }));
+    world.agents.push(createAgent({ id: "agent-2", name: "シラカバ", pos: { x: 3, y: 0 } }));
     world.stockpile.wood =
       HOUSE_WOOD_COST + world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
 

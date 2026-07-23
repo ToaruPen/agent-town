@@ -13,7 +13,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 
 function sendNotFound(response: ServerResponse): void {
   response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-  response.end("Not Found");
+  response.end("見つかりません");
 }
 
 function requestPath(request: IncomingMessage): string | undefined {
@@ -67,7 +67,7 @@ async function serveFile(
     }
     console.error("static file read failed", error);
     response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Internal Server Error");
+    response.end("サーバー内部エラー");
   }
 }
 

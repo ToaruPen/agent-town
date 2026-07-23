@@ -582,21 +582,21 @@ git commit -m "feat(sim): anchor old world history in the settlement map"
 ```ts
 const view = buildWorldChronicleViewModel(historyFixture());
 
-expect(view.eraLabel).toBe("200 years before settlement");
+expect(view.eraLabel).toBe("開拓以前の200年間");
 expect(view.origin).toEqual({
-  homelandName: "The Sable March",
-  reason: "The last granaries failed after the border war.",
-  inheritedValues: ["Mutual aid", "Order"],
+  homelandName: "黒貂辺境国",
+  reason: "国境戦争の後、最後の穀倉が尽きた。",
+  inheritedValues: ["相互扶助", "秩序"],
 });
 expect(view.polities[0]).toEqual(
   expect.objectContaining({
-    name: "The Sable March",
+    name: "黒貂辺境国",
     isHomeland: true,
-    values: expect.arrayContaining(["Mutual aid", "Order"]),
+    values: expect.arrayContaining(["相互扶助", "秩序"]),
   }),
 );
 expect(view.events.at(-1)).toEqual(
-  expect.objectContaining({ kind: "migration", causes: ["The Ashen Border War"] }),
+  expect.objectContaining({ kind: "migration", causes: ["黒貂・金環国境戦争"] }),
 );
 ```
 
@@ -708,7 +708,7 @@ expect(resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 })).toEqual({
   landmarkId: "landmark-1",
 });
 expect(buildLandmarkBubbleText(world.history.landmarks[0]!, world.history)).toBe(
-  "Old Border Keep — raised after The Ashen Border War, year -80",
+  "古き黒貂国境砦 — 黒貂・金環国境戦争の後に築かれた（−80年）",
 );
 ```
 
@@ -791,7 +791,7 @@ git commit -m "feat(client): reveal old world landmarks on the map"
 
 ```html
 <button id="chronicle-toggle" class="chronicle-toggle" type="button" hidden>
-  Open chronicle
+  年代記を開く
 </button>
 <aside
   id="world-chronicle"

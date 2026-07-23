@@ -21,26 +21,32 @@ function agent(id: string, name: string): AgentState {
   };
 }
 
-const agents = [agent("agent-0", "Ash"), agent("agent-1", "Birch"), agent("agent-2", "Cedar")];
+const agents = [
+  agent("agent-0", "トネリコ"),
+  agent("agent-1", "シラカバ"),
+  agent("agent-2", "スギ"),
+];
 
 describe("parseLlmProviderRoutes", () => {
   it("defaults current and future residents to Codex", () => {
     const routes = parseLlmProviderRoutes(undefined, agents, { kind: "all" });
 
     expect(llmProviderForAgent(routes, agents[0])).toBe("codex");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Dahlia"))).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "ダリア"))).toBe("codex");
   });
 
   it("trims routes and uses the wildcard for other and future residents", () => {
-    const routes = parseLlmProviderRoutes(" Ash : claude , * : codex ", agents, { kind: "all" });
+    const routes = parseLlmProviderRoutes(" トネリコ : claude , * : codex ", agents, {
+      kind: "all",
+    });
 
     expect(llmProviderForAgent(routes, agents[0])).toBe("claude");
     expect(llmProviderForAgent(routes, agents[1])).toBe("codex");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Dahlia"))).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "ダリア"))).toBe("codex");
   });
 
   it("allows a fixed selection to use exact routes without a wildcard", () => {
-    const routes = parseLlmProviderRoutes("Ash:claude,Birch:codex", agents, {
+    const routes = parseLlmProviderRoutes("トネリコ:claude,シラカバ:codex", agents, {
       kind: "selected",
       agentIds: ["agent-0", "agent-1"],
     });
@@ -51,15 +57,15 @@ describe("parseLlmProviderRoutes", () => {
 
   it.each([
     "",
-    "Ash",
+    "トネリコ",
     ":claude",
-    "Ash:",
-    "Ash:openai",
-    "Ash:claude:codex",
-    "Ash:claude,",
-    ",Ash:claude",
-    "Ash:claude,,*:codex",
-    "Ash:claude,Ash:codex",
+    "トネリコ:",
+    "トネリコ:openai",
+    "トネリコ:claude:codex",
+    "トネリコ:claude,",
+    ",トネリコ:claude",
+    "トネリコ:claude,,*:codex",
+    "トネリコ:claude,トネリコ:codex",
     "*:claude,*:codex",
     "Unknown:claude",
   ])("rejects invalid route setting %j", (setting) => {
@@ -68,13 +74,13 @@ describe("parseLlmProviderRoutes", () => {
 
   it("requires a wildcard for all residents", () => {
     expect(() =>
-      parseLlmProviderRoutes("Ash:claude,Birch:codex,Cedar:claude", agents, { kind: "all" }),
+      parseLlmProviderRoutes("トネリコ:claude,シラカバ:codex,スギ:claude", agents, { kind: "all" }),
     ).toThrow(/LLM_ROUTES/);
   });
 
   it("requires routes for every fixed selected resident", () => {
     expect(() =>
-      parseLlmProviderRoutes("Ash:claude", agents, {
+      parseLlmProviderRoutes("トネリコ:claude", agents, {
         kind: "selected",
         agentIds: ["agent-0", "agent-1"],
       }),
@@ -82,7 +88,7 @@ describe("parseLlmProviderRoutes", () => {
   });
 
   it("allows exact routes for known unmanaged residents", () => {
-    const routes = parseLlmProviderRoutes("Ash:claude,Cedar:codex", agents, {
+    const routes = parseLlmProviderRoutes("トネリコ:claude,スギ:codex", agents, {
       kind: "selected",
       agentIds: ["agent-0"],
     });

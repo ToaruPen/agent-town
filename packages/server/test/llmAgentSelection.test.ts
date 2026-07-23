@@ -21,13 +21,17 @@ function agent(id: string, name: string): AgentState {
   };
 }
 
-const agents = [agent("agent-0", "Ash"), agent("agent-1", "Birch"), agent("agent-2", "Cedar")];
+const agents = [
+  agent("agent-0", "トネリコ"),
+  agent("agent-1", "シラカバ"),
+  agent("agent-2", "スギ"),
+];
 
 describe("parseLlmAgentSelection", () => {
   it("keeps undefined and all settings dynamic as residents immigrate", () => {
     const defaultSelection = parseLlmAgentSelection(undefined, agents);
     const allSelection = parseLlmAgentSelection("all", agents);
-    const residents = [...agents, agent("agent-3", "Dahlia")];
+    const residents = [...agents, agent("agent-3", "ダリア")];
 
     expect(llmAgentIdsForWorld(defaultSelection, residents)).toEqual([
       "agent-0",
@@ -44,16 +48,21 @@ describe("parseLlmAgentSelection", () => {
   });
 
   it("keeps comma-separated names fixed to their startup IDs", () => {
-    const selection = parseLlmAgentSelection(" Cedar, Ash ", agents);
-    const residents = [...agents, agent("agent-3", "Dahlia")];
+    const selection = parseLlmAgentSelection(" スギ, トネリコ ", agents);
+    const residents = [...agents, agent("agent-3", "ダリア")];
 
     expect(llmAgentIdsForWorld(selection, residents)).toEqual(["agent-2", "agent-0"]);
   });
 
-  it.each(["", "Ash,", ",Ash", "Ash,,Birch", "all,Ash", "Ash,Ash", "Unknown"])(
-    "rejects malformed or unknown setting %j",
-    (setting) => {
-      expect(() => parseLlmAgentSelection(setting, agents)).toThrow(/LLM_AGENTS/);
-    },
-  );
+  it.each([
+    "",
+    "トネリコ,",
+    ",トネリコ",
+    "トネリコ,,シラカバ",
+    "all,トネリコ",
+    "トネリコ,トネリコ",
+    "Unknown",
+  ])("rejects malformed or unknown setting %j", (setting) => {
+    expect(() => parseLlmAgentSelection(setting, agents)).toThrow(/LLM_AGENTS/);
+  });
 });

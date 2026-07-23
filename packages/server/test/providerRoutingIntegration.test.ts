@@ -21,10 +21,10 @@ function setup() {
   return { engine, fallback };
 }
 
-const validPlan = JSON.stringify({ reasoning: "Observe the town.", plan: [{ kind: "rest" }] });
+const validPlan = JSON.stringify({ reasoning: "集落を見守る。", plan: [{ kind: "rest" }] });
 
 describe("provider routing integration", () => {
-  it("routes Ash only to Claude and Birch only to Codex", async () => {
+  it("routes トネリコ only to Claude and シラカバ only to Codex", async () => {
     const { engine, fallback } = setup();
     const claudeRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
     const codexRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
@@ -37,7 +37,7 @@ describe("provider routing integration", () => {
       engine,
       fallback,
       llmAgents: "all",
-      llmRoutes: "Ash:claude,*:codex",
+      llmRoutes: "トネリコ:claude,*:codex",
       runners,
     });
 
@@ -46,8 +46,8 @@ describe("provider routing integration", () => {
 
     expect(claudeRun).toHaveBeenCalledOnce();
     expect(codexRun).toHaveBeenCalledOnce();
-    expect(claudeRun.mock.calls[0]?.[0]).toContain("Ash");
-    expect(codexRun.mock.calls[0]?.[0]).toContain("Birch");
+    expect(claudeRun.mock.calls[0]?.[0]).toContain("トネリコ");
+    expect(codexRun.mock.calls[0]?.[0]).toContain("シラカバ");
     expect(engine.world.agents.map(({ llmProvider }) => llmProvider)).toEqual(["claude", "codex"]);
   });
 
@@ -60,7 +60,7 @@ describe("provider routing integration", () => {
       engine,
       fallback,
       llmAgents: "all",
-      llmRoutes: "Ash:claude,*:codex",
+      llmRoutes: "トネリコ:claude,*:codex",
       runners: { claude: runner(claudeRun), codex: runner(codexRun) },
     });
 
@@ -93,7 +93,7 @@ describe("provider routing integration", () => {
       engine,
       fallback,
       llmAgents: "all",
-      llmRoutes: "Ash:claude,*:codex",
+      llmRoutes: "トネリコ:claude,*:codex",
       runners: { claude: runner(claudeRun), codex: runner(codexRun) },
     });
 
