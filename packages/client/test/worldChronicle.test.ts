@@ -1,6 +1,8 @@
 import type { WorldHistory } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
+let focusedElement: FakeElement | null = null;
+
 class FakeElement {
   className = "";
   hidden = false;
@@ -26,6 +28,19 @@ class FakeElement {
 
   addEventListener(): void {
     this.listenerWrites += 1;
+  }
+
+  focus(): void {
+    focusedElement = this;
+  }
+
+  findByClass(className: string): FakeElement | null {
+    if (this.className === className) return this;
+    for (const child of this.children) {
+      const match = child.findByClass(className);
+      if (match !== null) return match;
+    }
+    return null;
   }
 
   allText(): string {
@@ -155,17 +170,33 @@ describe("buildWorldChronicleViewModel", () => {
 });
 
 describe("createWorldChronicle", () => {
-  it("opens a text-safe chronicle and clears it when closed", async () => {
+  it("moves focus into a text-safe chronicle and returns it when closed with Escape", async () => {
     const module = await import("../src/ui/worldChronicle.js");
     const factory = Reflect.get(module, "createWorldChronicle");
+    const bindEscape = Reflect.get(module, "bindWorldChronicleEscape");
     const root = new FakeElement("aside");
+    const toggle = new FakeElement("button");
     root.hidden = true;
+    const documentListeners = new Map<
+      string,
+      (event: { key: string; preventDefault(): void }) => void
+    >();
     vi.stubGlobal("document", {
       createElement: (tagName: string) => new FakeElement(tagName),
+      addEventListener: (
+        type: string,
+        listener: (event: { key: string; preventDefault(): void }) => void,
+      ) => documentListeners.set(type, listener),
+      removeEventListener: (type: string) => documentListeners.delete(type),
     });
 
     expect(typeof factory).toBe("function");
-    const controller = factory(root as unknown as HTMLElement, vi.fn()) as {
+    expect(typeof bindEscape).toBe("function");
+    const controller = factory(
+      root as unknown as HTMLElement,
+      vi.fn(),
+      toggle as unknown as HTMLElement,
+    ) as {
       show(history: WorldHistory): void;
       close(): void;
       isOpen(): boolean;
@@ -174,13 +205,26 @@ describe("createWorldChronicle", () => {
 
     expect(controller.isOpen()).toBe(true);
     expect(root.hidden).toBe(false);
+    expect(focusedElement).toBe(root.findByClass("world-chronicle__close"));
     expect(root.allText()).toContain("The Sable March");
     expect(root.allText()).toContain("The Ashen Border War");
 
-    controller.close();
+    const release = bindEscape(controller, () => controller.close()) as () => void;
+    let prevented = 0;
+    documentListeners.get("keydown")?.({
+      key: "Escape",
+      preventDefault: () => {
+        prevented += 1;
+      },
+    });
+
+    expect(prevented).toBe(1);
     expect(controller.isOpen()).toBe(false);
     expect(root.hidden).toBe(true);
     expect(root.children).toEqual([]);
+    expect(focusedElement).toBe(toggle);
+    release();
+    expect(documentListeners.has("keydown")).toBe(false);
     vi.unstubAllGlobals();
   });
 });

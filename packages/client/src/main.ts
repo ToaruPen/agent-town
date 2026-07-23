@@ -54,7 +54,7 @@ import {
   latestDeathEvent,
   updateDeathEventSchedule,
 } from "./ui/survivalViewModel.js";
-import { createWorldChronicle } from "./ui/worldChronicle.js";
+import { bindWorldChronicleEscape, createWorldChronicle } from "./ui/worldChronicle.js";
 
 const HUD_PADDING = 16;
 const NARROW_SCREEN_MAX_WIDTH = 520;
@@ -97,7 +97,11 @@ let activeInfoTarget: InfoBubbleTarget | null = null;
 let agentsDirty = false;
 let infoBubbleDirty = false;
 const inspectPanel = createInspectPanel(inspectPanelRoot, closeInspectPanel);
-const chronicle = createWorldChronicle(chronicleRoot, closeWorldChronicle);
+const chronicle = createWorldChronicle(chronicleRoot, closeWorldChronicle, chronicleToggleRoot);
+bindWorldChronicleEscape(chronicle, () => {
+  closeWorldChronicle();
+  announce("Chronicle closed.");
+});
 const tapCandidates = new Map<number, TapCandidate>();
 const knownResourceKinds = new Map<number, ResourceKind>();
 const mainTapHistory = createDoubleTapHistory();
@@ -523,7 +527,12 @@ function renderDirtyWorldLayers(currentState: WorldState): void {
   }
   if (historyDirty) {
     const landmarkId = activeInfoTarget?.kind === "landmark" ? activeInfoTarget.landmarkId : null;
-    renderHistoryLayer(objectLayer, currentState.history.landmarks, landmarkId);
+    renderHistoryLayer(
+      objectLayer,
+      currentState.history.landmarks,
+      currentState.history.polities,
+      landmarkId,
+    );
     historyDirty = false;
   }
   if (agentsDirty) {

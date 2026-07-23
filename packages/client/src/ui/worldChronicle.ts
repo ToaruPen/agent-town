@@ -232,7 +232,12 @@ function eventSection(events: ChronicleEventViewModel[]): HTMLElement {
   return section;
 }
 
-function chronicleHeader(view: WorldChronicleViewModel, onClose: () => void): HTMLElement {
+interface ChronicleHeader {
+  header: HTMLElement;
+  closeButton: HTMLButtonElement;
+}
+
+function chronicleHeader(view: WorldChronicleViewModel, onClose: () => void): ChronicleHeader {
   const header = element("header", "world-chronicle__header");
   const title = element("h2", "world-chronicle__title", "Frontier chronicle");
   title.id = "world-chronicle-title";
@@ -240,37 +245,56 @@ function chronicleHeader(view: WorldChronicleViewModel, onClose: () => void): HT
   close.type = "button";
   close.addEventListener("click", onClose);
   header.append(title, element("p", "world-chronicle__era", view.eraLabel), close);
-  return header;
+  return { header, closeButton: close };
 }
 
 function renderChronicle(
   root: HTMLElement,
   view: WorldChronicleViewModel,
   onClose: () => void,
-): void {
+): HTMLButtonElement {
+  const { header, closeButton } = chronicleHeader(view, onClose);
   root.replaceChildren(
-    chronicleHeader(view, onClose),
+    header,
     originSection(view.origin),
     politySection(view.polities),
     eventSection(view.events),
   );
+  return closeButton;
 }
 
 export function createWorldChronicle(
   root: HTMLElement,
   onClose: () => void,
+  returnFocus?: HTMLElement,
 ): WorldChronicleController {
   return {
     show(history: WorldHistory): void {
-      renderChronicle(root, buildWorldChronicleViewModel(history), onClose);
+      const closeButton = renderChronicle(root, buildWorldChronicleViewModel(history), onClose);
       root.hidden = false;
+      closeButton.focus();
     },
     close(): void {
+      const wasOpen = !root.hidden;
       root.hidden = true;
       root.replaceChildren();
+      if (wasOpen) returnFocus?.focus();
     },
     isOpen(): boolean {
       return !root.hidden;
     },
   };
+}
+
+export function bindWorldChronicleEscape(
+  controller: WorldChronicleController,
+  onEscape: () => void,
+): () => void {
+  const handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !controller.isOpen()) return;
+    event.preventDefault();
+    onEscape();
+  };
+  document.addEventListener("keydown", handleKeydown);
+  return () => document.removeEventListener("keydown", handleKeydown);
 }
