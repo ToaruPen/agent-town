@@ -77,6 +77,18 @@ describe("wire protocol", () => {
         events: [],
         landmarks: [],
         settlementOrigin: null,
+        worldMap: {
+          width: 96,
+          height: 64,
+          cells: Array.from({ length: 96 * 64 }, (_, index) => ({
+            terrain: index === 97 ? "plains" : "sea",
+            polityId: null,
+          })),
+          cities: [],
+          tradeRoutes: [],
+          borderChanges: [],
+          settlementFrontierPos: { x: 1, y: 1 },
+        },
       },
     };
     const message: ServerMessage = { type: "welcome", state };
@@ -84,6 +96,9 @@ describe("wire protocol", () => {
 
     expect(decoded).toEqual(message);
     expect(decoded.type === "welcome" ? decoded.state.tiles[0]?.resourceOrigin : null).toBe("food");
+    expect(
+      decoded.type === "welcome" ? decoded.state.history.worldMap.settlementFrontierPos : null,
+    ).toEqual({ x: 1, y: 1 });
   });
 
   it("round-trips an update server message with social state", () => {
@@ -153,6 +168,49 @@ describe("wire protocol", () => {
     });
 
     expect(() => decodeServerMessage(welcomeWithoutHistory)).toThrow("invalid server message");
+  });
+
+  it("rejects a welcome message without a world map", () => {
+    const validWelcome: ServerMessage = {
+      type: "welcome",
+      state: {
+        tick: 0,
+        width: 1,
+        height: 1,
+        tiles: [],
+        agents: [],
+        stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+        buildings: [],
+        deaths: [],
+        collectives: [],
+        institutions: [],
+        history: {
+          startYear: -200,
+          currentYear: 0,
+          polities: [],
+          events: [],
+          landmarks: [],
+          settlementOrigin: null,
+          worldMap: {
+            width: 96,
+            height: 64,
+            cells: Array.from({ length: 96 * 64 }, (_, index) => ({
+              terrain: index === 97 ? "plains" : "sea",
+              polityId: null,
+            })),
+            cities: [],
+            tradeRoutes: [],
+            borderChanges: [],
+            settlementFrontierPos: { x: 1, y: 1 },
+          },
+        },
+      },
+    };
+    const encoded = JSON.parse(encodeMessage(validWelcome));
+
+    delete encoded.state.history.worldMap;
+
+    expect(() => decodeServerMessage(JSON.stringify(encoded))).toThrow("invalid server message");
   });
 
   it("rejects an update without death history", () => {

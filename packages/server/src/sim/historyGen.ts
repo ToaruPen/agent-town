@@ -19,6 +19,7 @@ import {
 } from "@agent-town/shared";
 
 import { createRng } from "./rng.js";
+import { generateWorldMap } from "./worldMapGen.js";
 
 interface PolityTemplate {
   name: string;
@@ -609,12 +610,17 @@ export function generateWorldHistory(seed: number, map?: HistoryMap): WorldHisto
   const settlementOrigin = createDeparture(rng, polities, events);
   const landmarks = createLandmarks(rng, map, polities, events);
 
-  return {
+  const history = {
     startYear: -WORLD_HISTORY_YEARS,
     currentYear: 0,
     polities: polities.map(publicPolity),
     events,
     landmarks,
     settlementOrigin,
+  } satisfies Omit<WorldHistory, "worldMap">;
+
+  return {
+    ...history,
+    worldMap: generateWorldMap(seed, history),
   };
 }

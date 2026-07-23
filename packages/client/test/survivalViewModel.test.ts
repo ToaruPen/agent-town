@@ -14,6 +14,7 @@ import {
   latestDeathEvent,
   updateDeathEventSchedule,
 } from "../src/ui/survivalViewModel.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -55,6 +56,7 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
     ...overrides,
   };

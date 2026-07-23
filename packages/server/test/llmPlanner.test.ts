@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmPlanner } from "../src/llm/llmPlanner.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(): AgentState {
   return {
@@ -56,6 +57,7 @@ function createWorld(agent: AgentState): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

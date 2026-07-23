@@ -16,6 +16,7 @@ import {
   validateNormalizedPlanExecutability,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
   return {
@@ -70,6 +71,7 @@ function createWorld(agent: AgentState): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }

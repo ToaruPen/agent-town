@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { dayOfTick, foodDaysRemaining, isWinter, seasonOfTick } from "../src/time.js";
+import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function worldWithFood(food: number, population: number): WorldState {
   return {
@@ -45,6 +46,7 @@ function worldWithFood(food: number, population: number): WorldState {
       events: [],
       landmarks: [],
       settlementOrigin: null,
+      worldMap: makeWorldMapFixture(),
     },
   };
 }
