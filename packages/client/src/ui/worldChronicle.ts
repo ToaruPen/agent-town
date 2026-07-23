@@ -69,6 +69,10 @@ function rankedValues(polity: Polity): string[] {
     .map(({ value }) => CULTURAL_VALUE_LABELS[value]);
 }
 
+function formativeWounds(history: WorldHistory, eventIds: string[]): string[] {
+  return [...new Set(eventTitles(history, eventIds))].slice(-3);
+}
+
 function originView(history: WorldHistory): ChronicleOriginViewModel | null {
   const origin = history.settlementOrigin;
   if (origin === null) return null;
@@ -88,7 +92,7 @@ function polityView(history: WorldHistory, polity: Polity): ChroniclePolityViewM
     adjective: polity.adjective,
     color: polity.color,
     foundingMyth: polity.foundingMyth,
-    traumaTitles: eventTitles(history, polity.formativeTraumaEventIds),
+    traumaTitles: formativeWounds(history, polity.formativeTraumaEventIds),
     taboo: polity.taboo,
     ambition: polity.ambition,
     governance: polity.governance,
@@ -111,8 +115,24 @@ function eventView(history: WorldHistory, eventId: string): ChronicleEventViewMo
   };
 }
 
+function featuredEventIds(history: WorldHistory): Set<string> {
+  const featured = new Set(
+    history.events
+      .filter(({ kind }) => ["anomaly", "founding", "migration", "war"].includes(kind))
+      .map(({ id }) => id),
+  );
+  const departure = history.events.find(
+    ({ id }) => id === history.settlementOrigin?.departureEventId,
+  );
+  for (const causeId of departure?.causeIds ?? []) featured.add(causeId);
+  for (const landmark of history.landmarks) featured.add(landmark.foundedByEventId);
+  return featured;
+}
+
 export function buildWorldChronicleViewModel(history: WorldHistory): WorldChronicleViewModel {
+  const featured = featuredEventIds(history);
   const sortedEventIds = history.events
+    .filter(({ id }) => featured.has(id))
     .toSorted((left, right) => left.year - right.year || left.id.localeCompare(right.id))
     .map(({ id }) => id);
 

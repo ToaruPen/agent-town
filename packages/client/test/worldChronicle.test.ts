@@ -49,7 +49,7 @@ function historyFixture(): WorldHistory {
           { value: "valor", weight: 0.4, changedByEventIds: ["event-war"] },
         ],
         foundingMyth: "The first wardens shared one fire through a winter siege.",
-        formativeTraumaEventIds: ["event-war"],
+        formativeTraumaEventIds: ["event-war", "event-war-repeat"],
         taboo: "Leaving a neighbor unburied.",
         ambition: "Secure every western pass.",
         governance: "Wardens bargain with village moot speakers.",
@@ -94,6 +94,26 @@ function historyFixture(): WorldHistory {
           { kind: "culture", targetId: "polity-1", value: "valor", delta: 0.08 },
         ],
       },
+      {
+        id: "event-war-repeat",
+        year: -60,
+        kind: "war",
+        title: "The Ashen Border War",
+        summary: "The same disputed line burned again.",
+        polityIds: ["polity-1", "polity-2"],
+        causeIds: ["event-war"],
+        effects: [{ kind: "population", targetId: "polity-1", delta: -4 }],
+      },
+      {
+        id: "event-trade",
+        year: -40,
+        kind: "trade",
+        title: "The Sable-Auric Compact",
+        summary: "Merchants reopened a minor road.",
+        polityIds: ["polity-1", "polity-2"],
+        causeIds: [],
+        effects: [{ kind: "population", targetId: "polity-1", delta: 2 }],
+      },
     ],
     landmarks: [],
     settlementOrigin: {
@@ -130,6 +150,7 @@ describe("buildWorldChronicleViewModel", () => {
         causes: ["The Ashen Border War"],
       }),
     );
+    expect(view.events.some(({ id }) => id === "event-trade")).toBe(false);
   });
 });
 

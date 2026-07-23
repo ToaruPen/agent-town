@@ -17,6 +17,7 @@ import {
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
 import { renderAgentLayer } from "./render/agentLayer.js";
 import { renderDeathMarkerLayer, renderDeathTickerLayer } from "./render/deathLayer.js";
+import { renderHistoryLayer } from "./render/historyLayer.js";
 import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
@@ -53,6 +54,7 @@ import {
   latestDeathEvent,
   updateDeathEventSchedule,
 } from "./ui/survivalViewModel.js";
+import { createWorldChronicle } from "./ui/worldChronicle.js";
 
 const HUD_PADDING = 16;
 const NARROW_SCREEN_MAX_WIDTH = 520;
@@ -83,6 +85,11 @@ if (inspectPanelRoot === null) throw new Error("Missing #inspect-panel root");
 const worldStatusElement = document.querySelector<HTMLElement>("#world-status");
 if (worldStatusElement === null) throw new Error("Missing #world-status root");
 const worldStatusRoot: HTMLElement = worldStatusElement;
+const chronicleRoot = document.querySelector<HTMLElement>("#world-chronicle");
+if (chronicleRoot === null) throw new Error("Missing #world-chronicle root");
+const chronicleToggleElement = document.querySelector<HTMLButtonElement>("#chronicle-toggle");
+if (chronicleToggleElement === null) throw new Error("Missing #chronicle-toggle root");
+const chronicleToggleRoot: HTMLButtonElement = chronicleToggleElement;
 
 let selectedAgentId: string | null = null;
 let hoveredAgentId: string | null = null;
@@ -90,6 +97,7 @@ let activeInfoTarget: InfoBubbleTarget | null = null;
 let agentsDirty = false;
 let infoBubbleDirty = false;
 const inspectPanel = createInspectPanel(inspectPanelRoot, closeInspectPanel);
+const chronicle = createWorldChronicle(chronicleRoot, closeWorldChronicle);
 const tapCandidates = new Map<number, TapCandidate>();
 const knownResourceKinds = new Map<number, ResourceKind>();
 const mainTapHistory = createDoubleTapHistory();
@@ -126,7 +134,13 @@ function closeInspectPanel(): void {
   agentsDirty = true;
 }
 
+function closeWorldChronicle(): void {
+  chronicle.close();
+  chronicleToggleRoot.setAttribute("aria-expanded", "false");
+}
+
 function closeInfoBubble(): void {
+  if (activeInfoTarget?.kind === "landmark") historyDirty = true;
   activeInfoTarget = null;
   infoBubbleDirty = true;
   infoBubbleRenderGate.cancel();
@@ -186,8 +200,10 @@ function targetAnnouncement(target: InfoBubbleTarget): string {
 }
 
 function selectInfoTarget(target: InfoBubbleTarget): void {
+  closeWorldChronicle();
   closeInspectPanel();
   activeInfoTarget = target;
+  historyDirty = true;
   infoBubbleDirty = true;
   agentsDirty = true;
   announce(targetAnnouncement(target));
@@ -268,6 +284,7 @@ let structuresDirty = false;
 let deathsDirty = false;
 let tickerDirty = false;
 let hudDirty = false;
+let historyDirty = false;
 
 function syncInspectPanel(next: WorldState): void {
   if (selectedAgentId === null) return;
@@ -283,6 +300,7 @@ function openInspectPanel(agentId: string): void {
   if (state === null) return;
   const agent = state.agents.find((candidate) => candidate.id === agentId);
   if (agent === undefined) return;
+  closeWorldChronicle();
   selectedAgentId = agentId;
   inspectPanel.show(agent);
   agentsDirty = true;
@@ -393,6 +411,11 @@ function handleCanvasKeydown(event: KeyboardEvent): void {
   }
   if (event.key !== "Escape") return;
   event.preventDefault();
+  if (chronicle.isOpen()) {
+    closeWorldChronicle();
+    announce("Chronicle closed.");
+    return;
+  }
   closeInspectPanel();
   closeInfoBubble();
   announce("Selection closed.");
@@ -420,6 +443,8 @@ function replaceState(next: WorldState): void {
   knownResourceKinds.clear();
   observeResourceKinds(next);
   state = next;
+  closeWorldChronicle();
+  chronicleToggleRoot.hidden = next.history.events.length === 0;
   syncKeyboardCursor(next);
   closeInfoBubble();
   viewport.fit(next.width * TILE_SIZE, next.height * TILE_SIZE);
@@ -430,6 +455,7 @@ function replaceState(next: WorldState): void {
   deathsDirty = true;
   tickerDirty = true;
   hudDirty = true;
+  historyDirty = true;
   infoBubbleDirty = true;
   rehitHoveredAgent();
   if (keyboardFocused) announceKeyboardCursor();
@@ -457,6 +483,16 @@ function updateState(next: WorldState): void {
 
 connect(getWebSocketUrl(window.location), { onWelcome: replaceState, onUpdate: updateState });
 
+function openWorldChronicle(): void {
+  if (state === null) return;
+  closeInspectPanel();
+  closeInfoBubble();
+  chronicle.show(state.history);
+  chronicleToggleRoot.setAttribute("aria-expanded", "true");
+  announce(`Opened the ${state.history.currentYear - state.history.startYear}-year chronicle.`);
+}
+
+chronicleToggleRoot.addEventListener("click", openWorldChronicle);
 app.canvas.addEventListener("pointerleave", clearHoveredAgent);
 app.canvas.addEventListener("keydown", handleCanvasKeydown);
 app.canvas.addEventListener("focus", () => {
@@ -484,6 +520,11 @@ function renderDirtyWorldLayers(currentState: WorldState): void {
   if (structuresDirty) {
     renderStructureLayer(objectLayer, currentState.buildings);
     structuresDirty = false;
+  }
+  if (historyDirty) {
+    const landmarkId = activeInfoTarget?.kind === "landmark" ? activeInfoTarget.landmarkId : null;
+    renderHistoryLayer(objectLayer, currentState.history.landmarks, landmarkId);
+    historyDirty = false;
   }
   if (agentsDirty) {
     const bubbleAgentId =

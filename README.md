@@ -27,6 +27,12 @@ just check
 
 See [docs/superpowers/specs/](docs/superpowers/specs/).
 
+## Observe the old world
+
+- Open **Chronicle** to inspect the four old-world polities and the settlers' reason for leaving.
+- Select a ruin, border keep, or standing stone to trace it to the event that created it.
+- World history is deterministic for the server seed and does not consume LLM quota.
+
 ## LLM mode
 
 Residents can be routed independently through logged-in Claude Code and Codex CLIs.
