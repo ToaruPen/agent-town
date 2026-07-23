@@ -517,7 +517,7 @@ function openWorldChronicle(): void {
   closeInfoBubble();
   chronicle.show(state.history);
   chronicleToggleRoot.setAttribute("aria-expanded", "true");
-  announce(`${state.history.currentYear - state.history.startYear}年分の年代記を開きました。`);
+  announce("世界地図を開きました。");
 }
 
 chronicleToggleRoot.addEventListener("click", openWorldChronicle);

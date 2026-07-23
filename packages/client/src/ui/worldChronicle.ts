@@ -1,5 +1,12 @@
 import type { CulturalValue, HistoryEventKind, Polity, WorldHistory } from "@agent-town/shared";
 
+import {
+  buildWorldMapViewModel,
+  polityIdAtWorldMapPosition,
+  renderWorldMapCanvas,
+  worldMapPositionFromPointer,
+} from "./worldMapView.js";
+
 const CULTURAL_VALUE_LABELS: Record<CulturalValue, string> = {
   commerce: "交易",
   faith: "信仰",
@@ -279,6 +286,120 @@ function eventSection(events: ChronicleEventViewModel[]): HTMLElement {
   return section;
 }
 
+function chroniclePanel(view: WorldChronicleViewModel): HTMLElement {
+  const panel = element("div", "world-chronicle__chronicle-panel");
+  panel.id = "world-chronicle-chronicle-panel";
+  panel.hidden = true;
+  panel.setAttribute("role", "tabpanel");
+  panel.setAttribute("aria-labelledby", "world-chronicle-chronicle-tab");
+  panel.append(originSection(view.origin), politySection(view.polities), eventSection(view.events));
+  return panel;
+}
+
+interface LegendItem {
+  label: string;
+  modifier: string;
+  symbol: string;
+}
+
+function legendList(title: string, items: LegendItem[]): HTMLElement {
+  const group = element("section", "world-chronicle__legend-group");
+  group.append(element("h4", "world-chronicle__legend-title", title));
+  const list = element("ul", "world-chronicle__legend-list");
+  for (const item of items) {
+    const listItem = element("li", "world-chronicle__legend-item");
+    const symbol = element(
+      "span",
+      `world-chronicle__legend-symbol world-chronicle__legend-symbol--${item.modifier}`,
+      item.symbol,
+    );
+    symbol.setAttribute("aria-hidden", "true");
+    listItem.append(symbol, element("span", "world-chronicle__legend-label", item.label));
+    list.append(listItem);
+  }
+  group.append(list);
+  return group;
+}
+
+function mapLegend(): HTMLElement {
+  const legend = element("div", "world-chronicle__map-legend");
+  legend.setAttribute("aria-label", "世界地図の凡例");
+  legend.append(
+    legendList("地形", [
+      { label: "海", modifier: "sea", symbol: "■" },
+      { label: "平地", modifier: "plains", symbol: "■" },
+      { label: "森", modifier: "forest", symbol: "■" },
+      { label: "丘陵", modifier: "hills", symbol: "■" },
+      { label: "山地", modifier: "mountains", symbol: "■" },
+    ]),
+    legendList("記号", [
+      { label: "首都", modifier: "capital", symbol: "◎" },
+      { label: "都市", modifier: "city", symbol: "●" },
+      { label: "交易路", modifier: "route", symbol: "━" },
+      { label: "現在地", modifier: "settlement", symbol: "◇" },
+    ]),
+  );
+  return legend;
+}
+
+function selectionPrompt(): HTMLElement {
+  return element("p", "world-chronicle__map-prompt", "地図上の勢力を選択してください。");
+}
+
+function selectedPolityViews(
+  history: WorldHistory,
+  chronicle: WorldChronicleViewModel,
+): ReadonlyMap<string, ChroniclePolityViewModel> {
+  return new Map(
+    history.polities.flatMap((polity, index) => {
+      const view = chronicle.polities[index];
+      return view === undefined ? [] : [[polity.id, view] as const];
+    }),
+  );
+}
+
+function replaceMapSelection(
+  container: HTMLElement,
+  polities: ReadonlyMap<string, ChroniclePolityViewModel>,
+  selectedPolityId: string | null,
+): void {
+  const selected = selectedPolityId === null ? undefined : polities.get(selectedPolityId);
+  container.replaceChildren(selected === undefined ? selectionPrompt() : polityCard(selected));
+}
+
+function mapPanel(history: WorldHistory, chronicle: WorldChronicleViewModel): HTMLElement {
+  const panel = element("section", "world-chronicle__map-panel");
+  panel.id = "world-chronicle-map-panel";
+  panel.setAttribute("role", "tabpanel");
+  panel.setAttribute("aria-labelledby", "world-chronicle-map-tab");
+
+  const canvasWrapper = element("div", "world-chronicle__map-canvas-wrapper");
+  const canvas = element("canvas", "world-chronicle__map-canvas");
+  canvas.setAttribute("aria-label", "現存国家、都市、交易路、現在地を示す世界地図");
+  canvasWrapper.append(canvas);
+
+  const selection = element("div", "world-chronicle__map-selection");
+  const polityViews = selectedPolityViews(history, chronicle);
+  let mapView = buildWorldMapViewModel(history, null);
+  renderWorldMapCanvas(canvas, mapView);
+  replaceMapSelection(selection, polityViews, null);
+  canvas.addEventListener("pointerup", (event) => {
+    const pos = worldMapPositionFromPointer(
+      mapView,
+      canvas.getBoundingClientRect(),
+      event.clientX,
+      event.clientY,
+    );
+    const selectedPolityId = pos === null ? null : polityIdAtWorldMapPosition(mapView, pos);
+    mapView = buildWorldMapViewModel(history, selectedPolityId);
+    renderWorldMapCanvas(canvas, mapView);
+    replaceMapSelection(selection, polityViews, selectedPolityId);
+  });
+
+  panel.append(canvasWrapper, mapLegend(), selection);
+  return panel;
+}
+
 interface ChronicleHeader {
   header: HTMLElement;
   closeButton: HTMLButtonElement;
@@ -295,18 +416,62 @@ function chronicleHeader(view: WorldChronicleViewModel, onClose: () => void): Ch
   return { header, closeButton: close };
 }
 
+interface ChronicleTabs {
+  tabList: HTMLElement;
+  mapTab: HTMLButtonElement;
+  chronicleTab: HTMLButtonElement;
+}
+
+function chronicleTabs(): ChronicleTabs {
+  const tabList = element("div", "world-chronicle__tabs");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "旧世界の表示");
+
+  const mapTab = element("button", "world-chronicle__tab world-chronicle__tab--map", "世界地図");
+  mapTab.id = "world-chronicle-map-tab";
+  mapTab.type = "button";
+  mapTab.setAttribute("role", "tab");
+  mapTab.setAttribute("aria-selected", "true");
+  mapTab.setAttribute("aria-controls", "world-chronicle-map-panel");
+
+  const chronicleTab = element(
+    "button",
+    "world-chronicle__tab world-chronicle__tab--chronicle",
+    "年代記",
+  );
+  chronicleTab.id = "world-chronicle-chronicle-tab";
+  chronicleTab.type = "button";
+  chronicleTab.setAttribute("role", "tab");
+  chronicleTab.setAttribute("aria-selected", "false");
+  chronicleTab.setAttribute("aria-controls", "world-chronicle-chronicle-panel");
+
+  tabList.append(mapTab, chronicleTab);
+  return { tabList, mapTab, chronicleTab };
+}
+
+function bindTabs(tabs: ChronicleTabs, map: HTMLElement, chronicle: HTMLElement): void {
+  const selectMap = (showMap: boolean): void => {
+    tabs.mapTab.setAttribute("aria-selected", String(showMap));
+    tabs.chronicleTab.setAttribute("aria-selected", String(!showMap));
+    map.hidden = !showMap;
+    chronicle.hidden = showMap;
+  };
+  tabs.mapTab.addEventListener("click", () => selectMap(true));
+  tabs.chronicleTab.addEventListener("click", () => selectMap(false));
+}
+
 function renderChronicle(
   root: HTMLElement,
-  view: WorldChronicleViewModel,
+  history: WorldHistory,
   onClose: () => void,
 ): HTMLButtonElement {
+  const view = buildWorldChronicleViewModel(history);
   const { header, closeButton } = chronicleHeader(view, onClose);
-  root.replaceChildren(
-    header,
-    originSection(view.origin),
-    politySection(view.polities),
-    eventSection(view.events),
-  );
+  const tabs = chronicleTabs();
+  const map = mapPanel(history, view);
+  const chronicle = chroniclePanel(view);
+  bindTabs(tabs, map, chronicle);
+  root.replaceChildren(header, tabs.tabList, map, chronicle);
   return closeButton;
 }
 
@@ -317,7 +482,7 @@ export function createWorldChronicle(
 ): WorldChronicleController {
   return {
     show(history: WorldHistory): void {
-      const closeButton = renderChronicle(root, buildWorldChronicleViewModel(history), onClose);
+      const closeButton = renderChronicle(root, history, onClose);
       root.hidden = false;
       closeButton.focus();
     },

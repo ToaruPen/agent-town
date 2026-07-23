@@ -1,4 +1,10 @@
-import type { WorldHistory } from "@agent-town/shared";
+import {
+  WORLD_MAP_CELL_SIZE_PX,
+  WORLD_MAP_HEIGHT,
+  WORLD_MAP_WIDTH,
+  type WorldHistory,
+  type WorldMap,
+} from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -18,9 +24,16 @@ afterEach(() => {
 class FakeElement {
   className = "";
   hidden = false;
+  id = "";
   textContent: string | null = null;
+  type = "";
+  width = 0;
+  height = 0;
   readonly children: FakeElement[] = [];
   readonly style = { setProperty: () => undefined };
+  readonly attributes = new Map<string, string>();
+  readonly listeners = new Map<string, Array<(event: FakeEvent) => void>>();
+  readonly context = new FakeCanvasContext();
   attributeWrites = 0;
   listenerWrites = 0;
 
@@ -34,12 +47,20 @@ class FakeElement {
     this.children.splice(0, this.children.length, ...children);
   }
 
-  setAttribute(): void {
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
     this.attributeWrites += 1;
   }
 
-  addEventListener(): void {
+  addEventListener(type: string, listener: (event: FakeEvent) => void): void {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
     this.listenerWrites += 1;
+  }
+
+  dispatch(type: string, event: FakeEvent = {}): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(event);
   }
 
   focus(): void {
@@ -47,7 +68,7 @@ class FakeElement {
   }
 
   findByClass(className: string): FakeElement | null {
-    if (this.className === className) return this;
+    if (this.className.split(" ").includes(className)) return this;
     for (const child of this.children) {
       const match = child.findByClass(className);
       if (match !== null) return match;
@@ -58,6 +79,118 @@ class FakeElement {
   allText(): string {
     return [this.textContent ?? "", ...this.children.map((child) => child.allText())].join(" ");
   }
+
+  getBoundingClientRect(): Pick<DOMRect, "left" | "top" | "width" | "height"> {
+    return { left: 0, top: 0, width: this.width, height: this.height };
+  }
+
+  getContext(contextId: string): FakeCanvasContext | null {
+    return contextId === "2d" ? this.context : null;
+  }
+}
+
+interface FakeEvent {
+  clientX?: number;
+  clientY?: number;
+}
+
+class FakeCanvasContext {
+  fillStyle = "";
+  globalAlpha = 1;
+  imageSmoothingEnabled = true;
+  lineCap = "butt";
+  lineWidth = 1;
+  strokeStyle = "";
+  textBaseline = "alphabetic";
+  readonly calls: string[] = [];
+
+  arc(): void {
+    this.calls.push("arc");
+  }
+
+  beginPath(): void {
+    this.calls.push("beginPath");
+  }
+
+  closePath(): void {
+    this.calls.push("closePath");
+  }
+
+  fill(): void {
+    this.calls.push("fill");
+  }
+
+  fillRect(): void {
+    this.calls.push("fillRect");
+  }
+
+  fillText(text: string): void {
+    this.calls.push(`fillText:${text}`);
+  }
+
+  lineTo(): void {
+    this.calls.push("lineTo");
+  }
+
+  moveTo(): void {
+    this.calls.push("moveTo");
+  }
+
+  stroke(): void {
+    this.calls.push("stroke");
+  }
+}
+
+function richWorldMapFixture(): WorldMap {
+  const map = makeWorldMapFixture();
+  map.cells[1 * WORLD_MAP_WIDTH + 1] = {
+    terrain: "plains",
+    polityId: "polity-1",
+  };
+  map.cells[1 * WORLD_MAP_WIDTH + 2] = {
+    terrain: "forest",
+    polityId: "polity-2",
+  };
+  map.cells[2 * WORLD_MAP_WIDTH + 3] = {
+    terrain: "plains",
+    polityId: null,
+  };
+  map.cities = [
+    {
+      id: "city-polity-1-1",
+      name: "黒貂府",
+      pos: { x: 1, y: 1 },
+      polityId: "polity-1",
+      isCapital: true,
+      foundedByEventId: "event-war",
+    },
+    {
+      id: "city-polity-2-1",
+      name: "金環府",
+      pos: { x: 2, y: 1 },
+      polityId: "polity-2",
+      isCapital: true,
+      foundedByEventId: "event-trade",
+    },
+  ];
+  map.tradeRoutes = [
+    {
+      id: "route-event-trade",
+      cityIds: ["city-polity-1-1", "city-polity-2-1"],
+      establishedByEventId: "event-trade",
+    },
+  ];
+  map.borderChanges = [
+    {
+      id: "border-event-war-1",
+      pos: { x: 2, y: 1 },
+      formerPolityId: "polity-1",
+      currentPolityId: "polity-2",
+      establishedByEventId: "event-war",
+    },
+  ];
+  map.settlementFrontierPos = { x: 3, y: 2 };
+  return map;
 }
 
 function historyFixture(): WorldHistory {
@@ -149,8 +282,27 @@ function historyFixture(): WorldHistory {
       reason: "国境戦争の後、最後の穀倉が尽きた。",
       inheritedValues: ["mutualAid", "order"],
     },
-    worldMap: makeWorldMapFixture(),
+    worldMap: richWorldMapFixture(),
   };
+}
+
+function installFakeDocument(): Map<
+  string,
+  (event: { key: string; preventDefault(): void }) => void
+> {
+  const documentListeners = new Map<
+    string,
+    (event: { key: string; preventDefault(): void }) => void
+  >();
+  vi.stubGlobal("document", {
+    createElement: (tagName: string) => new FakeElement(tagName),
+    addEventListener: (
+      type: string,
+      listener: (event: { key: string; preventDefault(): void }) => void,
+    ) => documentListeners.set(type, listener),
+    removeEventListener: (type: string) => documentListeners.delete(type),
+  });
+  return documentListeners;
 }
 
 describe("buildWorldChronicleViewModel", () => {
@@ -199,18 +351,7 @@ describe("createWorldChronicle", () => {
     const root = new FakeElement("aside");
     const toggle = new FakeElement("button");
     root.hidden = true;
-    const documentListeners = new Map<
-      string,
-      (event: { key: string; preventDefault(): void }) => void
-    >();
-    vi.stubGlobal("document", {
-      createElement: (tagName: string) => new FakeElement(tagName),
-      addEventListener: (
-        type: string,
-        listener: (event: { key: string; preventDefault(): void }) => void,
-      ) => documentListeners.set(type, listener),
-      removeEventListener: (type: string) => documentListeners.delete(type),
-    });
+    const documentListeners = installFakeDocument();
 
     const controller = createWorldChronicle(
       root as unknown as HTMLElement,
@@ -243,5 +384,65 @@ describe("createWorldChronicle", () => {
     expect(focusedElement).toBe(toggle);
     release();
     expect(documentListeners.has("keydown")).toBe(false);
+  });
+
+  it("opens on the map, reuses the polity card after selection, and switches to the chronicle", () => {
+    const root = new FakeElement("aside");
+    const toggle = new FakeElement("button");
+    root.hidden = true;
+    const documentListeners = installFakeDocument();
+    const controller = createWorldChronicle(
+      root as unknown as HTMLElement,
+      vi.fn(),
+      toggle as unknown as HTMLElement,
+    );
+
+    controller.show(historyFixture());
+
+    const mapTab = root.findByClass("world-chronicle__tab--map");
+    const chronicleTab = root.findByClass("world-chronicle__tab--chronicle");
+    const mapPanel = root.findByClass("world-chronicle__map-panel");
+    const chroniclePanel = root.findByClass("world-chronicle__chronicle-panel");
+    const canvas = root.findByClass("world-chronicle__map-canvas");
+    expect(root.allText()).toContain("世界地図");
+    expect(root.allText()).toContain("年代記");
+    expect(root.allText()).toContain("現在地");
+    expect(root.allText()).not.toMatch(/[A-Za-z]/);
+    expect(mapTab?.attributes.get("aria-selected")).toBe("true");
+    expect(chronicleTab?.attributes.get("aria-selected")).toBe("false");
+    expect(mapPanel?.hidden).toBe(false);
+    expect(chroniclePanel?.hidden).toBe(true);
+    expect(canvas?.width).toBe(WORLD_MAP_WIDTH * WORLD_MAP_CELL_SIZE_PX);
+    expect(canvas?.height).toBe(WORLD_MAP_HEIGHT * WORLD_MAP_CELL_SIZE_PX);
+    expect(canvas?.context.calls).toContain("fillText:現在地");
+
+    canvas?.dispatch("pointerup", { clientX: 9, clientY: 9 });
+
+    const selectedCard = root.findByClass("world-chronicle__map-selection");
+    expect(selectedCard?.allText()).toContain("黒貂辺境国");
+    expect(selectedCard?.allText()).toContain("建国譚");
+    expect(selectedCard?.allText()).toContain("統治");
+    expect(selectedCard?.allText()).toContain("禁忌");
+    expect(selectedCard?.allText()).toContain("悲願");
+    expect(selectedCard?.allText()).toContain("刻まれた傷");
+
+    chronicleTab?.dispatch("click");
+
+    expect(mapTab?.attributes.get("aria-selected")).toBe("false");
+    expect(chronicleTab?.attributes.get("aria-selected")).toBe("true");
+    expect(mapPanel?.hidden).toBe(true);
+    expect(chroniclePanel?.hidden).toBe(false);
+    expect(chroniclePanel?.allText()).toContain("黒貂の旅立ち");
+    expect(chroniclePanel?.allText()).toContain("黒貂・金環国境戦争");
+
+    const release = bindWorldChronicleEscape(controller, () => controller.close());
+    documentListeners.get("keydown")?.({
+      key: "Escape",
+      preventDefault: vi.fn(),
+    });
+
+    expect(controller.isOpen()).toBe(false);
+    expect(focusedElement).toBe(toggle);
+    release();
   });
 });
