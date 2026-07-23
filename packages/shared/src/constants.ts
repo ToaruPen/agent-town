@@ -1,5 +1,6 @@
 import type { CulturalValue } from "./history.js";
 import type { InstitutionKind } from "./society.js";
+import type { WorldMapTerrain } from "./worldMap.js";
 
 export const TICK_RATE = 10; // sim ticks per second
 export const TICKS_PER_DAY = 2400;
@@ -71,6 +72,38 @@ export const WORLD_HISTORY_TURN_YEARS = 20;
 export const WORLD_POLITY_COUNT = 4;
 export const WORLD_LANDMARK_MIN_DISTANCE = 12;
 export const WORLD_LANDMARK_FALLBACK_DISTANCE = 6;
+export const WORLD_MAP_WIDTH = 96;
+export const WORLD_MAP_HEIGHT = 64;
+export const WORLD_MAP_RNG_SALT = 0x9e3779b9;
+export const WORLD_MAP_NOISE_PASSES = 3;
+export const WORLD_MAP_ELEVATION_NOISE_WEIGHT = 0.55;
+export const WORLD_MAP_CENTER_BIAS_WEIGHT = 0.45;
+export const WORLD_MAP_LAND_THRESHOLD = 0.46;
+export const WORLD_MAP_HILLS_THRESHOLD = 0.62;
+export const WORLD_MAP_MOUNTAINS_THRESHOLD = 0.76;
+export const WORLD_MAP_FOREST_MOISTURE_THRESHOLD = 0.54;
+export const WORLD_MAP_CLAIMED_LAND_RATIO = 0.7;
+export const WORLD_MAP_CAPITAL_MIN_DISTANCE = 12;
+export const WORLD_MAP_CITY_MIN_DISTANCE = 5;
+export const WORLD_MAP_CITY_COUNT_MIN = 1;
+export const WORLD_MAP_CITY_COUNT_MAX = 3;
+export const WORLD_MAP_WAR_BORDER_CELLS_PER_EVENT = 2;
+export const WORLD_MAP_CELL_SIZE_PX = 6;
+export const WORLD_MAP_CITY_RADIUS_PX = 2;
+export const WORLD_MAP_CAPITAL_RADIUS_PX = 3;
+export const WORLD_MAP_SETTLEMENT_RADIUS_PX = 4;
+export const WORLD_MAP_POLITY_ALPHA = 0.28;
+export const WORLD_MAP_SELECTED_POLITY_ALPHA = 0.52;
+
+export const WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS: Readonly<Record<WorldMapTerrain, number>> = {
+  sea: 0,
+  plains: 1,
+  forest: 0.8,
+  hills: 0.55,
+  mountains: 0.2,
+};
+
+export const WORLD_CITY_NAME_SUFFIXES = ["府", "市", "砦"] as const;
 
 export const INSTITUTION_KINDS = [
   "communalGranaryStore",
