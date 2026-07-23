@@ -18,9 +18,7 @@ export interface ChronicleOriginViewModel {
 }
 
 export interface ChroniclePolityViewModel {
-  id: string;
   name: string;
-  adjective: string;
   color: number;
   foundingMyth: string;
   traumaTitles: string[];
@@ -42,13 +40,11 @@ export interface ChronicleValueCauseViewModel {
 }
 
 export interface ChronicleEventViewModel {
-  id: string;
   year: number;
   kind: HistoryEventKind;
   title: string;
   summary: string;
   causes: string[];
-  polityIds: string[];
 }
 
 export interface WorldChronicleViewModel {
@@ -110,9 +106,7 @@ function originView(history: WorldHistory): ChronicleOriginViewModel | null {
 
 function polityView(history: WorldHistory, polity: Polity): ChroniclePolityViewModel {
   return {
-    id: polity.id,
     name: polity.name,
-    adjective: polity.adjective,
     color: polity.color,
     foundingMyth: polity.foundingMyth,
     traumaTitles: formativeWounds(history, polity.formativeTraumaEventIds),
@@ -128,13 +122,11 @@ function eventView(history: WorldHistory, eventId: string): ChronicleEventViewMo
   const event = history.events.find(({ id }) => id === eventId);
   if (event === undefined) return null;
   return {
-    id: event.id,
     year: event.year,
     kind: event.kind,
     title: event.title,
     summary: event.summary,
     causes: eventTitles(history, event.causeIds),
-    polityIds: event.polityIds,
   };
 }
 

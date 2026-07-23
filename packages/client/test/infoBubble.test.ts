@@ -12,6 +12,7 @@ import {
   beginInfoBubbleInteraction,
   buildAgentBubbleText,
   buildHouseBubbleText,
+  buildLandmarkBubbleText,
   buildResourceBubbleText,
   buildStockpileBubbleText,
   buildTerrainBubbleText,
@@ -279,15 +280,11 @@ describe("resolveInfoBubbleTarget", () => {
         settlementOrigin: null,
       },
     });
-    const module = await import("../src/ui/infoBubble.js");
-    const builder = Reflect.get(module, "buildLandmarkBubbleText");
-
     expect(resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 })).toEqual({
       kind: "landmark",
       landmarkId: "landmark-1",
     });
-    expect(typeof builder).toBe("function");
-    expect(builder(world.history.landmarks[0], world.history)).toBe(
+    expect(buildLandmarkBubbleText(world.history.landmarks[0], world.history)).toBe(
       "Old Border Keep — raised after The Ashen Border War, year -80",
     );
   });

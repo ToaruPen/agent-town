@@ -520,13 +520,7 @@ class CodexChildMonitor {
   }
 
   private guardUnconfirmedProcess(): void {
-    this.child.stdout.off("data", this.onStdoutData);
-    this.child.stderr.off("data", this.onStderrData);
-    this.child.stdout.off("error", this.onStdoutError);
-    this.child.stderr.off("error", this.onStderrError);
-    this.child.stdin.off("error", this.onStdinError);
-    this.child.off("error", this.onProcessError);
-    this.child.off("close", this.onClose);
+    this.detachListeners();
     this.child.stdout.on("error", ignoreLateError);
     this.child.stderr.on("error", ignoreLateError);
     this.child.stdin.on("error", ignoreLateError);

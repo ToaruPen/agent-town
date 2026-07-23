@@ -1,7 +1,18 @@
 import type { WorldHistory } from "@agent-town/shared";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  bindWorldChronicleEscape,
+  buildWorldChronicleViewModel,
+  createWorldChronicle,
+} from "../src/ui/worldChronicle.js";
 
 let focusedElement: FakeElement | null = null;
+
+afterEach(() => {
+  focusedElement = null;
+  vi.unstubAllGlobals();
+});
 
 class FakeElement {
   className = "";
@@ -141,8 +152,7 @@ function historyFixture(): WorldHistory {
 }
 
 describe("buildWorldChronicleViewModel", () => {
-  it("resolves the homeland, inherited values, trauma titles, and event causes", async () => {
-    const { buildWorldChronicleViewModel } = await import("../src/ui/worldChronicle.js");
+  it("resolves the homeland, inherited values, trauma titles, and event causes", () => {
     const view = buildWorldChronicleViewModel(historyFixture());
 
     expect(view.eraLabel).toBe("200 years before settlement");
@@ -178,15 +188,12 @@ describe("buildWorldChronicleViewModel", () => {
         causes: ["The Ashen Border War"],
       }),
     );
-    expect(view.events.some(({ id }) => id === "event-trade")).toBe(true);
+    expect(view.events.some(({ title }) => title === "The Sable-Auric Compact")).toBe(true);
   });
 });
 
 describe("createWorldChronicle", () => {
-  it("moves focus into a text-safe chronicle and returns it when closed with Escape", async () => {
-    const module = await import("../src/ui/worldChronicle.js");
-    const factory = Reflect.get(module, "createWorldChronicle");
-    const bindEscape = Reflect.get(module, "bindWorldChronicleEscape");
+  it("moves focus into a text-safe chronicle and returns it when closed with Escape", () => {
     const root = new FakeElement("aside");
     const toggle = new FakeElement("button");
     root.hidden = true;
@@ -203,17 +210,11 @@ describe("createWorldChronicle", () => {
       removeEventListener: (type: string) => documentListeners.delete(type),
     });
 
-    expect(typeof factory).toBe("function");
-    expect(typeof bindEscape).toBe("function");
-    const controller = factory(
+    const controller = createWorldChronicle(
       root as unknown as HTMLElement,
       vi.fn(),
       toggle as unknown as HTMLElement,
-    ) as {
-      show(history: WorldHistory): void;
-      close(): void;
-      isOpen(): boolean;
-    };
+    );
     controller.show(historyFixture());
 
     expect(controller.isOpen()).toBe(true);
@@ -223,7 +224,7 @@ describe("createWorldChronicle", () => {
     expect(root.allText()).toContain("The Ashen Border War");
     expect(root.allText()).toContain("Strengthened by −40 · The Sable-Auric Compact");
 
-    const release = bindEscape(controller, () => controller.close()) as () => void;
+    const release = bindWorldChronicleEscape(controller, () => controller.close());
     let prevented = 0;
     documentListeners.get("keydown")?.({
       key: "Escape",
@@ -239,6 +240,5 @@ describe("createWorldChronicle", () => {
     expect(focusedElement).toBe(toggle);
     release();
     expect(documentListeners.has("keydown")).toBe(false);
-    vi.unstubAllGlobals();
   });
 });

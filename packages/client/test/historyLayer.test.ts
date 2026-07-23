@@ -2,6 +2,8 @@ import type { HistoricalLandmark, Polity } from "@agent-town/shared";
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
+import { landmarkSelectionColor, renderHistoryLayer } from "../src/render/historyLayer.js";
+
 const landmarks: HistoricalLandmark[] = [
   {
     id: "ruin",
@@ -57,14 +59,10 @@ const polities: Polity[] = [
 ];
 
 describe("renderHistoryLayer", () => {
-  it("draws each landmark once and clears stale landmarks", async () => {
-    const module = await import("../src/render/historyLayer.js");
-    const { renderHistoryLayer } = module;
-    const selectionColor = Reflect.get(module, "landmarkSelectionColor");
+  it("draws each landmark once and clears stale landmarks", () => {
     const layer = new Container();
 
-    expect(typeof selectionColor).toBe("function");
-    expect(selectionColor(landmarks[2], polities)).toBe(0x8878a6);
+    expect(landmarkSelectionColor(landmarks[2], polities)).toBe(0x8878a6);
     renderHistoryLayer(layer, landmarks, polities, "stone");
     expect(layer.children).toHaveLength(3);
     expect(layer.children.every(({ label }) => label === "landmark-object")).toBe(true);
