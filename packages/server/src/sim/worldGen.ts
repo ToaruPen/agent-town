@@ -21,6 +21,7 @@ import {
   type WorldState,
 } from "@agent-town/shared";
 
+import { generateWorldHistory } from "./historyGen.js";
 import { createRng } from "./rng.js";
 
 type ImpassableTerrain = Extract<Terrain, "water" | "rock">;
@@ -148,13 +149,6 @@ export function generateWorld(seed: number): WorldState {
     stockpile: { pos: stockpilePosition, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-    },
+    history: generateWorldHistory(seed),
   };
 }

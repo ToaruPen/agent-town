@@ -10,6 +10,9 @@ import {
   type Position,
   WOOD_RESOURCE_MAX,
   WOOD_RESOURCE_MIN,
+  WORLD_HISTORY_YEARS,
+  WORLD_POLITY_COUNT,
+  type WorldHistory,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
@@ -18,6 +21,15 @@ import { generateWorld } from "../src/sim/worldGen.js";
 
 function tileAt(tiles: ReturnType<typeof generateWorld>["tiles"], pos: Position) {
   return tiles[pos.y * MAP_WIDTH + pos.x];
+}
+
+function historicalReferenceIds(history: WorldHistory): string[] {
+  return [
+    ...history.events.flatMap(({ causeIds }) => causeIds),
+    ...history.polities.flatMap(({ formativeTraumaEventIds }) => formativeTraumaEventIds),
+    ...history.landmarks.map(({ foundedByEventId }) => foundedByEventId),
+    ...(history.settlementOrigin === null ? [] : [history.settlementOrigin.departureEventId]),
+  ];
 }
 
 describe("generateWorld", () => {
@@ -141,6 +153,51 @@ describe("generateWorld", () => {
 
   it("starts without buildings", () => {
     expect(generateWorld(42).buildings).toEqual([]);
+  });
+
+  it("simulates two centuries across four old-world polities", () => {
+    const history = generateWorld(42).history;
+
+    expect(history.currentYear - history.startYear).toBe(WORLD_HISTORY_YEARS);
+    expect(history.polities).toHaveLength(WORLD_POLITY_COUNT);
+    expect(history.settlementOrigin).not.toBeNull();
+  });
+
+  it("changes the old-world outcome for a different seed", () => {
+    expect(generateWorld(42).history).not.toEqual(generateWorld(43).history);
+  });
+
+  it("keeps every historical cause, trauma, origin, and landmark reference resolvable", () => {
+    const history = generateWorld(42).history;
+    const eventIds = new Set(history.events.map(({ id }) => id));
+
+    expect(historicalReferenceIds(history).every((id) => eventIds.has(id))).toBe(true);
+  });
+
+  it("records a costly magical anomaly and derives migration from an earlier pressure", () => {
+    const history = generateWorld(42).history;
+    const anomaly = history.events.find(({ kind }) => kind === "anomaly");
+    const departure = history.events.find(
+      ({ id }) => id === history.settlementOrigin?.departureEventId,
+    );
+
+    expect(anomaly?.effects.some(({ kind }) => kind === "culture")).toBe(true);
+    expect(anomaly?.effects.some(({ kind }) => kind === "population")).toBe(true);
+    expect(departure?.kind).toBe("migration");
+    expect(departure?.causeIds.length).toBeGreaterThan(0);
+  });
+
+  it("preserves historical referential integrity across one hundred seeds", () => {
+    for (let seed = 0; seed < 100; seed += 1) {
+      const history = generateWorld(seed).history;
+      const ids = new Set(history.events.map(({ id }) => id));
+
+      expect(ids.size).toBe(history.events.length);
+      expect(history.polities).toHaveLength(WORLD_POLITY_COUNT);
+      expect(history.events.every(({ causeIds }) => causeIds.every((id) => ids.has(id)))).toBe(
+        true,
+      );
+    }
   });
 });
 
