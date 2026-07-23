@@ -55,6 +55,12 @@ interface QuotaDraft {
 type Rng = () => number;
 
 const WORLD_MAP_CELL_COUNT = WORLD_MAP_WIDTH * WORLD_MAP_HEIGHT;
+const FOUR_NEIGHBOR_INDEX = Array.from({ length: WORLD_MAP_CELL_COUNT }, (_value, index) =>
+  createFourNeighborIndices(index),
+);
+const EIGHT_NEIGHBOR_INDEX = Array.from({ length: WORLD_MAP_CELL_COUNT }, (_value, index) =>
+  createEightNeighborIndices(index),
+);
 
 function indexOf(pos: Position): number {
   return pos.y * WORLD_MAP_WIDTH + pos.x;
@@ -68,7 +74,7 @@ function inBounds(pos: Position): boolean {
   return pos.x >= 0 && pos.x < WORLD_MAP_WIDTH && pos.y >= 0 && pos.y < WORLD_MAP_HEIGHT;
 }
 
-function fourNeighborIndices(index: number): number[] {
+function createFourNeighborIndices(index: number): number[] {
   const pos = positionOf(index);
   return [
     { x: pos.x, y: pos.y - 1 },
@@ -81,7 +87,11 @@ function fourNeighborIndices(index: number): number[] {
     .toSorted((left, right) => left - right);
 }
 
-function eightNeighborIndices(index: number): number[] {
+function fourNeighborIndices(index: number): readonly number[] {
+  return FOUR_NEIGHBOR_INDEX[index] ?? [];
+}
+
+function createEightNeighborIndices(index: number): number[] {
   const pos = positionOf(index);
   const neighbors: number[] = [];
   for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
@@ -92,6 +102,10 @@ function eightNeighborIndices(index: number): number[] {
     }
   }
   return neighbors;
+}
+
+function eightNeighborIndices(index: number): readonly number[] {
+  return EIGHT_NEIGHBOR_INDEX[index] ?? [];
 }
 
 function clampUnit(value: number): number {
@@ -124,9 +138,10 @@ function createScalarField(rng: Rng): number[] {
 }
 
 function smoothCell(field: readonly number[], index: number): number {
-  const indices = [index, ...eightNeighborIndices(index)];
-  const sum = indices.reduce((total, neighbor) => total + (field[neighbor] ?? 0), 0);
-  return sum / indices.length;
+  const neighbors = eightNeighborIndices(index);
+  let sum = field[index] ?? 0;
+  for (const neighbor of neighbors) sum += field[neighbor] ?? 0;
+  return sum / (neighbors.length + 1);
 }
 
 function smoothField(field: readonly number[]): number[] {
@@ -172,9 +187,11 @@ function landComponent(
 ): number[] {
   const component: number[] = [];
   const pending = [start];
+  let pendingIndex = 0;
   visited.add(start);
-  while (pending.length > 0) {
-    const index = pending.shift();
+  while (pendingIndex < pending.length) {
+    const index = pending[pendingIndex];
+    pendingIndex += 1;
     if (index === undefined) break;
     component.push(index);
     for (const neighbor of fourNeighborIndices(index)) {
@@ -364,16 +381,129 @@ function countTerritories(cells: readonly WorldMapCell[]): Map<string, number> {
   return counts;
 }
 
-function frontierCandidates(cells: readonly WorldMapCell[], polityId: string): number[] {
-  const candidates: number[] = [];
+interface TerritoryFrontier {
+  candidates: number[];
+  membership: Set<number>;
+}
+
+type TerritoryFrontiers = Map<string, TerritoryFrontier>;
+
+function frontierCandidatePosition(candidates: readonly number[], candidate: number): number {
+  let lower = 0;
+  let upper = candidates.length;
+  while (lower < upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    if ((candidates[middle] ?? candidate) < candidate) lower = middle + 1;
+    else upper = middle;
+  }
+  return lower;
+}
+
+function addFrontierCandidate(frontier: TerritoryFrontier, candidate: number): void {
+  if (frontier.membership.has(candidate)) return;
+  const position = frontierCandidatePosition(frontier.candidates, candidate);
+  frontier.candidates.splice(position, 0, candidate);
+  frontier.membership.add(candidate);
+}
+
+function deleteFrontierCandidate(frontier: TerritoryFrontier, candidate: number): void {
+  if (!frontier.membership.delete(candidate)) return;
+  const position = frontierCandidatePosition(frontier.candidates, candidate);
+  if (frontier.candidates[position] !== candidate) {
+    throw new Error("world map territory frontier index is inconsistent");
+  }
+  frontier.candidates.splice(position, 1);
+}
+
+function indexInitialFrontierCandidate(
+  cells: readonly WorldMapCell[],
+  frontiers: TerritoryFrontiers,
+  index: number,
+): void {
+  const cell = cells[index];
+  if (cell === undefined || cell.terrain === "sea" || cell.polityId !== null) return;
+  for (const neighbor of fourNeighborIndices(index)) {
+    const polityId = cells[neighbor]?.polityId;
+    if (polityId === null || polityId === undefined) continue;
+    const frontier = frontiers.get(polityId);
+    if (frontier !== undefined) addFrontierCandidate(frontier, index);
+  }
+}
+
+function createTerritoryFrontiers(
+  cells: readonly WorldMapCell[],
+  quotas: readonly PolityQuota[],
+): TerritoryFrontiers {
+  const frontiers: TerritoryFrontiers = new Map(
+    quotas.map(
+      ({ polityId }) => [polityId, { candidates: [], membership: new Set<number>() }] as const,
+    ),
+  );
   for (let index = 0; index < cells.length; index += 1) {
-    const cell = cells[index];
-    if (cell === undefined || cell.terrain === "sea" || cell.polityId !== null) continue;
-    if (fourNeighborIndices(index).some((neighbor) => cells[neighbor]?.polityId === polityId)) {
-      candidates.push(index);
+    indexInitialFrontierCandidate(cells, frontiers, index);
+  }
+  return frontiers;
+}
+
+function orderedFrontierCandidates(
+  frontiers: ReadonlyMap<string, TerritoryFrontier>,
+  polityId: string,
+): readonly number[] {
+  return frontiers.get(polityId)?.candidates ?? [];
+}
+
+function removeFromFrontiers(frontiers: TerritoryFrontiers, index: number): void {
+  for (const frontier of frontiers.values()) deleteFrontierCandidate(frontier, index);
+}
+
+function addUnclaimedNeighbors(
+  cells: readonly WorldMapCell[],
+  frontiers: TerritoryFrontiers,
+  polityId: string,
+  index: number,
+): void {
+  const frontier = frontiers.get(polityId);
+  if (frontier === undefined) throw new Error(`world map polity ${polityId} has no frontier`);
+  for (const neighbor of fourNeighborIndices(index)) {
+    const cell = cells[neighbor];
+    if (cell !== undefined && cell.terrain !== "sea" && cell.polityId === null) {
+      addFrontierCandidate(frontier, neighbor);
     }
   }
-  return candidates;
+}
+
+function claimTerritoryCell(
+  cells: WorldMapCell[],
+  frontiers: TerritoryFrontiers,
+  polityId: string,
+  index: number,
+): void {
+  const cell = cells[index];
+  if (cell === undefined || cell.terrain === "sea" || cell.polityId !== null) {
+    throw new Error("world map selected territory cell is unavailable");
+  }
+  cell.polityId = polityId;
+  removeFromFrontiers(frontiers, index);
+  addUnclaimedNeighbors(cells, frontiers, polityId, index);
+}
+
+function refreshAdjacentFrontier(
+  cells: readonly WorldMapCell[],
+  frontiers: TerritoryFrontiers,
+  polityId: string,
+  changedIndex: number,
+): void {
+  const frontier = frontiers.get(polityId);
+  if (frontier === undefined) throw new Error(`world map polity ${polityId} has no frontier`);
+  for (const neighbor of fourNeighborIndices(changedIndex)) {
+    const cell = cells[neighbor];
+    if (cell === undefined || cell.terrain === "sea" || cell.polityId !== null) continue;
+    const touchesPolity = fourNeighborIndices(neighbor).some(
+      (candidate) => cells[candidate]?.polityId === polityId,
+    );
+    if (touchesPolity) addFrontierCandidate(frontier, neighbor);
+    else deleteFrontierCandidate(frontier, neighbor);
+  }
 }
 
 function weightedCandidate(
@@ -381,23 +511,26 @@ function weightedCandidate(
   cells: readonly WorldMapCell[],
   candidates: readonly number[],
 ): number {
-  const weighted = candidates.map((index) => ({
-    index,
-    weight: WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[index]?.terrain ?? "sea"],
-  }));
-  const totalWeight = weighted.reduce((total, candidate) => total + candidate.weight, 0);
-  let draw = rng() * totalWeight;
-  for (const candidate of weighted) {
-    draw -= candidate.weight;
-    if (draw < 0) return candidate.index;
+  let totalWeight = 0;
+  for (const index of candidates) {
+    totalWeight += WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[index]?.terrain ?? "sea"];
   }
-  const fallback = weighted.at(-1)?.index;
+  let draw = rng() * totalWeight;
+  for (const index of candidates) {
+    draw -= WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[index]?.terrain ?? "sea"];
+    if (draw < 0) return index;
+  }
+  const fallback = candidates.at(-1);
   if (fallback === undefined) throw new Error("world map territory requires a frontier");
   return fallback;
 }
 
 function ownedIndices(cells: readonly WorldMapCell[], polityId: string): number[] {
-  return cells.flatMap((cell, index) => (cell.polityId === polityId ? [index] : []));
+  const owned: number[] = [];
+  for (let index = 0; index < cells.length; index += 1) {
+    if (cells[index]?.polityId === polityId) owned.push(index);
+  }
+  return owned;
 }
 
 function connectedIndices(
@@ -407,8 +540,10 @@ function connectedIndices(
 ): Set<number> {
   const connected = new Set([start]);
   const pending = [start];
-  while (pending.length > 0) {
-    const index = pending.shift();
+  let pendingIndex = 0;
+  while (pendingIndex < pending.length) {
+    const index = pending[pendingIndex];
+    pendingIndex += 1;
     if (index === undefined) break;
     for (const neighbor of fourNeighborIndices(index)) {
       if (connected.has(neighbor) || cells[neighbor]?.polityId !== polityId) continue;
@@ -419,6 +554,31 @@ function connectedIndices(
   return connected;
 }
 
+function connectsAll(
+  cells: readonly WorldMapCell[],
+  polityId: string,
+  start: number,
+  targets: readonly number[],
+): boolean {
+  const remaining = new Set(targets);
+  const visited = new Set([start]);
+  const pending = [start];
+  let pendingIndex = 0;
+  remaining.delete(start);
+  while (pendingIndex < pending.length && remaining.size > 0) {
+    const index = pending[pendingIndex];
+    pendingIndex += 1;
+    if (index === undefined) break;
+    for (const neighbor of fourNeighborIndices(index)) {
+      if (visited.has(neighbor) || cells[neighbor]?.polityId !== polityId) continue;
+      visited.add(neighbor);
+      remaining.delete(neighbor);
+      pending.push(neighbor);
+    }
+  }
+  return remaining.size === 0;
+}
+
 function remainsConnectedAfterRemoval(
   cells: WorldMapCell[],
   polityId: string,
@@ -427,10 +587,13 @@ function remainsConnectedAfterRemoval(
   const cell = cells[removedIndex];
   if (cell?.polityId !== polityId) return false;
   cell.polityId = null;
-  const remaining = ownedIndices(cells, polityId);
+  const neighbors = fourNeighborIndices(removedIndex).filter(
+    (neighbor) => cells[neighbor]?.polityId === polityId,
+  );
+  const start = neighbors[0];
   const connected =
-    remaining.length > 0 &&
-    connectedIndices(cells, polityId, remaining[0] ?? -1).size === remaining.length;
+    start !== undefined &&
+    (neighbors.length === 1 || connectsAll(cells, polityId, start, neighbors.slice(1)));
   cell.polityId = polityId;
   return connected;
 }
@@ -460,21 +623,22 @@ function boundaryDonorCandidates(
   quotas: ReadonlyMap<string, PolityQuota>,
   capitalIndices: ReadonlySet<number>,
 ): number[] {
-  return cells
-    .flatMap((cell, index) => {
-      if (cell.polityId === null || capitalIndices.has(index)) return [];
-      const donorQuota = quotas.get(cell.polityId);
-      if ((counts.get(cell.polityId) ?? 0) <= (donorQuota?.targetCells ?? 0)) return [];
-      const touchesTarget = fourNeighborIndices(index).some(
-        (neighbor) => cells[neighbor]?.polityId === targetPolityId,
-      );
-      return touchesTarget ? [index] : [];
-    })
-    .toSorted(
-      (left, right) =>
-        WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[left]?.terrain ?? "sea"] -
-          WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[right]?.terrain ?? "sea"] || left - right,
+  const candidates: number[] = [];
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index];
+    if (cell === undefined || cell.polityId === null || capitalIndices.has(index)) continue;
+    const donorQuota = quotas.get(cell.polityId);
+    if ((counts.get(cell.polityId) ?? 0) <= (donorQuota?.targetCells ?? 0)) continue;
+    const touchesTarget = fourNeighborIndices(index).some(
+      (neighbor) => cells[neighbor]?.polityId === targetPolityId,
     );
+    if (touchesTarget) candidates.push(index);
+  }
+  return candidates.toSorted(
+    (left, right) =>
+      WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[left]?.terrain ?? "sea"] -
+        WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[right]?.terrain ?? "sea"] || left - right,
+  );
 }
 
 function repairEnclosedTerritory(
@@ -484,14 +648,15 @@ function repairEnclosedTerritory(
   counts: Map<string, number>,
   quotas: ReadonlyMap<string, PolityQuota>,
   capitalIndices: ReadonlySet<number>,
+  frontiers: TerritoryFrontiers,
 ): boolean {
   let candidates = boundaryDonorCandidates(cells, polityId, counts, quotas, capitalIndices);
   if (candidates.length === 0) {
-    prepareOverQuotaDonor(rng, cells, polityId, counts, quotas, capitalIndices);
+    prepareOverQuotaDonor(rng, cells, polityId, counts, quotas, capitalIndices, frontiers);
     candidates = boundaryDonorCandidates(cells, polityId, counts, quotas, capitalIndices);
   }
   for (const index of candidates) {
-    if (transferBoundaryCell(cells, index, polityId, counts)) return true;
+    if (transferBoundaryCell(cells, index, polityId, counts, frontiers)) return true;
   }
   return false;
 }
@@ -501,6 +666,7 @@ function transferBoundaryCell(
   index: number,
   targetId: string,
   counts: Map<string, number>,
+  frontiers: TerritoryFrontiers,
 ): boolean {
   const donorId = cells[index]?.polityId;
   if (donorId === null || donorId === undefined) return false;
@@ -508,6 +674,9 @@ function transferBoundaryCell(
   const cell = cells[index];
   if (cell === undefined) return false;
   cell.polityId = targetId;
+  removeFromFrontiers(frontiers, index);
+  refreshAdjacentFrontier(cells, frontiers, donorId, index);
+  addUnclaimedNeighbors(cells, frontiers, targetId, index);
   counts.set(donorId, (counts.get(donorId) ?? 0) - 1);
   counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
   return true;
@@ -515,7 +684,8 @@ function transferBoundaryCell(
 
 function adjacentDonorIds(cells: readonly WorldMapCell[], polityId: string): string[] {
   const donors = new Set<string>();
-  for (const index of ownedIndices(cells, polityId)) {
+  for (let index = 0; index < cells.length; index += 1) {
+    if (cells[index]?.polityId !== polityId) continue;
     for (const neighbor of fourNeighborIndices(index)) {
       const neighborPolityId = cells[neighbor]?.polityId;
       if (
@@ -536,12 +706,14 @@ function donorHasTransferCell(
   targetId: string,
   capitalIndices: ReadonlySet<number>,
 ): boolean {
-  return ownedIndices(cells, donorId).some(
-    (index) =>
-      !capitalIndices.has(index) &&
-      fourNeighborIndices(index).some((neighbor) => cells[neighbor]?.polityId === targetId) &&
-      remainsConnectedAfterRemoval(cells, donorId, index),
-  );
+  for (let index = 0; index < cells.length; index += 1) {
+    if (cells[index]?.polityId !== donorId || capitalIndices.has(index)) continue;
+    const touchesTarget = fourNeighborIndices(index).some(
+      (neighbor) => cells[neighbor]?.polityId === targetId,
+    );
+    if (touchesTarget && remainsConnectedAfterRemoval(cells, donorId, index)) return true;
+  }
+  return false;
 }
 
 function prepareOverQuotaDonor(
@@ -551,12 +723,13 @@ function prepareOverQuotaDonor(
   counts: Map<string, number>,
   quotas: ReadonlyMap<string, PolityQuota>,
   capitalIndices: ReadonlySet<number>,
+  frontiers: TerritoryFrontiers,
 ): boolean {
   for (const donorId of adjacentDonorIds(cells, targetId)) {
     const quota = quotas.get(donorId);
     if (quota === undefined) continue;
     if (!donorHasTransferCell(cells, donorId, targetId, capitalIndices)) continue;
-    if (growDonorPastQuota(rng, cells, donorId, counts, quota.targetCells)) return true;
+    if (growDonorPastQuota(rng, cells, donorId, counts, quota.targetCells, frontiers)) return true;
   }
   return false;
 }
@@ -567,14 +740,13 @@ function growDonorPastQuota(
   donorId: string,
   counts: Map<string, number>,
   targetCells: number,
+  frontiers: TerritoryFrontiers,
 ): boolean {
   while ((counts.get(donorId) ?? 0) <= targetCells) {
-    const candidates = frontierCandidates(cells, donorId).toSorted((left, right) => left - right);
+    const candidates = orderedFrontierCandidates(frontiers, donorId);
     if (candidates.length === 0) return false;
     const selected = weightedCandidate(rng, cells, candidates);
-    const cell = cells[selected];
-    if (cell === undefined) throw new Error("world map quota repair cell is missing");
-    cell.polityId = donorId;
+    claimTerritoryCell(cells, frontiers, donorId, selected);
     counts.set(donorId, (counts.get(donorId) ?? 0) + 1);
   }
   return true;
@@ -587,22 +759,19 @@ function growTerritoryTurn(
   counts: Map<string, number>,
   quotas: ReadonlyMap<string, PolityQuota>,
   capitalIndices: ReadonlySet<number>,
+  frontiers: TerritoryFrontiers,
 ): void {
-  const candidates = frontierCandidates(cells, quota.polityId);
+  const candidates = orderedFrontierCandidates(frontiers, quota.polityId);
   if (candidates.length === 0) {
-    if (repairEnclosedTerritory(rng, cells, quota.polityId, counts, quotas, capitalIndices)) {
+    if (
+      repairEnclosedTerritory(rng, cells, quota.polityId, counts, quotas, capitalIndices, frontiers)
+    ) {
       return;
     }
     throw new Error(`world map cannot fill territory quota for ${quota.polityId}`);
   }
-  const selected = weightedCandidate(
-    rng,
-    cells,
-    candidates.toSorted((left, right) => left - right),
-  );
-  const cell = cells[selected];
-  if (cell === undefined) throw new Error("world map selected territory cell is missing");
-  cell.polityId = quota.polityId;
+  const selected = weightedCandidate(rng, cells, candidates);
+  claimTerritoryCell(cells, frontiers, quota.polityId, selected);
   counts.set(quota.polityId, (counts.get(quota.polityId) ?? 0) + 1);
 }
 
@@ -615,11 +784,12 @@ function growTerritories(
   const counts = countTerritories(cells);
   const quotasById = quotaByPolity(quotas);
   const capitalIndices = new Set(capitals.map(({ pos }) => indexOf(pos)));
+  const frontiers = createTerritoryFrontiers(cells, quotas);
   while (true) {
     const order = territoryTurnOrder(quotas, counts);
     const quota = order[0];
     if (quota === undefined) return;
-    growTerritoryTurn(rng, cells, quota, counts, quotasById, capitalIndices);
+    growTerritoryTurn(rng, cells, quota, counts, quotasById, capitalIndices, frontiers);
   }
 }
 
@@ -722,15 +892,15 @@ function loserBorderCandidates(
   winnerId: string,
   excluded: ReadonlySet<number>,
 ): number[] {
-  return cells
-    .flatMap((cell, index) => {
-      if (cell.polityId !== loserId || excluded.has(index)) return [];
-      const touchesWinner = fourNeighborIndices(index).some(
-        (neighbor) => cells[neighbor]?.polityId === winnerId,
-      );
-      return touchesWinner ? [index] : [];
-    })
-    .toSorted((left, right) => left - right);
+  const candidates: number[] = [];
+  for (let index = 0; index < cells.length; index += 1) {
+    if (cells[index]?.polityId !== loserId || excluded.has(index)) continue;
+    const touchesWinner = fourNeighborIndices(index).some(
+      (neighbor) => cells[neighbor]?.polityId === winnerId,
+    );
+    if (touchesWinner) candidates.push(index);
+  }
+  return candidates;
 }
 
 function applyOneWar(
@@ -807,13 +977,17 @@ function applyWars(
 }
 
 function unclaimedHomelandFrontier(cells: readonly WorldMapCell[], homelandId: string): number[] {
-  return cells.flatMap((cell, index) => {
-    if (cell.terrain === "sea" || cell.polityId !== null) return [];
+  const candidates: number[] = [];
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index];
+    if (cell === undefined) continue;
+    if (cell.terrain === "sea" || cell.polityId !== null) continue;
     const touchesHomeland = fourNeighborIndices(index).some(
       (neighbor) => cells[neighbor]?.polityId === homelandId,
     );
-    return touchesHomeland ? [index] : [];
-  });
+    if (touchesHomeland) candidates.push(index);
+  }
+  return candidates;
 }
 
 function homelandBoundaryCandidates(
@@ -822,21 +996,21 @@ function homelandBoundaryCandidates(
   capitals: ReadonlySet<number>,
   protectedCells: ReadonlySet<number>,
 ): number[] {
-  return cells
-    .flatMap((cell, index) => {
-      if (cell.polityId !== homelandId || capitals.has(index) || protectedCells.has(index)) {
-        return [];
-      }
-      const boundary = fourNeighborIndices(index).some(
-        (neighbor) => cells[neighbor]?.polityId !== homelandId,
-      );
-      return boundary ? [index] : [];
-    })
-    .toSorted(
-      (left, right) =>
-        WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[left]?.terrain ?? "sea"] -
-          WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[right]?.terrain ?? "sea"] || left - right,
+  const candidates: number[] = [];
+  for (let index = 0; index < cells.length; index += 1) {
+    if (cells[index]?.polityId !== homelandId || capitals.has(index) || protectedCells.has(index)) {
+      continue;
+    }
+    const boundary = fourNeighborIndices(index).some(
+      (neighbor) => cells[neighbor]?.polityId !== homelandId,
     );
+    if (boundary) candidates.push(index);
+  }
+  return candidates.toSorted(
+    (left, right) =>
+      WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[left]?.terrain ?? "sea"] -
+        WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS[cells[right]?.terrain ?? "sea"] || left - right,
+  );
 }
 
 function releaseFrontierCell(

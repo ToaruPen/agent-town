@@ -145,6 +145,12 @@ function expectPopulationOrder(history: WorldMapHistory, map: WorldMap): void {
 }
 
 describe("generateWorldMap", () => {
+  it("generates several seeded maps within the CI timeout budget", () => {
+    for (const seed of [0, 1, 2, 3]) {
+      generated(seed);
+    }
+  }, 1_000);
+
   it("replays the identical world map from the same seed and history", () => {
     expect(generated(42).map).toEqual(generated(42).map);
   });
