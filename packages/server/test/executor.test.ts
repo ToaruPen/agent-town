@@ -39,6 +39,8 @@ function createAgent(overrides: Partial<AgentState> = {}): AgentState {
     llmProvider: null,
     thinking: false,
     lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 100,
     fatigue: 100,
     health: 100,
@@ -72,6 +74,8 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

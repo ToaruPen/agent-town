@@ -29,6 +29,8 @@ function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
     llmProvider: null,
     thinking: false,
     lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 100,
     fatigue: 100,
     health: 100,
@@ -59,6 +61,8 @@ function createWorld(agent: AgentState): WorldState {
       },
     ],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

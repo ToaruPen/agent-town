@@ -81,6 +81,39 @@ describe("startServer", () => {
       },
     ];
     world.tick = DAYS_PER_SEASON * SEASONS.length * TICKS_PER_DAY - 1;
+    world.collectives = [
+      {
+        id: "collective-communalGranaryStore-150",
+        purpose: "communalGranaryStore",
+        supporterIds: ["agent-1"],
+        representativeId: "agent-1",
+        cohesion: 0.78,
+        formedAtTick: 150,
+        provenance: {
+          causedByEventIds: ["event-scarcity-1"],
+          proposedByAgentIds: ["agent-1"],
+          supportedByAgentIds: ["agent-1"],
+          opposedByAgentIds: [],
+          decidedAtTick: 150,
+        },
+      },
+    ];
+    world.institutions = [
+      {
+        id: "institution-communalGranaryStore-200",
+        kind: "communalGranaryStore",
+        supporterIds: ["agent-1"],
+        opposedIds: [],
+        establishedAtTick: 200,
+        provenance: {
+          causedByEventIds: ["event-scarcity-1"],
+          proposedByAgentIds: ["agent-1"],
+          supportedByAgentIds: ["agent-1"],
+          opposedByAgentIds: [],
+          decidedAtTick: 200,
+        },
+      },
+    ];
     const idlePlanner: Planner = { plan: () => [] };
     const engine = createEngine(world, idlePlanner, () => 0);
 
@@ -90,6 +123,8 @@ describe("startServer", () => {
     expect(update.type).toBe("update");
     if (update.type !== "update") throw new Error("expected update message");
     expect(update.agents.map(({ name }) => name)).toEqual(["トネリコ", IMMIGRANT_NAMES[0]]);
+    expect(update.collectives).toEqual(world.collectives);
+    expect(update.institutions).toEqual(world.institutions);
   });
 
   it("accepts /ws upgrades, sends updates, and closes cleanly", async () => {

@@ -76,6 +76,8 @@ function movingAgent(nextX: number): AgentState {
     llmProvider: null,
     thinking: false,
     lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 100,
     fatigue: 100,
     health: 100,

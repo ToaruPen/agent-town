@@ -221,6 +221,8 @@ function maybeImmigrate(world: WorldState): void {
     llmProvider: null,
     thinking: false,
     lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: HUNGER_MAX,
     fatigue: FATIGUE_MAX,
     health: HEALTH_MAX,

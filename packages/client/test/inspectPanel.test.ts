@@ -23,6 +23,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     llmProvider: "claude",
     thinking: false,
     lastThought: "日暮れまでに木材を集める。\nそれから挨拶する。",
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 100,
     fatigue: 100,
     health: 100,

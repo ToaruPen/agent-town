@@ -19,6 +19,8 @@ function createWorld(width: number, height: number, terrainAt: Map<string, Terra
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

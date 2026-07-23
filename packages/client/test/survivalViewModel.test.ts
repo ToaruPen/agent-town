@@ -27,6 +27,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     llmProvider: null,
     thinking: false,
     lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 100,
     fatigue: 100,
     health: 100,
@@ -44,6 +46,8 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     stockpile: { pos: { x: 4, y: 4 }, wood: 8, food: 25 },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

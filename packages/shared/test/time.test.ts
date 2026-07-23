@@ -27,6 +27,8 @@ function worldWithFood(food: number, population: number): WorldState {
       llmProvider: null,
       thinking: false,
       lastThought: null,
+      desires: { foodSecurity: 0 },
+      lastHungerInterruptTick: null,
       hunger: 100,
       fatigue: 100,
       health: 100,
@@ -34,6 +36,8 @@ function worldWithFood(food: number, population: number): WorldState {
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

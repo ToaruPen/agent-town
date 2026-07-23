@@ -117,6 +117,8 @@ function createAgents(stockpile: Position): AgentState[] {
       llmProvider: null,
       thinking: false,
       lastThought: null,
+      desires: { foodSecurity: 0 },
+      lastHungerInterruptTick: null,
       hunger: HUNGER_MAX,
       fatigue: FATIGUE_MAX,
       health: HEALTH_MAX,
@@ -149,6 +151,8 @@ export function generateWorld(seed: number): WorldState {
     stockpile: { pos: stockpilePosition, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: generateWorldHistory(seed, {
       width: MAP_WIDTH,
       height: MAP_HEIGHT,

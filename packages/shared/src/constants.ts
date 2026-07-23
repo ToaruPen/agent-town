@@ -1,3 +1,6 @@
+import type { CulturalValue } from "./history.js";
+import type { InstitutionKind } from "./society.js";
+
 export const TICK_RATE = 10; // sim ticks per second
 export const TICKS_PER_DAY = 2400;
 export const THINK_COOLDOWN_TICKS = 1200;
@@ -68,3 +71,73 @@ export const WORLD_HISTORY_TURN_YEARS = 20;
 export const WORLD_POLITY_COUNT = 4;
 export const WORLD_LANDMARK_MIN_DISTANCE = 12;
 export const WORLD_LANDMARK_FALLBACK_DISTANCE = 6;
+
+export const INSTITUTION_KINDS = [
+  "communalGranaryStore",
+  "grainMarket",
+  "rationControl",
+] as const satisfies readonly InstitutionKind[];
+
+export const INSTITUTION_NAMES: Readonly<Record<InstitutionKind, string>> = {
+  communalGranaryStore: "共同備蓄",
+  grainMarket: "私的取引",
+  rationControl: "配給統制",
+};
+
+export const INSTITUTION_CULTURAL_AFFINITIES: Readonly<
+  Record<InstitutionKind, Readonly<Record<CulturalValue, number>>>
+> = {
+  communalGranaryStore: {
+    commerce: 0.05,
+    faith: 0.35,
+    knowledge: 0.2,
+    kinship: 0.55,
+    mutualAid: 1,
+    order: 0.3,
+    stewardship: 0.8,
+    valor: 0.25,
+  },
+  grainMarket: {
+    commerce: 1,
+    faith: 0.4,
+    knowledge: 0.7,
+    kinship: 0.35,
+    mutualAid: 0.15,
+    order: 0.3,
+    stewardship: 0.2,
+    valor: 0.2,
+  },
+  rationControl: {
+    commerce: 0.1,
+    faith: 0.45,
+    knowledge: 0.2,
+    kinship: 0.35,
+    mutualAid: 0.35,
+    order: 1,
+    stewardship: 0.3,
+    valor: 0.8,
+  },
+};
+
+export const FOOD_SECURITY_UPDATE_INTERVAL_TICKS = 10;
+export const FOOD_SECURITY_SAFE_FOOD_DAYS = 4;
+export const FOOD_SECURITY_WINTER_LOOKAHEAD_DAYS = 6;
+export const FOOD_SECURITY_HUNGER_MEMORY_TICKS = 2 * TICKS_PER_DAY;
+export const FOOD_SECURITY_FOOD_SHORTAGE_WEIGHT = 0.55;
+export const FOOD_SECURITY_WINTER_WEIGHT = 0.2;
+export const FOOD_SECURITY_HUNGER_HISTORY_WEIGHT = 0.25;
+export const FOOD_SECURITY_MAX_CHANGE_PER_UPDATE = 0.1;
+export const FOOD_SECURITY_RECOGNITION_THRESHOLD = 0.5;
+
+export const INSTITUTION_CULTURE_WEIGHT = 0.45;
+export const INSTITUTION_DESIRE_WEIGHT = 0.55;
+export const INSTITUTION_SUPPORT_THRESHOLD = 0.55;
+export const INSTITUTION_OPPOSITION_THRESHOLD = 0.35;
+
+export const SOCIETY_UPDATE_INTERVAL_TICKS = 10;
+export const COLLECTIVE_MIN_SUPPORTERS = 2;
+export const COLLECTIVE_FORMATION_TICKS = 50;
+export const COLLECTIVE_DISSOLUTION_TICKS = 50;
+export const COLLECTIVE_DISSOLUTION_COHESION = 0.5;
+export const INSTITUTION_FOOD_PRESSURE_DAYS = 2;
+export const SOCIAL_MILESTONE_DURATION_TICKS = 50;

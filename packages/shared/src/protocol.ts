@@ -9,6 +9,8 @@ export type ServerMessage =
       stockpile: { pos: Position; wood: number; food: number };
       buildings: WorldState["buildings"];
       deaths: WorldState["deaths"];
+      collectives: WorldState["collectives"];
+      institutions: WorldState["institutions"];
       changedTiles: { index: number; tile: Tile }[];
     };
 
@@ -41,7 +43,10 @@ function hasRequiredKeys(value: Record<string, unknown>, keys: string[]): boolea
 function isServerMessage(value: unknown): value is ServerMessage {
   if (!isRecord(value)) return false;
   if (value.type === "welcome") {
-    return isRecord(value.state) && hasRequiredKeys(value.state, ["history"]);
+    return (
+      isRecord(value.state) &&
+      hasRequiredKeys(value.state, ["history", "collectives", "institutions"])
+    );
   }
   if (value.type === "update") {
     return hasRequiredKeys(value, [
@@ -50,6 +55,8 @@ function isServerMessage(value: unknown): value is ServerMessage {
       "stockpile",
       "buildings",
       "deaths",
+      "collectives",
+      "institutions",
       "changedTiles",
     ]);
   }

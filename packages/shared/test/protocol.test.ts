@@ -27,6 +27,8 @@ describe("wire protocol", () => {
           llmProvider: "codex",
           thinking: true,
           lastThought: "Gather nearby wood before winter.",
+          desires: { foodSecurity: 0.72 },
+          lastHungerInterruptTick: 120,
           hunger: 42,
           fatigue: 37,
           health: 88,
@@ -35,6 +37,39 @@ describe("wire protocol", () => {
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
       buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
       deaths: [{ name: "シラカバ", tick: 7200, cause: "starvation" }],
+      collectives: [
+        {
+          id: "collective-communalGranaryStore-150",
+          purpose: "communalGranaryStore",
+          supporterIds: ["agent-1", "agent-2"],
+          representativeId: "agent-1",
+          cohesion: 0.78,
+          formedAtTick: 150,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["agent-1"],
+            supportedByAgentIds: ["agent-1", "agent-2"],
+            opposedByAgentIds: [],
+            decidedAtTick: 150,
+          },
+        },
+      ],
+      institutions: [
+        {
+          id: "institution-communalGranaryStore-200",
+          kind: "communalGranaryStore",
+          supporterIds: ["agent-1", "agent-2"],
+          opposedIds: [],
+          establishedAtTick: 200,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["agent-1"],
+            supportedByAgentIds: ["agent-1", "agent-2"],
+            opposedByAgentIds: [],
+            decidedAtTick: 200,
+          },
+        },
+      ],
       history: {
         startYear: -200,
         currentYear: 0,
@@ -49,6 +84,53 @@ describe("wire protocol", () => {
 
     expect(decoded).toEqual(message);
     expect(decoded.type === "welcome" ? decoded.state.tiles[0]?.resourceOrigin : null).toBe("food");
+  });
+
+  it("round-trips an update server message with social state", () => {
+    const message: ServerMessage = {
+      type: "update",
+      tick: 200,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [],
+      deaths: [],
+      changedTiles: [],
+      collectives: [
+        {
+          id: "collective-communalGranaryStore-150",
+          purpose: "communalGranaryStore",
+          supporterIds: ["agent-1", "agent-2"],
+          representativeId: "agent-1",
+          cohesion: 0.78,
+          formedAtTick: 150,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["agent-1"],
+            supportedByAgentIds: ["agent-1", "agent-2"],
+            opposedByAgentIds: [],
+            decidedAtTick: 150,
+          },
+        },
+      ],
+      institutions: [
+        {
+          id: "institution-communalGranaryStore-200",
+          kind: "communalGranaryStore",
+          supporterIds: ["agent-1", "agent-2"],
+          opposedIds: [],
+          establishedAtTick: 200,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["agent-1"],
+            supportedByAgentIds: ["agent-1", "agent-2"],
+            opposedByAgentIds: [],
+            decidedAtTick: 200,
+          },
+        },
+      ],
+    };
+
+    expect(decodeServerMessage(encodeMessage(message))).toEqual(message);
   });
 
   it("rejects a server message without a type", () => {
@@ -96,6 +178,36 @@ describe("wire protocol", () => {
     });
 
     expect(() => decodeServerMessage(updateWithoutBuildings)).toThrow("invalid server message");
+  });
+
+  it("rejects an update without collectives", () => {
+    const updateWithoutCollectives = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [],
+      deaths: [],
+      institutions: [],
+      changedTiles: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutCollectives)).toThrow("invalid server message");
+  });
+
+  it("rejects an update without institutions", () => {
+    const updateWithoutInstitutions = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [],
+      deaths: [],
+      collectives: [],
+      changedTiles: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutInstitutions)).toThrow("invalid server message");
   });
 
   it("decodes a hello client message", () => {

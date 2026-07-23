@@ -61,6 +61,8 @@ export function createUpdateMessage(engine: ReturnType<typeof createEngine>): Se
     stockpile: engine.world.stockpile,
     buildings: engine.world.buildings,
     deaths: engine.world.deaths,
+    collectives: engine.world.collectives,
+    institutions: engine.world.institutions,
     changedTiles,
   };
 }

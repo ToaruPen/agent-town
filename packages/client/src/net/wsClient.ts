@@ -54,6 +54,8 @@ function applyUpdate(
     stockpile: message.stockpile,
     buildings: message.buildings,
     deaths: message.deaths,
+    collectives: message.collectives,
+    institutions: message.institutions,
     tiles,
   };
 }

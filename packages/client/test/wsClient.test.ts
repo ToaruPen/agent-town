@@ -25,6 +25,39 @@ function makeWorld(): WorldState {
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
     buildings: [],
     deaths: [],
+    collectives: [
+      {
+        id: "collective-grainMarket-1",
+        purpose: "grainMarket",
+        supporterIds: ["old-agent"],
+        representativeId: "old-agent",
+        cohesion: 0.5,
+        formedAtTick: 1,
+        provenance: {
+          causedByEventIds: [],
+          proposedByAgentIds: ["old-agent"],
+          supportedByAgentIds: ["old-agent"],
+          opposedByAgentIds: [],
+          decidedAtTick: 1,
+        },
+      },
+    ],
+    institutions: [
+      {
+        id: "institution-grainMarket-2",
+        kind: "grainMarket",
+        supporterIds: ["old-agent"],
+        opposedIds: [],
+        establishedAtTick: 2,
+        provenance: {
+          causedByEventIds: [],
+          proposedByAgentIds: ["old-agent"],
+          supportedByAgentIds: ["old-agent"],
+          opposedByAgentIds: [],
+          decidedAtTick: 2,
+        },
+      },
+    ],
     history: {
       startYear: 0,
       currentYear: 0,
@@ -60,6 +93,8 @@ describe("connect", () => {
           llmProvider: "claude",
           thinking: true,
           lastThought: null,
+          desires: { foodSecurity: 0 },
+          lastHungerInterruptTick: null,
           hunger: 80,
           fatigue: 70,
           health: 90,
@@ -68,6 +103,39 @@ describe("connect", () => {
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
       buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
       deaths: [{ name: "シラカバ", tick: 4, cause: "starvation" }],
+      collectives: [
+        {
+          id: "collective-communalGranaryStore-3",
+          purpose: "communalGranaryStore",
+          supporterIds: ["ash"],
+          representativeId: "ash",
+          cohesion: 0.78,
+          formedAtTick: 3,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["ash"],
+            supportedByAgentIds: ["ash"],
+            opposedByAgentIds: [],
+            decidedAtTick: 3,
+          },
+        },
+      ],
+      institutions: [
+        {
+          id: "institution-communalGranaryStore-4",
+          kind: "communalGranaryStore",
+          supporterIds: ["ash"],
+          opposedIds: [],
+          establishedAtTick: 4,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["ash"],
+            supportedByAgentIds: ["ash"],
+            opposedByAgentIds: [],
+            decidedAtTick: 4,
+          },
+        },
+      ],
       changedTiles: [{ index: 1, tile: { terrain: "forest", resource: null } }],
     });
 
@@ -88,6 +156,8 @@ describe("connect", () => {
           llmProvider: "claude",
           thinking: true,
           lastThought: null,
+          desires: { foodSecurity: 0 },
+          lastHungerInterruptTick: null,
           hunger: 80,
           fatigue: 70,
           health: 90,
@@ -96,6 +166,39 @@ describe("connect", () => {
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
       buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
       deaths: [{ name: "シラカバ", tick: 4, cause: "starvation" }],
+      collectives: [
+        {
+          id: "collective-communalGranaryStore-3",
+          purpose: "communalGranaryStore",
+          supporterIds: ["ash"],
+          representativeId: "ash",
+          cohesion: 0.78,
+          formedAtTick: 3,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["ash"],
+            supportedByAgentIds: ["ash"],
+            opposedByAgentIds: [],
+            decidedAtTick: 3,
+          },
+        },
+      ],
+      institutions: [
+        {
+          id: "institution-communalGranaryStore-4",
+          kind: "communalGranaryStore",
+          supporterIds: ["ash"],
+          opposedIds: [],
+          establishedAtTick: 4,
+          provenance: {
+            causedByEventIds: ["event-scarcity-1"],
+            proposedByAgentIds: ["ash"],
+            supportedByAgentIds: ["ash"],
+            opposedByAgentIds: [],
+            decidedAtTick: 4,
+          },
+        },
+      ],
       tiles: [
         { terrain: "plains", resource: { kind: "food", amount: 3 } },
         { terrain: "forest", resource: null },

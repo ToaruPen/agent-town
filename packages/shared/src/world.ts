@@ -1,4 +1,5 @@
 import type { WorldHistory } from "./history.js";
+import type { AgentDesires, Collective, Institution } from "./society.js";
 
 export type Terrain = "plains" | "forest" | "water" | "rock";
 export type ResourceKind = "wood" | "food";
@@ -38,6 +39,8 @@ export interface AgentState {
   llmProvider: LlmProvider | null;
   thinking: boolean;
   lastThought: string | null;
+  desires: AgentDesires;
+  lastHungerInterruptTick: number | null;
   hunger: number;
   fatigue: number;
   health: number;
@@ -68,5 +71,7 @@ export interface WorldState {
   stockpile: { pos: Position; wood: number; food: number };
   buildings: House[];
   deaths: { name: string; tick: number; cause: "starvation" | "cold" }[];
+  collectives: Collective[];
+  institutions: Institution[];
   history: WorldHistory;
 }

@@ -44,6 +44,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     llmProvider: "claude",
     thinking: false,
     lastThought: "日暮れまでに木材を集める。\nその後、家へ戻る。",
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
     hunger: 21.2,
     fatigue: 43.4,
     health: 88.1,
@@ -61,6 +63,8 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     stockpile: { pos: { x: 0, y: 0 }, wood: 8, food: 25 },
     buildings: [],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,

@@ -31,6 +31,8 @@ function makeWorld(): WorldState {
         llmProvider: "claude",
         thinking: false,
         lastThought: null,
+        desires: { foodSecurity: 0 },
+        lastHungerInterruptTick: null,
         hunger: 100,
         fatigue: 100,
         health: 100,
@@ -39,6 +41,8 @@ function makeWorld(): WorldState {
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
     buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 0, complete: false }],
     deaths: [],
+    collectives: [],
+    institutions: [],
     history: {
       startYear: 0,
       currentYear: 0,
