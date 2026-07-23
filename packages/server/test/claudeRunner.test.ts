@@ -58,6 +58,8 @@ describe("CliClaudeRunner", () => {
       "-p",
       "--output-format",
       "json",
+      "--model",
+      "haiku",
       "--safe-mode",
       "--tools",
       "",
@@ -72,6 +74,22 @@ describe("CliClaudeRunner", () => {
     expect(spawnOptions?.cwd).toBeUndefined();
     expect(typeof spawnOptions?.env).toBe("object");
     expect(stdin).toBe("Plan Ash's day.");
+  });
+
+  it("passes the configured model to claude", async () => {
+    const child = createFakeChild();
+    const spawnMock = vi.fn(() => child);
+    const spawnFn = spawnMock as unknown as typeof spawn;
+    const resultPromise = new CliClaudeRunner({ model: "sonnet", spawnFn }).run("prompt");
+
+    child.stdout.write(JSON.stringify({ result: "done" }));
+    child.emit("close", 0);
+    await resultPromise;
+
+    const args = spawnMock.mock.calls[0]?.[1];
+    const modelFlagIndex = args?.indexOf("--model") ?? -1;
+    expect(modelFlagIndex).toBeGreaterThanOrEqual(0);
+    expect(args?.[modelFlagIndex + 1]).toBe("sonnet");
   });
 
   it("passes only allowlisted environment variables to claude", async () => {

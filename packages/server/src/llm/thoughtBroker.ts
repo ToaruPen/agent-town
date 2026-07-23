@@ -2,9 +2,12 @@ import {
   type AgentState,
   type AgentTask,
   HUNGER_EAT_THRESHOLD,
+  LLM_BUDGET_LOG_INTERVAL_TICKS,
+  LLM_MAX_CALLS_PER_HOUR,
   type LlmProvider,
   type PlanSource,
   THINK_COOLDOWN_TICKS,
+  TICKS_PER_HOUR,
   type WorldState,
 } from "@agent-town/shared";
 
@@ -14,6 +17,8 @@ interface ThoughtBrokerOptions {
   engine: Engine;
   llmAgentIds: string[] | (() => string[]);
   providerForAgent(agent: AgentState): LlmProvider;
+  cooldownTicks?: number;
+  maxCallsPerHour?: number;
   planFn: (
     world: WorldState,
     agent: AgentState,
@@ -37,9 +42,15 @@ export class ThoughtBroker {
   private readonly queuedAgentIds: string[] = [];
   private readonly cooldownUntil = new Map<string, number>();
   private readonly observedHunger = new Map<string, number>();
+  private readonly cooldownTicks: number;
+  private readonly maxCallsPerHour: number;
+  private callStartTicks: number[] = [];
+  private lastBudgetExhaustedLogTick: number | undefined;
   private requestInFlight = false;
 
   constructor(private readonly opts: ThoughtBrokerOptions) {
+    this.cooldownTicks = opts.cooldownTicks ?? THINK_COOLDOWN_TICKS;
+    this.maxCallsPerHour = opts.maxCallsPerHour ?? LLM_MAX_CALLS_PER_HOUR;
     for (const agentId of this.currentLlmAgentIds()) {
       const agent = this.managedAgent(agentId);
       if (agent !== undefined) {
@@ -90,7 +101,7 @@ export class ThoughtBroker {
     result: { tasks: AgentTask[]; source: PlanSource; reasoning?: string },
   ): void {
     this.opts.engine.applyPlan(agentId, result.tasks, result.source, result.reasoning);
-    this.cooldownUntil.set(agentId, this.opts.engine.world.tick + THINK_COOLDOWN_TICKS);
+    this.cooldownUntil.set(agentId, this.opts.engine.world.tick + this.cooldownTicks);
     this.requestInFlight = false;
     this.dispatchNext();
   }
@@ -98,7 +109,7 @@ export class ThoughtBroker {
   private failRequest(agent: AgentState, provider: LlmProvider): void {
     logPlanningFailure(agent.id, provider);
     agent.thinking = false;
-    this.cooldownUntil.set(agent.id, this.opts.engine.world.tick + THINK_COOLDOWN_TICKS);
+    this.cooldownUntil.set(agent.id, this.opts.engine.world.tick + this.cooldownTicks);
     this.requestInFlight = false;
     this.dispatchNext();
   }
@@ -114,6 +125,24 @@ export class ThoughtBroker {
     }
   }
 
+  private budgetAvailable(): boolean {
+    const windowStart = this.opts.engine.world.tick - TICKS_PER_HOUR;
+    this.callStartTicks = this.callStartTicks.filter((tick) => tick > windowStart);
+    return this.callStartTicks.length < this.maxCallsPerHour;
+  }
+
+  private logBudgetExhausted(): void {
+    const tick = this.opts.engine.world.tick;
+    if (
+      this.lastBudgetExhaustedLogTick !== undefined &&
+      tick - this.lastBudgetExhaustedLogTick < LLM_BUDGET_LOG_INTERVAL_TICKS
+    ) {
+      return;
+    }
+    console.log(JSON.stringify({ at: "thoughtBroker", outcome: "budget-exhausted", tick }));
+    this.lastBudgetExhaustedLogTick = tick;
+  }
+
   private dispatchNext(): void {
     if (this.requestInFlight) return;
     const agentId = this.queuedAgentIds.shift();
@@ -123,8 +152,15 @@ export class ThoughtBroker {
       this.dispatchNext();
       return;
     }
+    if (!this.budgetAvailable()) {
+      this.logBudgetExhausted();
+      agent.thinking = false;
+      this.dispatchNext();
+      return;
+    }
 
     const provider = this.assignProvider(agent);
+    this.callStartTicks.push(this.opts.engine.world.tick);
     this.requestInFlight = true;
     this.startRequest(agent, provider);
   }

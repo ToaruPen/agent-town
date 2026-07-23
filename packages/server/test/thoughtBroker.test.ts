@@ -197,7 +197,7 @@ describe("ThoughtBroker", () => {
     await pending.promise;
   });
 
-  it("respects the per-agent cooldown after a plan resolves", async () => {
+  it("uses a 1,200-tick cooldown after a plan resolves by default", async () => {
     const engine = createTestEngine();
     const agent = getAgent(engine, 0);
     engine.world.tick = 10;
@@ -223,17 +223,58 @@ describe("ThoughtBroker", () => {
     await first.promise;
     agent.tasks = [];
 
-    engine.world.tick = 10 + THINK_COOLDOWN_TICKS - 1;
+    engine.world.tick = 10 + 1_200 - 1;
     broker.onTick();
     expect(planFn).toHaveBeenCalledOnce();
 
-    engine.world.tick = 10 + THINK_COOLDOWN_TICKS;
+    engine.world.tick = 10 + 1_200;
     broker.onTick();
     expect(planFn).toHaveBeenCalledTimes(2);
 
     const second = requests[1];
     if (second === undefined) throw new Error("second plan was not dispatched");
     second.resolve({ tasks: [{ kind: "deposit" }], source: "fake" });
+    await second.promise;
+  });
+
+  it("uses the configured cooldown", async () => {
+    const engine = createTestEngine();
+    const agent = getAgent(engine, 0);
+    engine.world.tick = 10;
+    const requests: DeferredPlan[] = [];
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [agent.id],
+      providerForAgent: () => "claude",
+      planFn,
+      cooldownTicks: 4,
+    });
+
+    broker.onTick();
+    const first = requests[0];
+    if (first === undefined) throw new Error("first plan was not dispatched");
+    first.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await first.promise;
+    agent.tasks = [];
+
+    engine.world.tick = 13;
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledOnce();
+
+    engine.world.tick = 14;
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledTimes(2);
+
+    const second = requests[1];
+    if (second === undefined) throw new Error("second plan was not dispatched");
+    second.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
     await second.promise;
   });
 
@@ -279,6 +320,90 @@ describe("ThoughtBroker", () => {
     await second.promise;
 
     expect(broker.inFlightCount()).toBe(0);
+  });
+
+  it("blocks the next global call inside the hourly window and allows it after the window slides", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    const secondAgent = getAgent(engine, 1);
+    const thirdAgent = getAgent(engine, 2);
+    let managedAgentIds = [firstAgent.id, secondAgent.id, thirdAgent.id];
+    const requests: DeferredPlan[] = [];
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        const request = createDeferredPlan();
+        requests.push(request);
+        return request.promise;
+      },
+    );
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: () => managedAgentIds,
+      providerForAgent: (agent) => (agent === secondAgent ? "codex" : "claude"),
+      planFn,
+      maxCallsPerHour: 2,
+    });
+
+    broker.onTick();
+    const first = requests[0];
+    if (first === undefined) throw new Error("first plan was not dispatched");
+    first.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await first.promise;
+
+    const second = requests[1];
+    if (second === undefined) throw new Error("second plan was not dispatched");
+    second.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await second.promise;
+
+    expect(planFn).toHaveBeenCalledTimes(2);
+    expect(planFn.mock.calls.map(([, , provider]) => provider)).toEqual(["claude", "codex"]);
+    expect(thirdAgent.thinking).toBe(false);
+    expect(broker.inFlightCount()).toBe(0);
+
+    managedAgentIds = [thirdAgent.id];
+    engine.world.tick = 36_000;
+    broker.onTick();
+
+    expect(planFn).toHaveBeenCalledTimes(3);
+    const third = requests[2];
+    if (third === undefined) throw new Error("third plan was not dispatched");
+    third.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await third.promise;
+  });
+
+  it("logs budget exhaustion at most once per 1,000 ticks", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    const secondAgent = getAgent(engine, 1);
+    let managedAgentIds = [firstAgent.id, secondAgent.id];
+    const first = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, _agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        first.promise,
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: () => managedAgentIds,
+      providerForAgent: () => "claude",
+      planFn,
+      maxCallsPerHour: 1,
+    });
+
+    broker.onTick();
+    first.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await first.promise;
+    managedAgentIds = [secondAgent.id];
+
+    engine.world.tick = 999;
+    broker.onTick();
+    engine.world.tick = 1_000;
+    broker.onTick();
+
+    expect(log.mock.calls).toEqual([
+      [JSON.stringify({ at: "thoughtBroker", outcome: "budget-exhausted", tick: 0 })],
+      [JSON.stringify({ at: "thoughtBroker", outcome: "budget-exhausted", tick: 1_000 })],
+    ]);
   });
 
   it("advances the queue and cools down the current agent when planning rejects", async () => {

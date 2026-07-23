@@ -1,9 +1,13 @@
 export const TICK_RATE = 10; // sim ticks per second
 export const TICKS_PER_DAY = 2400;
-export const THINK_COOLDOWN_TICKS = 300;
+export const THINK_COOLDOWN_TICKS = 1200;
 export const MAX_PLAN_TASKS = 8;
 export const MAX_PLAN_REASONING_CHARS = 512;
 export const LLM_TIMEOUT_MS = 90_000;
+export const LLM_CLAUDE_MODEL_DEFAULT = "haiku";
+export const LLM_MAX_CALLS_PER_HOUR = 30;
+export const LLM_BUDGET_LOG_INTERVAL_TICKS = 1_000;
+export const TICKS_PER_HOUR = 36_000;
 export const DAYS_PER_SEASON = 2;
 export const SEASONS = ["spring", "summer", "autumn", "winter"] as const; // year = 8 days = ~32 real minutes
 export const HUNGER_MAX = 100;

@@ -1,24 +1,28 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
-import { LLM_TIMEOUT_MS } from "@agent-town/shared";
+import { LLM_CLAUDE_MODEL_DEFAULT, LLM_TIMEOUT_MS } from "@agent-town/shared";
 
 import type { LlmRunner, RunnerResult } from "./llmRunner.js";
 
 // Planning keeps subscription auth but disables tools, project instructions, MCP, and sessions.
-const CLAUDE_ARGS = [
-  "-p",
-  "--output-format",
-  "json",
-  "--safe-mode",
-  "--tools",
-  "",
-  "--disable-slash-commands",
-  "--strict-mcp-config",
-  "--mcp-config",
-  '{"mcpServers":{}}',
-  "--no-chrome",
-  "--no-session-persistence",
-];
+function claudeArgs(model: string): string[] {
+  return [
+    "-p",
+    "--output-format",
+    "json",
+    "--model",
+    model,
+    "--safe-mode",
+    "--tools",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    '{"mcpServers":{}}',
+    "--no-chrome",
+    "--no-session-persistence",
+  ];
+}
 
 export const CLAUDE_STDOUT_MAX_BYTES = 65_536;
 export const CLAUDE_STDERR_MAX_BYTES = 65_536;
@@ -332,16 +336,20 @@ function monitorChild(
 export class CliClaudeRunner implements LlmRunner {
   private readonly spawnFn: typeof spawn;
   private readonly timeoutMs: number;
+  private readonly model: string;
 
-  constructor(opts: { spawnFn?: typeof spawn; timeoutMs?: number } = {}) {
+  constructor(opts: { model?: string; spawnFn?: typeof spawn; timeoutMs?: number } = {}) {
     this.spawnFn = opts.spawnFn ?? spawn;
     this.timeoutMs = opts.timeoutMs ?? LLM_TIMEOUT_MS;
+    this.model = opts.model ?? LLM_CLAUDE_MODEL_DEFAULT;
   }
 
   run(prompt: string): Promise<RunnerResult> {
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = this.spawnFn("claude", CLAUDE_ARGS, { env: claudeEnvironment(process.env) });
+      child = this.spawnFn("claude", claudeArgs(this.model), {
+        env: claudeEnvironment(process.env),
+      });
     } catch (error) {
       return Promise.resolve({
         ok: false,

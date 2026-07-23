@@ -27,6 +27,9 @@ interface ServerOptions {
   llmPlannerEnabled?: boolean;
   llmAgents?: string;
   llmRoutes?: string;
+  llmClaudeModel?: string;
+  llmCooldownTicks?: number;
+  llmMaxCallsPerHour?: number;
   staticDir?: string;
 }
 
@@ -38,6 +41,9 @@ interface ThoughtBrokerFactoryOptions {
   fallback: FakePlanner;
   llmAgents?: string;
   llmRoutes?: string;
+  claudeModel?: string;
+  cooldownTicks?: number;
+  maxCallsPerHour?: number;
   runners?: LlmRunnerRegistry;
 }
 
@@ -116,7 +122,7 @@ export function createThoughtBroker(opts: ThoughtBrokerFactoryOptions): ThoughtB
   const selection = parseLlmAgentSelection(opts.llmAgents, opts.engine.world.agents);
   const routes = parseLlmProviderRoutes(opts.llmRoutes, opts.engine.world.agents, selection);
   const runners: LlmRunnerRegistry = opts.runners ?? {
-    claude: new CliClaudeRunner(),
+    claude: new CliClaudeRunner(opts.claudeModel === undefined ? {} : { model: opts.claudeModel }),
     codex: new CliCodexRunner(),
   };
   const planners: Readonly<Record<LlmProvider, LlmPlanner>> = {
@@ -129,6 +135,8 @@ export function createThoughtBroker(opts: ThoughtBrokerFactoryOptions): ThoughtB
     llmAgentIds: () => llmAgentIdsForWorld(selection, opts.engine.world.agents),
     providerForAgent: (agent) => llmProviderForAgent(routes, agent),
     planFn: (world, agent, provider) => planners[provider].planAsync(world, agent),
+    ...(opts.cooldownTicks === undefined ? {} : { cooldownTicks: opts.cooldownTicks }),
+    ...(opts.maxCallsPerHour === undefined ? {} : { maxCallsPerHour: opts.maxCallsPerHour }),
   });
 }
 
@@ -142,6 +150,9 @@ export function startServer(opts: ServerOptions): ServerHandle {
     fallback,
     ...(opts.llmAgents === undefined ? {} : { llmAgents: opts.llmAgents }),
     ...(opts.llmRoutes === undefined ? {} : { llmRoutes: opts.llmRoutes }),
+    ...(opts.llmClaudeModel === undefined ? {} : { claudeModel: opts.llmClaudeModel }),
+    ...(opts.llmCooldownTicks === undefined ? {} : { cooldownTicks: opts.llmCooldownTicks }),
+    ...(opts.llmMaxCallsPerHour === undefined ? {} : { maxCallsPerHour: opts.llmMaxCallsPerHour }),
   });
   const httpServer = createServer(createStaticHandler(opts.staticDir));
   const socketServer = createWebSocketServer(httpServer, WEBSOCKET_PATH);
