@@ -21,6 +21,18 @@ interface ThoughtBrokerOptions {
   ) => Promise<{ tasks: AgentTask[]; source: PlanSource; reasoning?: string }>;
 }
 
+function logPlanningFailure(agentId: string, provider: LlmProvider): void {
+  console.error(
+    JSON.stringify({
+      at: "thoughtBroker",
+      agent: agentId,
+      provider,
+      outcome: "error",
+      error: "planning failed",
+    }),
+  );
+}
+
 export class ThoughtBroker {
   private readonly queuedAgentIds: string[] = [];
   private readonly cooldownUntil = new Map<string, number>();
@@ -83,6 +95,25 @@ export class ThoughtBroker {
     this.dispatchNext();
   }
 
+  private failRequest(agent: AgentState, provider: LlmProvider): void {
+    logPlanningFailure(agent.id, provider);
+    agent.thinking = false;
+    this.cooldownUntil.set(agent.id, this.opts.engine.world.tick + THINK_COOLDOWN_TICKS);
+    this.requestInFlight = false;
+    this.dispatchNext();
+  }
+
+  private startRequest(agent: AgentState, provider: LlmProvider): void {
+    try {
+      void this.opts
+        .planFn(this.opts.engine.world, agent, provider)
+        .then((result) => this.finishRequest(agent.id, result))
+        .catch(() => this.failRequest(agent, provider));
+    } catch {
+      this.failRequest(agent, provider);
+    }
+  }
+
   private dispatchNext(): void {
     if (this.requestInFlight) return;
     const agentId = this.queuedAgentIds.shift();
@@ -95,9 +126,7 @@ export class ThoughtBroker {
 
     const provider = this.assignProvider(agent);
     this.requestInFlight = true;
-    void this.opts
-      .planFn(this.opts.engine.world, agent, provider)
-      .then((result) => this.finishRequest(agentId, result));
+    this.startRequest(agent, provider);
   }
 
   onTick(): void {

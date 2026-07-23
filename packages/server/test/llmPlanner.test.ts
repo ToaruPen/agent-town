@@ -208,6 +208,44 @@ describe("LlmPlanner", () => {
     );
   });
 
+  it("retries runner rejections twice before returning fallback tasks", async () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const fallbackTasks: AgentTask[] = [{ kind: "deposit" }];
+    const run = vi
+      .fn<LlmRunner["run"]>()
+      .mockRejectedValue(new Error("sensitive prompt and credential details"));
+    const fallbackPlan = vi.fn((): AgentTask[] => fallbackTasks);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await new LlmPlanner("claude", { run }, { plan: fallbackPlan }).planAsync(
+      world,
+      agent,
+    );
+
+    expect(result).toEqual({ tasks: fallbackTasks, source: "fake" });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(fallbackPlan).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledTimes(3);
+    for (const attempt of [1, 2]) {
+      expect(log).toHaveBeenNthCalledWith(
+        attempt,
+        JSON.stringify({
+          at: "llmPlanner",
+          agent: agent.id,
+          provider: "claude",
+          attempt,
+          outcome: "error",
+          error: "runner rejected",
+        }),
+      );
+    }
+    expect(log).toHaveBeenLastCalledWith(
+      JSON.stringify({ at: "llmPlanner", agent: agent.id, provider: "claude", outcome: "fake" }),
+    );
+    expect(log.mock.calls.flat().join("\n")).not.toContain("sensitive");
+  });
+
   it("returns LLM tasks when garbage is followed by a valid response", async () => {
     const agent = createAgent();
     const world = createWorld(agent);

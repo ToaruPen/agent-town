@@ -81,6 +81,39 @@ describe("provider routing integration", () => {
     });
   });
 
+  it("continues to a Codex resident after the Claude runner rejects", async () => {
+    const { engine, fallback } = setup();
+    const claudeRun = vi
+      .fn<LlmRunner["run"]>()
+      .mockRejectedValue(new Error("Claude process rejected"));
+    const codexRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const broker = createThoughtBroker({
+      enabled: true,
+      engine,
+      fallback,
+      llmAgents: "all",
+      llmRoutes: "Ash:claude,*:codex",
+      runners: { claude: runner(claudeRun), codex: runner(codexRun) },
+    });
+
+    broker?.onTick();
+    await vi.waitFor(() => expect(broker?.inFlightCount()).toBe(0));
+
+    const ash = engine.world.agents[0] as AgentState;
+    const birch = engine.world.agents[1] as AgentState;
+    expect(claudeRun).toHaveBeenCalledTimes(2);
+    expect(codexRun).toHaveBeenCalledOnce();
+    expect({ provider: ash.llmProvider, source: ash.planSource }).toEqual({
+      provider: "claude",
+      source: "fake",
+    });
+    expect({ provider: birch.llmProvider, source: birch.planSource }).toEqual({
+      provider: "codex",
+      source: "llm",
+    });
+  });
+
   it("does not parse provider routes when planning is disabled", () => {
     const { engine, fallback } = setup();
 

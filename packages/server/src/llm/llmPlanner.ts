@@ -7,7 +7,7 @@ import type {
 } from "@agent-town/shared";
 
 import type { Planner } from "../sim/fakePlanner.js";
-import type { LlmRunner } from "./llmRunner.js";
+import type { LlmRunner, RunnerResult } from "./llmRunner.js";
 import { normalizePlan } from "./normalizePlan.js";
 import { buildPlanPrompt } from "./planPrompt.js";
 import { parsePlanResponse, validateNormalizedPlanExecutability } from "./planSchema.js";
@@ -40,6 +40,14 @@ function logAttempt(
   console.log(JSON.stringify(line));
 }
 
+async function runSafely(runner: LlmRunner, prompt: string): Promise<RunnerResult> {
+  try {
+    return await runner.run(prompt);
+  } catch {
+    return { ok: false, error: "runner rejected" };
+  }
+}
+
 export class LlmPlanner {
   constructor(
     private readonly provider: LlmProvider,
@@ -49,7 +57,7 @@ export class LlmPlanner {
 
   async planAsync(world: WorldState, agent: AgentState): Promise<AsyncPlanResult> {
     for (let attempt = 1; attempt <= PLAN_ATTEMPTS; attempt += 1) {
-      const runnerResult = await this.runner.run(buildPlanPrompt(world, agent));
+      const runnerResult = await runSafely(this.runner, buildPlanPrompt(world, agent));
       if (!runnerResult.ok) {
         logAttempt(agent, this.provider, "error", attempt, runnerResult.error);
         continue;

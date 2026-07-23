@@ -281,6 +281,116 @@ describe("ThoughtBroker", () => {
     expect(broker.inFlightCount()).toBe(0);
   });
 
+  it("advances the queue and cools down the current agent when planning rejects", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    const secondAgent = getAgent(engine, 1);
+    const secondPlan = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        agent === firstAgent
+          ? Promise.reject(new Error("sensitive prompt and credential details"))
+          : secondPlan.promise,
+    );
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [firstAgent.id, secondAgent.id],
+      providerForAgent: (agent) => (agent === firstAgent ? "claude" : "codex"),
+      planFn,
+    });
+
+    broker.onTick();
+    await vi.waitFor(() => expect(planFn).toHaveBeenCalledTimes(2));
+
+    expect(firstAgent.thinking).toBe(false);
+    expect(secondAgent.thinking).toBe(true);
+    expect(broker.inFlightCount()).toBe(1);
+    expect(errorLog).toHaveBeenCalledOnce();
+    expect(errorLog).toHaveBeenCalledWith(
+      JSON.stringify({
+        at: "thoughtBroker",
+        agent: firstAgent.id,
+        provider: "claude",
+        outcome: "error",
+        error: "planning failed",
+      }),
+    );
+    expect(errorLog.mock.calls.flat().join("\n")).not.toContain("sensitive");
+
+    secondPlan.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await secondPlan.promise;
+    await vi.waitFor(() => expect(broker.inFlightCount()).toBe(0));
+
+    broker.onTick();
+    expect(planFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("advances the queue when planning throws synchronously", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    const secondAgent = getAgent(engine, 1);
+    const secondPlan = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, agent: AgentState, _provider: LlmProvider): Promise<PlanResult> => {
+        if (agent === firstAgent) throw new Error("sensitive synchronous details");
+        return secondPlan.promise;
+      },
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [firstAgent.id, secondAgent.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
+
+    broker.onTick();
+
+    expect(planFn).toHaveBeenCalledTimes(2);
+    expect(firstAgent.thinking).toBe(false);
+    expect(secondAgent.thinking).toBe(true);
+    expect(broker.inFlightCount()).toBe(1);
+
+    secondPlan.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await secondPlan.promise;
+    await vi.waitFor(() => expect(broker.inFlightCount()).toBe(0));
+  });
+
+  it("advances the queue when applying a resolved plan throws", async () => {
+    const engine = createTestEngine();
+    const firstAgent = getAgent(engine, 0);
+    const secondAgent = getAgent(engine, 1);
+    const secondPlan = createDeferredPlan();
+    const planFn = vi.fn(
+      (_world: WorldState, agent: AgentState, _provider: LlmProvider): Promise<PlanResult> =>
+        agent === firstAgent
+          ? Promise.resolve({ tasks: [{ kind: "deposit" }], source: "llm" })
+          : secondPlan.promise,
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(engine, "applyPlan").mockImplementationOnce(() => {
+      throw new Error("apply failed with sensitive details");
+    });
+    const broker = new ThoughtBroker({
+      engine,
+      llmAgentIds: [firstAgent.id, secondAgent.id],
+      providerForAgent: () => "claude",
+      planFn,
+    });
+
+    broker.onTick();
+    await vi.waitFor(() => expect(planFn).toHaveBeenCalledTimes(2));
+
+    expect(firstAgent.thinking).toBe(false);
+    expect(secondAgent.thinking).toBe(true);
+    expect(broker.inFlightCount()).toBe(1);
+
+    secondPlan.resolve({ tasks: [{ kind: "deposit" }], source: "llm" });
+    await secondPlan.promise;
+    await vi.waitFor(() => expect(broker.inFlightCount()).toBe(0));
+  });
+
   it("dispatches once when hunger crosses below the eat threshold", async () => {
     const engine = createTestEngine();
     const agent = getAgent(engine, 0);
