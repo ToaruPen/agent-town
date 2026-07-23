@@ -388,11 +388,26 @@
       }
 
       .world-chronicle__values {
-        margin: 0.2rem 0 0.7rem;
+        display: grid;
+        gap: 0.3rem;
+        margin: 0.35rem 0 0.8rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      .world-chronicle__value-label {
         color: #bfd0cb;
         font: 0.62rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+      }
+
+      .world-chronicle__value-cause {
+        display: block;
+        margin-top: 0.05rem;
+        color: #a9aaa0;
+        font-size: 0.68rem;
+        line-height: 1.35;
       }
 
       .world-chronicle__polity .world-chronicle__detail {

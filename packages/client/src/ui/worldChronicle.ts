@@ -27,8 +27,18 @@ export interface ChroniclePolityViewModel {
   taboo: string;
   ambition: string;
   governance: string;
-  values: string[];
+  values: ChronicleValueViewModel[];
   isHomeland: boolean;
+}
+
+export interface ChronicleValueViewModel {
+  label: string;
+  strengthenedBy: ChronicleValueCauseViewModel[];
+}
+
+export interface ChronicleValueCauseViewModel {
+  year: number;
+  title: string;
 }
 
 export interface ChronicleEventViewModel {
@@ -62,11 +72,24 @@ function eventTitles(history: WorldHistory, eventIds: string[]): string[] {
   });
 }
 
-function rankedValues(polity: Polity): string[] {
+function strongestValues(polity: Polity) {
   return polity.values
     .toSorted((left, right) => right.weight - left.weight || left.value.localeCompare(right.value))
-    .slice(0, 3)
-    .map(({ value }) => CULTURAL_VALUE_LABELS[value]);
+    .slice(0, 3);
+}
+
+function valueCauses(history: WorldHistory, eventIds: string[]): ChronicleValueCauseViewModel[] {
+  return eventIds.slice(-2).flatMap((eventId) => {
+    const event = history.events.find(({ id }) => id === eventId);
+    return event === undefined ? [] : [{ year: event.year, title: event.title }];
+  });
+}
+
+function rankedValues(history: WorldHistory, polity: Polity): ChronicleValueViewModel[] {
+  return strongestValues(polity).map(({ value, changedByEventIds }) => ({
+    label: CULTURAL_VALUE_LABELS[value],
+    strengthenedBy: valueCauses(history, changedByEventIds),
+  }));
 }
 
 function formativeWounds(history: WorldHistory, eventIds: string[]): string[] {
@@ -96,7 +119,7 @@ function polityView(history: WorldHistory, polity: Polity): ChroniclePolityViewM
     taboo: polity.taboo,
     ambition: polity.ambition,
     governance: polity.governance,
-    values: rankedValues(polity),
+    values: rankedValues(history, polity),
     isHomeland: history.settlementOrigin?.homelandPolityId === polity.id,
   };
 }
@@ -126,6 +149,11 @@ function featuredEventIds(history: WorldHistory): Set<string> {
   );
   for (const causeId of departure?.causeIds ?? []) featured.add(causeId);
   for (const landmark of history.landmarks) featured.add(landmark.foundedByEventId);
+  for (const polity of history.polities) {
+    for (const value of strongestValues(polity)) {
+      for (const eventId of value.changedByEventIds.slice(-2)) featured.add(eventId);
+    }
+  }
   return featured;
 }
 
@@ -190,7 +218,7 @@ function polityCard(polity: ChroniclePolityViewModel): HTMLElement {
   card.style.setProperty("--polity-color", `#${polity.color.toString(16).padStart(6, "0")}`);
   card.append(
     element("h4", "world-chronicle__polity-name", polity.name),
-    element("p", "world-chronicle__values", polity.values.join(" · ")),
+    culturalValueList(polity.values),
     labelledText("Founding account", polity.foundingMyth),
     labelledText("Government", polity.governance),
     labelledText("Taboo", polity.taboo),
@@ -200,6 +228,33 @@ function polityCard(polity: ChroniclePolityViewModel): HTMLElement {
     card.append(labelledText("Formative wounds", polity.traumaTitles.join(" · ")));
   }
   return card;
+}
+
+function historicalYear(year: number): string {
+  return year < 0 ? `−${Math.abs(year)}` : String(year);
+}
+
+function valueCauseText(causes: ChronicleValueCauseViewModel[]): string {
+  return causes.map(({ year, title }) => `${historicalYear(year)} · ${title}`).join("; ");
+}
+
+function culturalValueList(values: ChronicleValueViewModel[]): HTMLElement {
+  const list = element("ul", "world-chronicle__values");
+  for (const value of values) {
+    const item = element("li", "world-chronicle__value");
+    item.append(element("span", "world-chronicle__value-label", value.label));
+    if (value.strengthenedBy.length > 0) {
+      item.append(
+        element(
+          "span",
+          "world-chronicle__value-cause",
+          `Strengthened by ${valueCauseText(value.strengthenedBy)}`,
+        ),
+      );
+    }
+    list.append(item);
+  }
+  return list;
 }
 
 function politySection(polities: ChroniclePolityViewModel[]): HTMLElement {

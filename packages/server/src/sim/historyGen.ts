@@ -12,6 +12,8 @@ import {
   type Tile,
   WORLD_HISTORY_TURN_YEARS,
   WORLD_HISTORY_YEARS,
+  WORLD_LANDMARK_FALLBACK_DISTANCE,
+  WORLD_LANDMARK_MIN_DISTANCE,
   WORLD_POLITY_COUNT,
   type WorldHistory,
 } from "@agent-town/shared";
@@ -41,7 +43,6 @@ interface MutablePolity {
   adjective: string;
   color: number;
   population: number;
-  relation: number;
   values: Map<CulturalValue, MutableValue>;
   foundingMyth: string;
   traumaIds: string[];
@@ -57,6 +58,8 @@ interface HistoryMap {
   tiles: Tile[];
   stockpile: Position;
 }
+
+type PolityRelations = Map<string, number>;
 
 const POLITY_TEMPLATES: PolityTemplate[] = [
   {
@@ -189,7 +192,6 @@ function createPolities(rng: () => number): MutablePolity[] {
       adjective: template.adjective,
       color: template.color,
       population: 80 + randomIndex(rng, 41),
-      relation: randomIndex(rng, 41) - 20,
       values: createValues(template),
       foundingMyth: template.foundingMyth,
       traumaIds: [],
@@ -198,6 +200,43 @@ function createPolities(rng: () => number): MutablePolity[] {
       governance: template.governance,
       latestEventId: "",
     }));
+}
+
+function relationKey(left: MutablePolity, right: MutablePolity): string {
+  return left.id < right.id ? `${left.id}:${right.id}` : `${right.id}:${left.id}`;
+}
+
+function createRelations(rng: () => number, polities: MutablePolity[]): PolityRelations {
+  const relations: PolityRelations = new Map();
+  for (let left = 0; left < polities.length; left += 1) {
+    for (let right = left + 1; right < polities.length; right += 1) {
+      const leftPolity = polities[left];
+      const rightPolity = polities[right];
+      if (leftPolity === undefined || rightPolity === undefined) continue;
+      relations.set(relationKey(leftPolity, rightPolity), randomIndex(rng, 41) - 20);
+    }
+  }
+  return relations;
+}
+
+function relationBetween(
+  relations: PolityRelations,
+  left: MutablePolity,
+  right: MutablePolity,
+): number {
+  const relation = relations.get(relationKey(left, right));
+  if (relation === undefined) throw new Error("history generation requires a polity relation");
+  return relation;
+}
+
+function changeRelation(
+  relations: PolityRelations,
+  left: MutablePolity,
+  right: MutablePolity,
+  delta: number,
+): void {
+  const current = relationBetween(relations, left, right);
+  relations.set(relationKey(left, right), Math.max(-100, Math.min(100, current + delta)));
 }
 
 function eventId(events: HistoryEvent[]): string {
@@ -310,10 +349,13 @@ function turnEffects(
   actor: MutablePolity,
   neighbor: MutablePolity,
 ): HistoryEffect[] {
-  const effects: HistoryEffect[] = [
-    { kind: "population", targetId: actor.id, delta: populationDelta(kind) },
-    { kind: "culture", targetId: actor.id, value: EVENT_VALUE[kind], delta: 0.08 },
-  ];
+  const effects: HistoryEffect[] = [];
+  for (const polity of affectedPolities(kind, actor, neighbor)) {
+    effects.push(
+      { kind: "population", targetId: polity.id, delta: populationDelta(kind) },
+      { kind: "culture", targetId: polity.id, value: EVENT_VALUE[kind], delta: 0.08 },
+    );
+  }
   const relation = relationDelta(kind);
   if (relation !== 0) {
     effects.push({
@@ -326,17 +368,31 @@ function turnEffects(
   return effects;
 }
 
+function affectedPolities(
+  kind: Exclude<HistoryEventKind, "founding" | "migration">,
+  actor: MutablePolity,
+  neighbor: MutablePolity,
+): MutablePolity[] {
+  return kind === "trade" || kind === "war" ? [actor, neighbor] : [actor];
+}
+
+function causalEventIds(polities: MutablePolity[]): string[] {
+  return [...new Set(polities.map(({ latestEventId }) => latestEventId).filter(Boolean))];
+}
+
 function simulatePolityTurn(
   rng: () => number,
   year: number,
   polityIndex: number,
   polities: MutablePolity[],
+  relations: PolityRelations,
   events: HistoryEvent[],
 ): void {
   const actor = polities[polityIndex];
   if (actor === undefined) return;
   const neighbor = neighborFor(rng, polities, actor);
-  const kind = turnKind(rng, year, polityIndex, actor.relation);
+  const kind = turnKind(rng, year, polityIndex, relationBetween(relations, actor, neighbor));
+  const affected = affectedPolities(kind, actor, neighbor);
   const id = eventId(events);
   const event: HistoryEvent = {
     id,
@@ -344,27 +400,34 @@ function simulatePolityTurn(
     kind,
     title: eventTitle(kind, actor, neighbor),
     summary: eventSummary(kind, actor, neighbor),
-    polityIds: kind === "trade" || kind === "war" ? [actor.id, neighbor.id] : [actor.id],
-    causeIds: [actor.latestEventId],
+    polityIds: affected.map(({ id: polityId }) => polityId),
+    causeIds: causalEventIds(affected),
     effects: turnEffects(kind, actor, neighbor),
   };
 
-  actor.population = Math.max(10, actor.population + populationDelta(kind));
-  actor.relation = Math.max(-100, Math.min(100, actor.relation + relationDelta(kind)));
-  actor.latestEventId = id;
-  updateValue(actor, EVENT_VALUE[kind], id);
-  recordTrauma(actor, kind, id);
+  for (const polity of affected) {
+    polity.population = Math.max(10, polity.population + populationDelta(kind));
+    polity.latestEventId = id;
+    updateValue(polity, EVENT_VALUE[kind], id);
+    recordTrauma(polity, kind, id);
+  }
+  changeRelation(relations, actor, neighbor, relationDelta(kind));
   events.push(event);
 }
 
-function simulateTurns(rng: () => number, polities: MutablePolity[], events: HistoryEvent[]): void {
+function simulateTurns(
+  rng: () => number,
+  polities: MutablePolity[],
+  relations: PolityRelations,
+  events: HistoryEvent[],
+): void {
   for (
     let year = -WORLD_HISTORY_YEARS + WORLD_HISTORY_TURN_YEARS;
     year < 0;
     year += WORLD_HISTORY_TURN_YEARS
   ) {
     for (let polityIndex = 0; polityIndex < polities.length; polityIndex += 1) {
-      simulatePolityTurn(rng, year, polityIndex, polities, events);
+      simulatePolityTurn(rng, year, polityIndex, polities, relations, events);
     }
   }
 }
@@ -465,15 +528,27 @@ function manhattanDistance(left: Position, right: Position): number {
   return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
 }
 
-function walkableLandmarkPositions(map: HistoryMap): Position[] {
+function walkableLandmarkPositions(map: HistoryMap, minDistance: number): Position[] {
   const positions: Position[] = [];
   for (const [index, tile] of map.tiles.entries()) {
     if (tile.resource !== null || (tile.terrain !== "plains" && tile.terrain !== "forest"))
       continue;
     const pos = { x: index % map.width, y: Math.floor(index / map.width) };
-    if (manhattanDistance(pos, map.stockpile) >= 12) positions.push(pos);
+    if (manhattanDistance(pos, map.stockpile) >= minDistance) positions.push(pos);
   }
   return positions;
+}
+
+function landmarkPositions(rng: () => number, map: HistoryMap, required: number): Position[] {
+  const preferred = shuffled(rng, walkableLandmarkPositions(map, WORLD_LANDMARK_MIN_DISTANCE));
+  if (preferred.length >= required) return preferred;
+  const fallback = shuffled(
+    rng,
+    walkableLandmarkPositions(map, WORLD_LANDMARK_FALLBACK_DISTANCE).filter(
+      (pos) => manhattanDistance(pos, map.stockpile) < WORLD_LANDMARK_MIN_DISTANCE,
+    ),
+  );
+  return [...preferred, ...fallback];
 }
 
 function landmarkSourceEvents(events: HistoryEvent[]): HistoryEvent[] {
@@ -500,8 +575,9 @@ function createLandmarks(
   events: HistoryEvent[],
 ): HistoricalLandmark[] {
   if (map === undefined) return [];
-  const positions = shuffled(rng, walkableLandmarkPositions(map));
-  return landmarkSourceEvents(events).flatMap((event, index) => {
+  const sources = landmarkSourceEvents(events);
+  const positions = landmarkPositions(rng, map, sources.length);
+  return sources.flatMap((event, index) => {
     const pos = positions[index];
     const polityId = event.polityIds[0];
     if (pos === undefined || polityId === undefined) return [];
@@ -524,8 +600,9 @@ function createLandmarks(
 export function generateWorldHistory(seed: number, map?: HistoryMap): WorldHistory {
   const rng = createRng(seed ^ 0x5f3759df);
   const polities = createPolities(rng);
+  const relations = createRelations(rng, polities);
   const events = createFoundingEvents(polities);
-  simulateTurns(rng, polities, events);
+  simulateTurns(rng, polities, relations, events);
   const settlementOrigin = createDeparture(rng, polities, events);
   const landmarks = createLandmarks(rng, map, polities, events);
 

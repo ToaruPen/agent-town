@@ -60,7 +60,7 @@ function historyFixture(): WorldHistory {
         color: 0x6f7f88,
         values: [
           { value: "mutualAid", weight: 0.9, changedByEventIds: ["event-war"] },
-          { value: "order", weight: 0.8, changedByEventIds: [] },
+          { value: "order", weight: 0.8, changedByEventIds: ["event-trade"] },
           { value: "valor", weight: 0.4, changedByEventIds: ["event-war"] },
         ],
         foundingMyth: "The first wardens shared one fire through a winter siege.",
@@ -155,7 +155,20 @@ describe("buildWorldChronicleViewModel", () => {
       expect.objectContaining({
         name: "The Sable March",
         isHomeland: true,
-        values: ["Mutual aid", "Order", "Valor"],
+        values: [
+          {
+            label: "Mutual aid",
+            strengthenedBy: [{ year: -80, title: "The Ashen Border War" }],
+          },
+          {
+            label: "Order",
+            strengthenedBy: [{ year: -40, title: "The Sable-Auric Compact" }],
+          },
+          {
+            label: "Valor",
+            strengthenedBy: [{ year: -80, title: "The Ashen Border War" }],
+          },
+        ],
         traumaTitles: ["The Ashen Border War"],
       }),
     );
@@ -165,7 +178,7 @@ describe("buildWorldChronicleViewModel", () => {
         causes: ["The Ashen Border War"],
       }),
     );
-    expect(view.events.some(({ id }) => id === "event-trade")).toBe(false);
+    expect(view.events.some(({ id }) => id === "event-trade")).toBe(true);
   });
 });
 
@@ -208,6 +221,7 @@ describe("createWorldChronicle", () => {
     expect(focusedElement).toBe(root.findByClass("world-chronicle__close"));
     expect(root.allText()).toContain("The Sable March");
     expect(root.allText()).toContain("The Ashen Border War");
+    expect(root.allText()).toContain("Strengthened by −40 · The Sable-Auric Compact");
 
     const release = bindEscape(controller, () => controller.close()) as () => void;
     let prevented = 0;

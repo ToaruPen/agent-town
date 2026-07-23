@@ -62,3 +62,5 @@ export const FOOD_RESOURCE_MAX = 30;
 export const WORLD_HISTORY_YEARS = 200;
 export const WORLD_HISTORY_TURN_YEARS = 20;
 export const WORLD_POLITY_COUNT = 4;
+export const WORLD_LANDMARK_MIN_DISTANCE = 12;
+export const WORLD_LANDMARK_FALLBACK_DISTANCE = 6;
