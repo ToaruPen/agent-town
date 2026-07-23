@@ -68,6 +68,14 @@ function createWorld(agent: AgentState): WorldState {
     stockpile: { pos: { x: 3, y: 3 }, wood: 7, food: 4 },
     buildings: [],
     deaths: [],
+    history: {
+      startYear: 0,
+      currentYear: 0,
+      polities: [],
+      events: [],
+      landmarks: [],
+      settlementOrigin: null,
+    },
   };
 }
 

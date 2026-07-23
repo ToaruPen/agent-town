@@ -24,11 +24,11 @@ function agent(id: string, name: string): AgentState {
 const agents = [agent("agent-0", "Ash"), agent("agent-1", "Birch"), agent("agent-2", "Cedar")];
 
 describe("parseLlmProviderRoutes", () => {
-  it("defaults current and future residents to Claude", () => {
+  it("defaults current and future residents to Codex", () => {
     const routes = parseLlmProviderRoutes(undefined, agents, { kind: "all" });
 
-    expect(llmProviderForAgent(routes, agents[0])).toBe("claude");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Dahlia"))).toBe("claude");
+    expect(llmProviderForAgent(routes, agents[0])).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "Dahlia"))).toBe("codex");
   });
 
   it("trims routes and uses the wildcard for other and future residents", () => {

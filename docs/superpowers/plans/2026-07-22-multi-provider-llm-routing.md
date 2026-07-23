@@ -190,12 +190,12 @@ function agent(id: string, name: string): AgentState {
 const residents = [agent("agent-1", "Ash"), agent("agent-2", "Birch")];
 
 describe("LLM provider routes", () => {
-  it("defaults every managed resident to claude", () => {
+  it("defaults every managed resident to codex", () => {
     const selection = parseLlmAgentSelection(undefined, residents);
     const routes = parseLlmProviderRoutes(undefined, residents, selection);
 
-    expect(llmProviderForAgent(routes, residents[0] as AgentState)).toBe("claude");
-    expect(llmProviderForAgent(routes, agent("agent-3", "Cedar"))).toBe("claude");
+    expect(llmProviderForAgent(routes, residents[0] as AgentState)).toBe("codex");
+    expect(llmProviderForAgent(routes, agent("agent-3", "Cedar"))).toBe("codex");
   });
 
   it("prefers an exact route and applies the wildcard to future residents", () => {
@@ -270,7 +270,7 @@ import type { AgentState, LlmProvider } from "@agent-town/shared";
 
 import type { LlmAgentSelection } from "./llmAgentSelection.js";
 
-const DEFAULT_ROUTES = "*:claude";
+const DEFAULT_ROUTES = "*:codex";
 
 export interface LlmProviderRoutes {
   exact: ReadonlyMap<string, LlmProvider>;
@@ -1470,14 +1470,14 @@ Residents can be routed independently through logged-in Claude Code and Codex CL
 provider. Exact names win over `*`.
 
 ```sh
-# All managed residents use Claude (default when LLM_ROUTES is unset)
+# All managed residents use Codex (default when LLM_ROUTES is unset)
 just dev-llm
 
 # Ash uses Claude; every other current or future resident uses Codex
 LLM_AGENTS=all LLM_ROUTES='Ash:claude,*:codex' just dev-llm
 
-# Every managed resident uses Codex
-LLM_AGENTS=all LLM_ROUTES='*:codex' just dev-llm
+# Every managed resident uses Claude
+LLM_AGENTS=all LLM_ROUTES='*:claude' just dev-llm
 ```
 
 Routing is not cross-provider fallback. Each resident retries its assigned provider twice, then
@@ -1675,7 +1675,7 @@ Expected: 意図したファイルのみ、未解決placeholderなし、ロー�
 | 設計要件 | 実装task |
 |---|---|
 | `LLM_AGENTS`と`LLM_ROUTES`の分離 | Task 2, 6 |
-| exact優先、`*`、未設定`*:claude` | Task 2 |
+| exact優先、`*`、未設定`*:codex` | Task 2 |
 | 起動時の厳密検証 | Task 2, 6 |
 | `planSource`と`llmProvider`の分離 | Task 1, 6 |
 | Claude/Codex共通runner境界 | Task 3 |

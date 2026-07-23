@@ -34,6 +34,13 @@ describe("objectDepth", () => {
     expect(objectDepth(4, "resource")).toBeLessThan(objectDepth(4, "agent"));
     expect(objectDepth(4, "agent")).toBeLessThan(objectDepth(5, "resource"));
   });
+
+  it("places old-world landmarks above resources but below residents", () => {
+    const landmarkDepth = objectDepth(4, "landmark" as Parameters<typeof objectDepth>[1]);
+
+    expect(objectDepth(4, "resource")).toBeLessThan(landmarkDepth);
+    expect(landmarkDepth).toBeLessThan(objectDepth(4, "agent"));
+  });
 });
 
 describe("agentDepth", () => {

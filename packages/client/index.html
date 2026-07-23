@@ -8,6 +8,15 @@
     />
     <title>Agent Town</title>
     <style>
+      :root {
+        --world-peat: #1d2428;
+        --world-iron: #54646b;
+        --world-parchment: #ded3b3;
+        --world-ember: #d7864b;
+        --world-verdigris: #6f9f91;
+        --world-ley: #8878a6;
+      }
+
       html,
       body {
         width: 100%;
@@ -196,6 +205,305 @@
         overflow-wrap: anywhere;
       }
 
+      .chronicle-toggle {
+        position: fixed;
+        z-index: 8;
+        top: calc(1rem + env(safe-area-inset-top));
+        right: calc(1rem + env(safe-area-inset-right));
+        min-height: 44px;
+        padding: 0.55rem 0.8rem;
+        color: var(--world-parchment);
+        background: rgb(24 33 38 / 94%);
+        border: 1px solid var(--world-verdigris);
+        box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 28%);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition:
+          color 140ms ease,
+          border-color 140ms ease,
+          transform 140ms ease;
+      }
+
+      .chronicle-toggle:hover {
+        color: #fff8dc;
+        border-color: var(--world-parchment);
+        transform: translate(-1px, -1px);
+      }
+
+      .chronicle-toggle:focus-visible,
+      .world-chronicle__close:focus-visible {
+        outline: 2px solid #fff176;
+        outline-offset: 2px;
+      }
+
+      .chronicle-toggle[hidden],
+      .world-chronicle[hidden] {
+        display: none;
+      }
+
+      .world-chronicle {
+        position: fixed;
+        z-index: 12;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        box-sizing: border-box;
+        width: min(38rem, 48vw);
+        padding: calc(1.1rem + env(safe-area-inset-top)) 1.25rem
+          calc(1.5rem + env(safe-area-inset-bottom));
+        overflow-y: auto;
+        color: var(--world-parchment);
+        background:
+          linear-gradient(90deg, rgb(111 159 145 / 10%) 0 2px, transparent 2px),
+          rgb(20 27 30 / 98%);
+        border-left: 1px solid var(--world-verdigris);
+        box-shadow: -0.5rem 0 1.5rem rgb(0 0 0 / 42%);
+        font-family: Georgia, "Times New Roman", serif;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+        transition: transform 180ms ease;
+      }
+
+      .world-chronicle__header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 0.2rem 1rem;
+        padding-bottom: 0.8rem;
+        border-bottom: 1px solid var(--world-iron);
+      }
+
+      .world-chronicle__title {
+        margin: 0;
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        font-size: clamp(1.45rem, 3vw, 2.15rem);
+        font-weight: 400;
+        letter-spacing: 0.02em;
+      }
+
+      .world-chronicle__era {
+        grid-column: 1;
+        margin: 0;
+        color: #aebdb9;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .world-chronicle__close {
+        grid-row: 1 / span 2;
+        grid-column: 2;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.35rem 0.55rem;
+        color: var(--world-parchment);
+        background: transparent;
+        border: 1px solid var(--world-iron);
+        font: 0.7rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .world-chronicle__section-title {
+        margin: 1.4rem 0 0.7rem;
+        color: #c5d5d0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .world-chronicle__origin {
+        position: relative;
+        padding-left: 1rem;
+      }
+
+      .world-chronicle__origin::before {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 2px;
+        background: var(--world-verdigris);
+        content: "";
+      }
+
+      .world-chronicle__homeland {
+        margin: 0;
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        font-size: 1.3rem;
+      }
+
+      .world-chronicle__origin-reason {
+        margin: 0.4rem 0 0.7rem;
+        color: #f1e8ce;
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .world-chronicle__detail {
+        display: grid;
+        grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+        gap: 0.75rem;
+        margin: 0.45rem 0 0;
+        font-size: 0.78rem;
+        line-height: 1.45;
+      }
+
+      .world-chronicle__detail-label {
+        color: #9fb0ad;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.65rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .world-chronicle__polity-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+      }
+
+      .world-chronicle__polity {
+        padding: 0.75rem 0.75rem 0.85rem;
+        background: rgb(255 255 255 / 2.5%);
+        border-left: 3px solid var(--polity-color, var(--world-iron));
+      }
+
+      .world-chronicle__polity--homeland {
+        background: rgb(111 159 145 / 9%);
+        box-shadow: inset 0 0 0 1px rgb(111 159 145 / 20%);
+      }
+
+      .world-chronicle__polity-name {
+        margin: 0;
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .world-chronicle__values {
+        display: grid;
+        gap: 0.3rem;
+        margin: 0.35rem 0 0.8rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      .world-chronicle__value-label {
+        color: #bfd0cb;
+        font: 0.62rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .world-chronicle__value-cause {
+        display: block;
+        margin-top: 0.05rem;
+        color: #a9aaa0;
+        font-size: 0.68rem;
+        line-height: 1.35;
+      }
+
+      .world-chronicle__polity .world-chronicle__detail {
+        display: block;
+      }
+
+      .world-chronicle__polity .world-chronicle__detail-label {
+        display: block;
+        margin-bottom: 0.08rem;
+      }
+
+      .world-chronicle__events {
+        position: relative;
+        margin: 0;
+        padding: 0 0 0 1.2rem;
+        list-style: none;
+      }
+
+      .world-chronicle__events::before {
+        position: absolute;
+        top: 0.2rem;
+        bottom: 0.2rem;
+        left: 0.24rem;
+        width: 1px;
+        background: var(--world-iron);
+        content: "";
+      }
+
+      .world-chronicle__event {
+        position: relative;
+        padding: 0 0 1rem 0.55rem;
+      }
+
+      .world-chronicle__event::before {
+        position: absolute;
+        top: 0.3rem;
+        left: -1.18rem;
+        width: 7px;
+        height: 7px;
+        background: var(--world-iron);
+        border: 2px solid #141b1e;
+        content: "";
+        transform: rotate(45deg);
+      }
+
+      .world-chronicle__event--war::before,
+      .world-chronicle__event--scarcity::before {
+        background: var(--world-ember);
+      }
+
+      .world-chronicle__event--trade::before,
+      .world-chronicle__event--migration::before {
+        background: var(--world-verdigris);
+      }
+
+      .world-chronicle__event--anomaly::before {
+        background: var(--world-ley);
+        box-shadow: 0 0 0.45rem rgb(136 120 166 / 65%);
+      }
+
+      .world-chronicle__event-heading {
+        display: grid;
+        grid-template-columns: 3.1rem minmax(0, 1fr);
+        gap: 0.55rem;
+        align-items: baseline;
+      }
+
+      .world-chronicle__event-year {
+        color: #9fb0ad;
+        font: 0.68rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .world-chronicle__event-title {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .world-chronicle__event-summary {
+        margin: 0.2rem 0 0 3.65rem;
+        color: #c9c3ae;
+        font-size: 0.78rem;
+        line-height: 1.45;
+      }
+
+      .world-chronicle__event .world-chronicle__detail {
+        margin-left: 3.65rem;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .world-chronicle,
+        .chronicle-toggle {
+          transition: none;
+        }
+      }
+
       @media (max-width: 600px) {
         .inspect-panel {
           top: auto;
@@ -205,6 +513,29 @@
           border-top: 1px solid #54646b;
           border-left: 0;
           box-shadow: 0 -0.25rem 1rem rgb(0 0 0 / 35%);
+        }
+
+        .chronicle-toggle {
+          right: calc(0.65rem + env(safe-area-inset-right));
+        }
+
+        .world-chronicle {
+          top: auto;
+          left: 0;
+          width: auto;
+          max-height: 72dvh;
+          border-top: 1px solid var(--world-verdigris);
+          border-left: 0;
+          box-shadow: 0 -0.5rem 1.5rem rgb(0 0 0 / 42%);
+        }
+
+        .world-chronicle__polity-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .world-chronicle__detail {
+          grid-template-columns: 1fr;
+          gap: 0.1rem;
         }
       }
     </style>
@@ -221,6 +552,22 @@
       aria-live="polite"
       aria-atomic="true"
     ></div>
+    <button
+      id="chronicle-toggle"
+      class="chronicle-toggle"
+      type="button"
+      aria-controls="world-chronicle"
+      aria-expanded="false"
+      hidden
+    >
+      Open chronicle
+    </button>
+    <aside
+      id="world-chronicle"
+      class="world-chronicle"
+      aria-labelledby="world-chronicle-title"
+      hidden
+    ></aside>
     <aside
       id="inspect-panel"
       class="inspect-panel"

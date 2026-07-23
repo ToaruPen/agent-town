@@ -1,6 +1,7 @@
 import {
   type AgentState,
   dayOfTick,
+  type HistoricalLandmark,
   HOUSE_BUILD_TICKS,
   HOUSE_CAPACITY,
   type House,
@@ -8,6 +9,7 @@ import {
   type Position,
   type ResourceKind,
   type Tile,
+  type WorldHistory,
   type WorldState,
 } from "@agent-town/shared";
 import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
@@ -37,6 +39,7 @@ export type InfoBubbleTarget =
   | { kind: "agent"; agentId: string }
   | { kind: "tombstone"; eventId: string }
   | { kind: "house"; pos: Position }
+  | { kind: "landmark"; landmarkId: string }
   | { kind: "stockpile" }
   | { kind: "resource"; tileIndex: number; resourceKind: ResourceKind }
   | { kind: "terrain"; tileIndex: number };
@@ -98,9 +101,10 @@ export interface InfoBubbleViewModel extends AgentBubbleText {
 }
 
 const HIT_PRIORITIES: Record<InfoBubbleTarget["kind"], number> = {
-  agent: 6,
-  tombstone: 5,
-  house: 4,
+  agent: 7,
+  tombstone: 6,
+  house: 5,
+  landmark: 4,
   stockpile: 3,
   resource: 2,
   terrain: 1,
@@ -149,6 +153,21 @@ export function buildStockpileBubbleText(world: WorldState): string {
 
 export function buildTombstoneBubbleText(event: DeathEvent): string {
   return `Here lies ${event.name} — died day ${dayOfTick(event.deathTick)} of ${event.cause}`;
+}
+
+export function buildLandmarkBubbleText(
+  landmark: HistoricalLandmark,
+  history: WorldHistory,
+): string {
+  const event = history.events.find(({ id }) => id === landmark.foundedByEventId);
+  if (event === undefined) return `${landmark.name} — origin unknown`;
+  const relation =
+    landmark.kind === "borderFort"
+      ? "raised after"
+      : landmark.kind === "ruin"
+        ? "left by"
+        : "sealed after";
+  return `${landmark.name} — ${relation} ${event.title}, year ${event.year}`;
 }
 
 export function buildTerrainBubbleText(tile: Tile, position: Position): string {
@@ -272,6 +291,18 @@ function appendHouseHits(
   }
 }
 
+function appendLandmarkHits(
+  hits: InfoBubbleTarget[],
+  landmarks: WorldHistory["landmarks"],
+  tilePosition: Position,
+): void {
+  for (const landmark of landmarks.toReversed()) {
+    if (positionsEqual(landmark.pos, tilePosition)) {
+      hits.push({ kind: "landmark", landmarkId: landmark.id });
+    }
+  }
+}
+
 export function resolveInfoBubbleTarget(
   world: WorldState,
   deathEvents: DeathEvent[],
@@ -287,6 +318,7 @@ export function resolveInfoBubbleTarget(
   const hits: InfoBubbleTarget[] = agentHits(world, point);
   appendTombstoneHits(hits, deathEvents, tilePosition);
   appendHouseHits(hits, world.buildings, tilePosition);
+  appendLandmarkHits(hits, world.history.landmarks, tilePosition);
   if (positionsEqual(world.stockpile.pos, tilePosition)) hits.push({ kind: "stockpile" });
   const resourceKind = resourceKindAt(tile, tileIndex, knownResourceKinds);
   if (resourceKind !== null) hits.push({ kind: "resource", tileIndex, resourceKind });
@@ -417,6 +449,16 @@ function tombstoneBubble(
     : textBubble(buildTombstoneBubbleText(event), tilePlacement(event.pos));
 }
 
+function landmarkBubble(
+  target: Extract<InfoBubbleTarget, { kind: "landmark" }>,
+  world: WorldState,
+): InfoBubbleViewModel | null {
+  const landmark = world.history.landmarks.find(({ id }) => id === target.landmarkId);
+  return landmark === undefined
+    ? null
+    : textBubble(buildLandmarkBubbleText(landmark, world.history), tilePlacement(landmark.pos));
+}
+
 function tileBubble(
   target: Extract<InfoBubbleTarget, { kind: "resource" | "terrain" }>,
   world: WorldState,
@@ -439,6 +481,7 @@ export function buildInfoBubbleViewModel(
   if (target.kind === "stockpile") return stockpileBubble(world);
   if (target.kind === "house") return houseBubble(target, world);
   if (target.kind === "tombstone") return tombstoneBubble(target, deathEvents);
+  if (target.kind === "landmark") return landmarkBubble(target, world);
   return tileBubble(target, world);
 }
 

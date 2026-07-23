@@ -35,6 +35,14 @@ describe("wire protocol", () => {
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
       buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
       deaths: [{ name: "Birch", tick: 7200, cause: "starvation" }],
+      history: {
+        startYear: -200,
+        currentYear: 0,
+        polities: [],
+        events: [],
+        landmarks: [],
+        settlementOrigin: null,
+      },
     };
     const message: ServerMessage = { type: "welcome", state };
     const decoded = decodeServerMessage(encodeMessage(message));
@@ -45,6 +53,24 @@ describe("wire protocol", () => {
 
   it("rejects a server message without a type", () => {
     expect(() => decodeServerMessage("{}")).toThrow("invalid server message");
+  });
+
+  it("rejects a welcome message without world history", () => {
+    const welcomeWithoutHistory = JSON.stringify({
+      type: "welcome",
+      state: {
+        tick: 0,
+        width: 1,
+        height: 1,
+        tiles: [],
+        agents: [],
+        stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+        buildings: [],
+        deaths: [],
+      },
+    });
+
+    expect(() => decodeServerMessage(welcomeWithoutHistory)).toThrow("invalid server message");
   });
 
   it("rejects an update without death history", () => {
