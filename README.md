@@ -29,12 +29,21 @@ See [docs/superpowers/specs/](docs/superpowers/specs/).
 
 ## LLM mode
 
-One resident (Ash) can plan with a real LLM through the Claude Code CLI:
+Residents can be routed independently through logged-in Claude Code and Codex CLIs.
+`LLM_AGENTS` selects managed residents; `LLM_ROUTES` assigns each selected resident to a
+provider. Exact names win over `*`.
 
 ```sh
-just dev-llm   # requires a logged-in `claude` CLI (subscription auth)
+# All managed residents use Claude (default when LLM_ROUTES is unset)
+just dev-llm
+
+# Ash uses Claude; every other current or future resident uses Codex
+LLM_AGENTS=all LLM_ROUTES='Ash:claude,*:codex' just dev-llm
+
+# Every managed resident uses Codex
+LLM_AGENTS=all LLM_ROUTES='*:codex' just dev-llm
 ```
 
-Watch the server log for `{"at":"llmPlanner","agent":"agent-1","outcome":"llm"}`.
-LLM-driven residents render with a gold ring; "…" appears while they think.
-All LLM failures fall back to the rule-based planner — the town never stalls.
+Routing is not cross-provider fallback. Each resident retries its assigned provider twice, then
+uses the rule-based planner so the town keeps moving. Logs include `agent`, `provider`, `attempt`,
+and `outcome`. The UI shows `CLAUDE`, `CODEX`, or `PROVIDER → FAKE` for each managed resident.
