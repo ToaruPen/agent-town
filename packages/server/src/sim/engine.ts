@@ -37,6 +37,7 @@ import { stepAgent } from "./executor.js";
 import type { Planner } from "./fakePlanner.js";
 import { updateFoodSecurityDesires } from "./foodAnxiety.js";
 import { advanceSociety, createSocietyMemory } from "./society.js";
+import { advanceSpatialDemands } from "./spatialDemand.js";
 
 const HUNGER_DECAY_PER_TICK = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY;
 const FATIGUE_DECAY_PER_TICK = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
@@ -274,7 +275,6 @@ function advanceAgent(world: WorldState, agent: AgentState, planner: Planner): v
 }
 
 export function createEngine(world: WorldState, planner: Planner, rng: () => number): Engine {
-  void rng;
   const dirtyTileIndexes = new Set<number>();
   const berryCaps = captureBerryCaps(world.tiles);
   const societyMemory = createSocietyMemory();
@@ -289,6 +289,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       world.tick += 1;
       updateFoodSecurityDesires(world);
       advanceSociety(world, societyMemory);
+      advanceSpatialDemands(world, rng);
       if (isPositiveDayBoundary(world.tick)) runDailyHooks(world, berryCaps);
       markDirtyTiles(world.tiles, resourcesBefore, dirtyTileIndexes);
     },

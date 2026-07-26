@@ -215,6 +215,16 @@ export const FACILITY_MAINTENANCE_PER_DAY = {
 export const FACILITY_SITE_DISTANCE_CAP = 32;
 export const SPATIAL_DEMAND_RETRY_INTERVAL_TICKS = 100;
 
+export const SITE_FACTORS = [
+  "foodAccess",
+  "residentAccess",
+  "stockpileAccess",
+  "existingTraffic",
+  "settlementEdgeAccess",
+  "openSpace",
+  "accessEquality",
+] as const satisfies readonly SiteFactor[];
+
 export const FACILITY_SITE_WEIGHTS = {
   communalGranary: {
     foodAccess: 0.25,
