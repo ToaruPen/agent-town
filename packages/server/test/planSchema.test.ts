@@ -127,6 +127,14 @@ describe("parsePlanResponse", () => {
     );
   });
 
+  it.each([
+    { kind: "buildFacility", facilityId: "facility-1" },
+    { kind: "maintainFacility", facilityId: "facility-1" },
+    { kind: "transferToFacility", facilityId: "facility-1", resource: "wood" },
+  ])("refuses to let a plan claim privileged facility work: $kind", (task) => {
+    expectParseFailure(parsePlanResponse(JSON.stringify({ reasoning: "x", plan: [task] })));
+  });
+
   it("rejects plans longer than MAX_PLAN_TASKS", () => {
     const plan = Array.from({ length: MAX_PLAN_TASKS + 1 }, () => ({ kind: "deposit" }));
 

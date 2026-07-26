@@ -7,6 +7,7 @@ import {
   EAT_TICKS,
   FATIGUE_MAX,
   FATIGUE_REST_RECOVERY_PER_DAY,
+  type Facility,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
@@ -24,6 +25,13 @@ import {
 } from "@agent-town/shared";
 
 import { findNearestReachable, findPath, isWalkable } from "./astar.js";
+import {
+  applyFacilityBuild,
+  applyFacilityMaintenance,
+  deliverFacilityTransfer,
+  findFacility,
+  withdrawFacilityTransfer,
+} from "./construction.js";
 import { moveTicksForTrail, type Traversal, trailLevelAt } from "./traffic.js";
 
 type MovingActivity = Extract<AgentActivity, { kind: "moving" }>;
@@ -412,6 +420,122 @@ function stepRest(world: WorldState, agent: AgentState, step: StepContext): void
   if (agent.fatigue === FATIGUE_MAX) finishHeadTask(agent);
 }
 
+/** Walks the last stretch to a facility; true once the resident can work on it. */
+function reachedFacility(
+  world: WorldState,
+  agent: AgentState,
+  facility: Facility,
+  step: StepContext,
+): boolean {
+  if (isAdjacentOrOn(agent.pos, facility.pos)) return true;
+  const approach = findNearestReachable(
+    world,
+    agent.pos,
+    buildApproachPositions(world, facility.pos, false),
+  );
+  if (approach === null) {
+    finishHeadTask(agent);
+    return false;
+  }
+  stepToward(world, agent, approach, (pos) => positionsEqual(pos, approach), step);
+  return false;
+}
+
+function collectTransferLoad(
+  world: WorldState,
+  agent: AgentState,
+  facility: Facility,
+  task: Extract<AgentTask, { kind: "transferToFacility" }>,
+  step: StepContext,
+): void {
+  if (!isAdjacentOrOn(agent.pos, world.stockpile.pos)) {
+    stepToward(
+      world,
+      agent,
+      world.stockpile.pos,
+      (pos) => isAdjacentOrOn(pos, world.stockpile.pos),
+      step,
+    );
+    return;
+  }
+
+  const amount = withdrawFacilityTransfer(world, facility, task.resource);
+  if (amount === 0) {
+    finishHeadTask(agent);
+    return;
+  }
+  agent.carrying = { kind: task.resource, amount };
+}
+
+function stepTransferToFacility(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "transferToFacility" }>,
+  step: StepContext,
+): void {
+  const facility = findFacility(world, task.facilityId);
+  if (facility === null) {
+    finishHeadTask(agent);
+    return;
+  }
+
+  const carrying = agent.carrying;
+  if (carrying === null) {
+    collectTransferLoad(world, agent, facility, task, step);
+    return;
+  }
+  if (carrying.kind !== task.resource) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!reachedFacility(world, agent, facility, step)) return;
+
+  const remainder = deliverFacilityTransfer(world, facility, task.resource, carrying.amount);
+  agent.carrying = remainder > 0 ? { kind: task.resource, amount: remainder } : null;
+  finishHeadTask(agent);
+}
+
+function stepBuildFacility(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "buildFacility" }>,
+  step: StepContext,
+): void {
+  const facility = findFacility(world, task.facilityId);
+  if (facility === null || facility.complete) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!reachedFacility(world, agent, facility, step)) return;
+
+  if (!applyFacilityBuild(world, facility, 1)) {
+    finishHeadTask(agent);
+    return;
+  }
+  agent.activity = { kind: "building", target: facility.pos };
+  if (facility.complete) finishHeadTask(agent);
+}
+
+function stepMaintainFacility(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "maintainFacility" }>,
+  step: StepContext,
+): void {
+  const facility = findFacility(world, task.facilityId);
+  if (facility === null || !facility.complete) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!reachedFacility(world, agent, facility, step)) return;
+
+  if (applyFacilityMaintenance(facility, 1) === 0) {
+    finishHeadTask(agent);
+    return;
+  }
+  agent.activity = { kind: "maintaining", facilityId: facility.id };
+}
+
 export function stepAgent(
   world: WorldState,
   agent: AgentState,
@@ -425,11 +549,36 @@ export function stepAgent(
   }
 
   const step: StepContext = { speed, record };
-  if (task.kind === "moveTo") stepMoveTo(world, agent, task, step);
-  if (task.kind === "gather") stepGather(world, agent, task, speed);
-  if (task.kind === "eat") stepEat(world, agent, step);
-  if (task.kind === "forage") stepForage(world, agent, task, step);
-  if (task.kind === "build") stepBuild(world, agent, task, step);
-  if (task.kind === "rest") stepRest(world, agent, step);
-  if (task.kind === "deposit") stepDeposit(world, agent);
+  switch (task.kind) {
+    case "moveTo":
+      stepMoveTo(world, agent, task, step);
+      break;
+    case "gather":
+      stepGather(world, agent, task, speed);
+      break;
+    case "eat":
+      stepEat(world, agent, step);
+      break;
+    case "forage":
+      stepForage(world, agent, task, step);
+      break;
+    case "build":
+      stepBuild(world, agent, task, step);
+      break;
+    case "rest":
+      stepRest(world, agent, step);
+      break;
+    case "deposit":
+      stepDeposit(world, agent);
+      break;
+    case "transferToFacility":
+      stepTransferToFacility(world, agent, task, step);
+      break;
+    case "buildFacility":
+      stepBuildFacility(world, agent, task, step);
+      break;
+    case "maintainFacility":
+      stepMaintainFacility(world, agent, task, step);
+      break;
+  }
 }

@@ -1,7 +1,9 @@
 import {
   type AgentState,
   DAYS_PER_SEASON,
+  FACILITY_WOOD_COST,
   FATIGUE_REST_THRESHOLD,
+  type Facility,
   FOOD_PER_MEAL,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
@@ -15,7 +17,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { FakePlanner } from "../src/sim/fakePlanner.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -280,5 +282,121 @@ describe("FakePlanner", () => {
       kind: "build",
       pos: expect.anything(),
     });
+  });
+});
+
+describe("FakePlanner facility priorities", () => {
+  function createFacilityWorld(): { world: WorldState; agent: AgentState; facility: Facility } {
+    const agent = createAgent();
+    const tiles: Tile[] = Array.from({ length: 4 }, () => ({
+      terrain: "plains",
+      resource: null,
+    }));
+    const world = createWorld(agent, tiles);
+    world.width = 4;
+    world.height = 1;
+    world.stockpile.wood = HOUSE_WOOD_COST * 10;
+    world.stockpile.food = STOCKPILE_TARGET_FOOD * 10;
+    const facility = makeFacilityFixture("communalGranary", { x: 3, y: 0 });
+    world.buildings.push(facility);
+    world.spatialDemands.push(makeDemandFixture("communalGranary", { x: 3, y: 0 }));
+    return { world, agent, facility };
+  }
+
+  it("hauls wood to a site that still needs it", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: facility.id, resource: "wood" },
+    ]);
+  });
+
+  it("builds once every plank has arrived", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary;
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "buildFacility", facilityId: facility.id },
+    ]);
+  });
+
+  it("repairs a standing facility that has fallen behind", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    facility.maintenanceDue = 4;
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "maintainFacility", facilityId: facility.id },
+    ]);
+  });
+
+  it("ignores a standing facility that needs nothing", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)[0]?.kind).not.toBe("maintainFacility");
+  });
+
+  it("gathers wood instead of proposing a transfer the stockpile cannot fund", () => {
+    const { world, agent } = createFacilityWorld();
+    world.stockpile.wood = 0;
+    const woodTile = world.tiles[2];
+    if (woodTile !== undefined) {
+      woodTile.terrain = "forest";
+      woodTile.resource = { kind: "wood", amount: 10 };
+    }
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "moveTo", dest: { x: 2, y: 0 } },
+      { kind: "gather", resource: "wood", target: { x: 2, y: 0 } },
+    ]);
+  });
+
+  it.each([
+    [
+      "a carried load first",
+      (world: WorldState, agent: AgentState) => {
+        agent.carrying = { kind: "wood", amount: 1 };
+        void world;
+      },
+      "moveTo",
+    ],
+    [
+      "hunger before facilities",
+      (world: WorldState, agent: AgentState) => {
+        agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+        void world;
+      },
+      "eat",
+    ],
+    [
+      "fatigue before facilities",
+      (world: WorldState, agent: AgentState) => {
+        agent.fatigue = FATIGUE_REST_THRESHOLD - 1;
+        void world;
+      },
+      "rest",
+    ],
+  ])("puts %s", (_label, arrange, expected) => {
+    const { world, agent } = createFacilityWorld();
+    arrange(world, agent);
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)[0]?.kind).toBe(expected);
+  });
+
+  it("puts facility work ahead of an incomplete house", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    world.buildings.push({ kind: "house", pos: { x: 1, y: 0 }, progress: 1, complete: false });
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: facility.id, resource: "wood" },
+    ]);
   });
 });

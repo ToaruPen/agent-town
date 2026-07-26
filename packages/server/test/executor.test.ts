@@ -2,8 +2,11 @@ import {
   type AgentState,
   CARRY_CAPACITY,
   EAT_TICKS,
+  FACILITY_BUILD_TICKS,
+  FACILITY_WOOD_COST,
   FATIGUE_MAX,
   FATIGUE_REST_RECOVERY_PER_DAY,
+  type Facility,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
@@ -22,7 +25,7 @@ import { describe, expect, it } from "vitest";
 
 import { stepAgent } from "../src/sim/executor.js";
 import { moveTicksForTrail, recordTraversal, type Traversal } from "../src/sim/traffic.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 interface TileOverride {
@@ -681,5 +684,190 @@ describe("stepAgent traversal recording", () => {
 
     expect(agent.pos).toEqual({ x: 1, y: 0 });
     expect(Math.ceil(moveTicksForTrail("establishedTrail"))).toBeLessThan(MOVE_TICKS_PER_TILE);
+  });
+});
+
+describe("stepAgent facility actions", () => {
+  function createSite(): { world: WorldState; facility: Facility } {
+    const world = createWorld(4, 1);
+    world.stockpile.wood = 20;
+    const facility = makeFacilityFixture("communalGranary", { x: 3, y: 0 });
+    world.buildings.push(facility);
+    world.spatialDemands.push(makeDemandFixture("communalGranary", { x: 3, y: 0 }));
+    return { world, facility };
+  }
+
+  function run(world: WorldState, agent: AgentState, ticks: number): void {
+    for (let tick = 0; tick < ticks; tick += 1) stepAgent(world, agent);
+  }
+
+  it("hauls exactly one carry load from the stockpile into the site", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+    expect(agent.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY });
+    expect(world.stockpile.wood).toBe(20 - CARRY_CAPACITY);
+    expect(agent.tasks).toHaveLength(1);
+
+    run(world, agent, MOVE_TICKS_PER_TILE * 3);
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+    expect(facility.woodDelivered).toBe(CARRY_CAPACITY);
+    expect(agent.carrying).toBeNull();
+    expect(agent.tasks).toEqual([]);
+    expect(world.stockpile.wood + facility.woodDelivered).toBe(20);
+  });
+
+  it("keeps the overflow it could not hand over", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary - 2;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.woodDelivered).toBe(FACILITY_WOOD_COST.communalGranary);
+    expect(agent.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY - 2 });
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("drops a transfer whose facility no longer exists", () => {
+    const { world } = createSite();
+    const agent = createAgent({
+      tasks: [{ kind: "transferToFacility", facilityId: "facility-missing", resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(world.stockpile.wood).toBe(20);
+  });
+
+  it("drops a transfer when the resident is carrying the wrong resource", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      carrying: { kind: "food", amount: 3 },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(agent.carrying).toEqual({ kind: "food", amount: 3 });
+    expect(facility.woodDelivered).toBe(0);
+  });
+
+  it("drops a transfer whose facility cannot be reached", () => {
+    const { world, facility } = createSite();
+    world.tiles[2] = { terrain: "water", resource: null };
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(facility.woodDelivered).toBe(0);
+  });
+
+  it("raises the frame one tick at a time once all the wood has arrived", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.progress).toBe(1);
+    expect(agent.activity).toEqual({ kind: "building", target: { x: 3, y: 0 } });
+    expect(world.spatialDemands[0]?.status).toBe("building");
+  });
+
+  it("finishes the build task and activates the facility on the last tick", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary;
+    facility.progress = FACILITY_BUILD_TICKS.communalGranary - 1;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility).toMatchObject({ complete: true, operation: "active" });
+    expect(agent.tasks).toEqual([]);
+    expect(world.spatialDemands[0]?.status).toBe("fulfilled");
+  });
+
+  it("drops a build task while the site is still short of wood", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.progress).toBe(0);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("keeps a standing facility in repair", () => {
+    const { world, facility } = createSite();
+    facility.complete = true;
+    facility.maintenanceDue = 2;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "maintainFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+    expect(facility.maintenanceDue).toBe(1);
+    expect(agent.activity).toEqual({ kind: "maintaining", facilityId: facility.id });
+
+    stepAgent(world, agent);
+    stepAgent(world, agent);
+    expect(facility.maintenanceDue).toBe(0);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("wears the ground on the way to a facility as facility service", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => {
+        recordTraversal(world, traversal);
+      });
+    }
+
+    expect(world.trailCells[1]?.dominantPurpose).toBe("facilityService");
+    expect(world.trailCells[1]?.causedByFacilityIds).toEqual([facility.id]);
   });
 });

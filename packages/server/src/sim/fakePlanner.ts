@@ -16,6 +16,7 @@ import {
 } from "@agent-town/shared";
 
 import { filterReachable, findNearestReachable, isWalkable } from "./astar.js";
+import { planFacilityTasks } from "./construction.js";
 
 export interface Planner {
   plan(world: WorldState, agent: AgentState): AgentTask[];
@@ -107,6 +108,8 @@ function priorityTasks(world: WorldState, agent: AgentState): AgentTask[] | null
   }
   if (agent.hunger < HUNGER_EAT_THRESHOLD) return [{ kind: "eat" }];
   if (agent.fatigue < FATIGUE_REST_THRESHOLD) return [{ kind: "rest" }];
+  const facilityTasks = planFacilityTasks(world, agent);
+  if (facilityTasks !== null) return facilityTasks;
   const incompleteTarget = incompleteHouseTarget(world, agent);
   return incompleteTarget === null ? null : [{ kind: "build", pos: incompleteTarget }];
 }
