@@ -4,6 +4,7 @@ export type WorldObjectKind =
   | "resource"
   | "stockpile"
   | "house"
+  | "facility"
   | "landmark"
   | "tombstone"
   | "agent";
@@ -12,9 +13,10 @@ const OBJECT_DEPTHS: Record<WorldObjectKind, number> = {
   resource: 0,
   stockpile: 1,
   house: 2,
-  landmark: 3,
-  tombstone: 4,
-  agent: 5,
+  facility: 3,
+  landmark: 4,
+  tombstone: 5,
+  agent: 6,
 };
 const DEPTHS_PER_ROW = 10;
 

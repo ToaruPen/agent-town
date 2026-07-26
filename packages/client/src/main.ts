@@ -23,6 +23,7 @@ import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
 import { renderTickerLayer } from "./render/tickerLayer.js";
+import { renderTrailLayer } from "./render/trailLayer.js";
 import { createDoubleTapHistory, createWorldViewport } from "./render/worldViewport.js";
 import {
   bubbleText,
@@ -121,6 +122,7 @@ let keyboardWorldInitialized = false;
 
 const world = new Container();
 const groundLayer = new Container();
+const trailLayer = new Container();
 const objectLayer = new Container();
 const infoBubbleLayer = new Container();
 const hudLayer = new Container();
@@ -131,11 +133,13 @@ const keyboardCursor = new Graphics()
 world.sortableChildren = true;
 objectLayer.sortableChildren = true;
 groundLayer.zIndex = 0;
-objectLayer.zIndex = 1;
-keyboardCursor.zIndex = 2;
+trailLayer.zIndex = 1;
+objectLayer.zIndex = 2;
+keyboardCursor.zIndex = 3;
 keyboardCursor.eventMode = "none";
 keyboardCursor.visible = false;
-world.addChild(groundLayer, objectLayer, keyboardCursor);
+trailLayer.eventMode = "none";
+world.addChild(groundLayer, trailLayer, objectLayer, keyboardCursor);
 hudLayer.position.set(HUD_PADDING, HUD_PADDING);
 app.stage.addChild(world, infoBubbleLayer, hudLayer, tickerLayer);
 
@@ -292,6 +296,7 @@ let bubbleSchedule = createThoughtBubbleSchedule();
 let deathSchedule: DeathEventSchedule = { observedDeaths: 0, events: [] };
 let socialSchedule: SocialMilestoneSchedule | null = null;
 let mapDirty = false;
+let trailsDirty = false;
 let structuresDirty = false;
 let deathsDirty = false;
 let tickerDirty = false;
@@ -463,6 +468,7 @@ function replaceState(next: WorldState): void {
   viewport.fit(next.width * TILE_SIZE, next.height * TILE_SIZE);
   syncInspectPanel(next);
   mapDirty = true;
+  trailsDirty = true;
   structuresDirty = true;
   agentsDirty = true;
   deathsDirty = true;
@@ -480,6 +486,7 @@ function updateState(next: WorldState): void {
     return;
   }
   mapDirty = mapDirty || next.tiles !== state.tiles;
+  trailsDirty = trailsDirty || next.trailCells !== state.trailCells;
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
   const previousSocialMilestone =
@@ -544,6 +551,10 @@ function renderDirtyWorldLayers(currentState: WorldState): void {
   if (mapDirty) {
     renderMapLayer(groundLayer, objectLayer, currentState);
     mapDirty = false;
+  }
+  if (trailsDirty) {
+    renderTrailLayer(trailLayer, currentState);
+    trailsDirty = false;
   }
   if (structuresDirty) {
     renderStructureLayer(objectLayer, currentState.buildings);
