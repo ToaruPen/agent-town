@@ -1,3 +1,4 @@
+import type { TrailCell } from "./spatial.js";
 import type { AgentState, Position, Tile, WorldState } from "./world.js";
 
 export type ServerMessage =
@@ -11,7 +12,9 @@ export type ServerMessage =
       deaths: WorldState["deaths"];
       collectives: WorldState["collectives"];
       institutions: WorldState["institutions"];
+      spatialDemands: WorldState["spatialDemands"];
       changedTiles: { index: number; tile: Tile }[];
+      changedTrailCells: { index: number; cell: TrailCell }[];
     };
 
 export type ClientMessage = { type: "hello" };
@@ -77,7 +80,9 @@ function isServerMessage(value: unknown): value is ServerMessage {
       "deaths",
       "collectives",
       "institutions",
+      "spatialDemands",
       "changedTiles",
+      "changedTrailCells",
     ]);
   }
   return false;

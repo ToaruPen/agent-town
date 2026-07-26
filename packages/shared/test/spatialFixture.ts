@@ -3,8 +3,32 @@ import {
   FACILITY_WOOD_COST,
   type Facility,
   type FacilityKind,
+  type SpatialDemand,
   type TrailCell,
 } from "../src/index.js";
+
+/** A sited demand still waiting on planks, so a test only has to state how it differs. */
+export function makeDemandFixture(kind: FacilityKind): SpatialDemand {
+  return {
+    id: `demand-institution-${kind}`,
+    facilityKind: kind,
+    source: { kind: "institution", id: `institution-${kind}` },
+    supporterIds: ["agent-1"],
+    requiredWood: FACILITY_WOOD_COST[kind],
+    requiredLabor: FACILITY_BUILD_TICKS[kind],
+    status: "awaitingMaterials",
+    blockedReason: null,
+    site: { x: 0, y: 0 },
+    siteRationale: { score: 1, contributions: [] },
+    provenance: {
+      causedByEventIds: [],
+      proposedByAgentIds: ["agent-1"],
+      supportedByAgentIds: ["agent-1"],
+      opposedByAgentIds: [],
+      decidedAtTick: 10,
+    },
+  };
+}
 
 /** A finished, working facility, so a test only has to state how it differs. */
 export function makeFacilityFixture(kind: FacilityKind, food: number): Facility {

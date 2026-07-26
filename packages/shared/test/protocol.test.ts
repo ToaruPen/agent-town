@@ -1,13 +1,34 @@
 import { describe, expect, it } from "vitest";
-
+import { TRAIL_LEVEL_WEAR } from "../src/constants.js";
 import {
   decodeClientMessage,
   decodeServerMessage,
   encodeMessage,
   type ServerMessage,
 } from "../src/protocol.js";
+import type { TrailCell } from "../src/spatial.js";
 import type { WorldState } from "../src/world.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
+
+/** The one cell a hauling route wore into a trail, which is all an update carries. */
+function makeWornTrailCell(): TrailCell {
+  return {
+    wear: TRAIL_LEVEL_WEAR.trail,
+    level: "trail",
+    passagesToday: 8,
+    purposeWear: {
+      survival: 0,
+      gathering: 0,
+      construction: 0,
+      facilityService: TRAIL_LEVEL_WEAR.trail,
+      wandering: 0,
+    },
+    dominantPurpose: "facilityService",
+    facilityWear: { "facility-institution-communalGranary": TRAIL_LEVEL_WEAR.trail },
+    causedByFacilityIds: ["facility-institution-communalGranary"],
+    lastUsedAtTick: 200,
+  };
+}
 
 describe("wire protocol", () => {
   it("round-trips a welcome server message", () => {
@@ -38,9 +59,12 @@ describe("wire protocol", () => {
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-      buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
+      buildings: [
+        { kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false },
+        { ...makeFacilityFixture("communalGranary", 0), progress: 0, complete: false },
+      ],
       deaths: [{ name: "シラカバ", tick: 7200, cause: "starvation" }],
-      spatialDemands: [],
+      spatialDemands: [makeDemandFixture("communalGranary")],
       trailCells: makeTrailCellsFixture(1, 1),
       collectives: [
         {
@@ -112,9 +136,11 @@ describe("wire protocol", () => {
       tick: 200,
       agents: [],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-      buildings: [],
+      buildings: [makeFacilityFixture("communalGranary", 12)],
       deaths: [],
       changedTiles: [],
+      spatialDemands: [makeDemandFixture("communalGranary")],
+      changedTrailCells: [{ index: 1, cell: makeWornTrailCell() }],
       collectives: [
         {
           id: "collective-communalGranaryStore-150",
@@ -273,6 +299,40 @@ describe("wire protocol", () => {
     });
 
     expect(() => decodeServerMessage(updateWithoutInstitutions)).toThrow("invalid server message");
+  });
+
+  it("rejects an update without spatial demands", () => {
+    const updateWithoutDemands = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [],
+      deaths: [],
+      collectives: [],
+      institutions: [],
+      changedTiles: [],
+      changedTrailCells: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutDemands)).toThrow("invalid server message");
+  });
+
+  it("rejects an update without changed trail cells", () => {
+    const updateWithoutTrails = JSON.stringify({
+      type: "update",
+      tick: 1,
+      agents: [],
+      stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+      buildings: [],
+      deaths: [],
+      collectives: [],
+      institutions: [],
+      spatialDemands: [],
+      changedTiles: [],
+    });
+
+    expect(() => decodeServerMessage(updateWithoutTrails)).toThrow("invalid server message");
   });
 
   it("decodes a hello client message", () => {
