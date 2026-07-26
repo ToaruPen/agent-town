@@ -168,15 +168,20 @@ function candidateStores(world: WorldState, agent: AgentState): FoodStore[] {
   return stores.filter((store) => storeFood(world, store) >= mealFood(world, store));
 }
 
-function isReachableStore(world: WorldState, agent: AgentState, store: FoodStore): boolean {
-  return filterReachable(world, agent.pos, [foodStorePos(store)]).length > 0;
+function positionKey({ x, y }: Position): string {
+  return `${x},${y}`;
+}
+
+/** One flood answers every counter at once, so a hungry resident costs a single search. */
+function reachableStores(world: WorldState, agent: AgentState, stores: FoodStore[]): FoodStore[] {
+  const counters = stores.map(foodStorePos);
+  const reached = new Set(filterReachable(world, agent.pos, counters).map(positionKey));
+  return stores.filter((store) => reached.has(positionKey(foodStorePos(store))));
 }
 
 export function chooseFoodStore(world: WorldState, agent: AgentState): FoodStore | null {
   refreshFacilityAvailability(world);
-  const reachable = candidateStores(world, agent).filter((store) =>
-    isReachableStore(world, agent, store),
-  );
+  const reachable = reachableStores(world, agent, candidateStores(world, agent));
   const ranked = reachable.toSorted(
     (left, right) => storeRank(world, left) - storeRank(world, right),
   );

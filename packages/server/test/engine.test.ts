@@ -23,6 +23,7 @@ import {
   HUNGER_PER_MEAL,
   IMMIGRANT_NAMES,
   IMMIGRATION_FOOD_DAYS_MIN,
+  isFacility,
   MAX_POPULATION,
   MOVE_TICKS_PER_TILE,
   SEASONS,
@@ -488,15 +489,18 @@ describe("createEngine", () => {
     agent.desires.foodSecurity = 0;
     const engine = createEngine(world, idlePlanner, () => 0);
 
+    engine.step();
+    expect(agent.desires.foodSecurity).toBe(FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
+
     for (let tick = 1; tick < FOOD_SECURITY_UPDATE_INTERVAL_TICKS; tick += 1) {
       engine.step();
-      expect(agent.desires.foodSecurity).toBe(0);
+      expect(agent.desires.foodSecurity).toBe(FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
     }
 
     engine.step();
 
-    expect(world.tick).toBe(FOOD_SECURITY_UPDATE_INTERVAL_TICKS);
-    expect(agent.desires.foodSecurity).toBe(FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
+    expect(world.tick).toBe(FOOD_SECURITY_UPDATE_INTERVAL_TICKS + 1);
+    expect(agent.desires.foodSecurity).toBe(2 * FOOD_SECURITY_MAX_CHANGE_PER_UPDATE);
   });
 
   it("replays social outcomes deterministically from the same seed and state", () => {
@@ -1107,5 +1111,101 @@ describe("createEngine", () => {
       IMMIGRANT_NAMES[0],
       IMMIGRANT_NAMES[1],
     ]);
+  });
+});
+
+interface PlannerObservation {
+  institutionKinds: string[];
+  demandStatuses: string[];
+  facilities: { id: string; complete: boolean; operation: string }[];
+}
+
+/** Reports what the world already held when the planner was asked, without engine internals. */
+function observingPlanner(observations: PlannerObservation[]): Planner {
+  return {
+    plan(world: WorldState): AgentTask[] {
+      observations.push({
+        institutionKinds: world.institutions.map(({ kind }) => kind),
+        demandStatuses: world.spatialDemands.map(({ status }) => status),
+        facilities: world.buildings
+          .filter(isFacility)
+          .map(({ id, complete, operation }) => ({ id, complete, operation })),
+      });
+      return [];
+    },
+  };
+}
+
+function pressuredCollectiveWorld(): WorldState {
+  const world = generateWorld(42);
+  const homelandId = world.history.settlementOrigin?.homelandPolityId;
+  const homeland = world.history.polities.find(({ id }) => id === homelandId);
+  if (homeland === undefined) throw new Error("missing homeland polity");
+  homeland.values = [{ value: "mutualAid", weight: 1, changedByEventIds: [] }];
+  world.stockpile.food = 0;
+  for (const agent of world.agents) {
+    agent.hunger = HUNGER_MAX;
+    agent.desires.foodSecurity = 1;
+    agent.tasks = [];
+  }
+  world.collectives = [
+    {
+      id: "collective-communalGranaryStore-0",
+      purpose: "communalGranaryStore",
+      supporterIds: world.agents.map(({ id }) => id),
+      representativeId: world.agents[0]?.id ?? "agent-1",
+      cohesion: 1,
+      formedAtTick: 0,
+      provenance: {
+        causedByEventIds: [],
+        proposedByAgentIds: [],
+        supportedByAgentIds: world.agents.map(({ id }) => id),
+        opposedByAgentIds: [],
+        decidedAtTick: 0,
+      },
+    },
+  ];
+  return world;
+}
+
+describe("engine update order", () => {
+  it("establishes an institution and its site before the same step asks the planner", () => {
+    const world = pressuredCollectiveWorld();
+    const observations: PlannerObservation[] = [];
+    const engine = createEngine(world, observingPlanner(observations), () => 0);
+
+    engine.step();
+
+    expect(world.institutions.map(({ kind }) => kind)).toEqual(["communalGranaryStore"]);
+    const first = observations[0];
+    expect(first?.institutionKinds).toEqual(["communalGranaryStore"]);
+    expect(first?.demandStatuses).toEqual(["awaitingMaterials"]);
+    expect(first?.facilities).toEqual([
+      { id: "facility-institution-communalGranaryStore-0", complete: false, operation: "inactive" },
+    ]);
+  });
+
+  it("records no facility operation before the new site is complete", () => {
+    const world = pressuredCollectiveWorld();
+    const engine = createEngine(world, observingPlanner([]), () => 0);
+
+    engine.step();
+
+    const facility = world.buildings.filter(isFacility)[0];
+    expect(facility?.complete).toBe(false);
+    expect(facility?.lastUsedAtTick).toBeNull();
+    expect(facility?.lastTradeTick).toBeNull();
+    expect(facility?.maintenanceDue).toBe(0);
+    expect(facility?.inventory).toEqual({ wood: 0, food: 0 });
+    expect(facility?.statsToday).toEqual({
+      visits: 0,
+      foodPreserved: 0,
+      foodImported: 0,
+      foodExported: 0,
+      woodSpent: 0,
+      woodReceived: 0,
+      rationMeals: 0,
+      maintenanceWork: 0,
+    });
   });
 });

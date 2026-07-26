@@ -212,6 +212,8 @@ export const FACILITY_MAINTENANCE_PER_DAY = {
   rationDepot: 35,
 } as const satisfies Readonly<Record<FacilityKind, number>>;
 
+/** Days of food residents keep at the stockpile before storing the rest in a facility. */
+export const FACILITY_STOCK_RESERVE_DAYS = 1;
 export const FACILITY_SITE_DISTANCE_CAP = 32;
 export const SPATIAL_DEMAND_RETRY_INTERVAL_TICKS = 100;
 

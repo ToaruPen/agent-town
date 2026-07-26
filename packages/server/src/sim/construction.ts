@@ -2,14 +2,15 @@ import {
   type AgentState,
   type AgentTask,
   CARRY_CAPACITY,
+  dailyFoodNeed,
   FACILITY_BUILD_TICKS,
   FACILITY_FOOD_CAPACITY,
+  FACILITY_STOCK_RESERVE_DAYS,
   type Facility,
   isFacility,
   MARKET_IMPORT_WOOD,
   type ResourceKind,
   type SpatialDemand,
-  STOCKPILE_TARGET_FOOD,
   type WorldState,
 } from "@agent-town/shared";
 
@@ -109,9 +110,12 @@ function constructionTask(world: WorldState, facility: Facility): AgentTask | nu
   return world.stockpile.wood > 0 ? transferTask(facility, "wood") : null;
 }
 
-/** Only a settlement with food to spare stocks a facility from its own table. */
-function hasSurplusFood(world: WorldState): boolean {
-  return world.stockpile.food > STOCKPILE_TARGET_FOOD * world.agents.length;
+/**
+ * Residents keep a day's meals at hand and store what is beyond it, so a settlement
+ * fills the store it built against scarcity while it is still scarce.
+ */
+function hasStorableFood(world: WorldState): boolean {
+  return world.stockpile.food > FACILITY_STOCK_RESERVE_DAYS * dailyFoodNeed(world);
 }
 
 function needsTradingWood(facility: Facility): boolean {
@@ -129,7 +133,7 @@ function serviceTask(world: WorldState, facility: Facility): AgentTask | null {
     return transferTask(facility, "wood");
   }
   const hasRoom = facility.inventory.food < FACILITY_FOOD_CAPACITY[facility.kind];
-  return hasSurplusFood(world) && hasRoom ? transferTask(facility, "food") : null;
+  return hasStorableFood(world) && hasRoom ? transferTask(facility, "food") : null;
 }
 
 /**

@@ -1,14 +1,18 @@
 import {
   type AgentState,
   DAYS_PER_SEASON,
+  dailyFoodNeed,
   FACILITY_FOOD_CAPACITY,
+  FACILITY_STOCK_RESERVE_DAYS,
   FACILITY_WOOD_COST,
   FATIGUE_REST_THRESHOLD,
   type Facility,
   FOOD_PER_MEAL,
+  foodDaysRemaining,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
+  RATION_BELOW_FOOD_DAYS,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
   type Tile,
@@ -365,9 +369,20 @@ describe("FakePlanner facility priorities", () => {
     ]);
   });
 
-  it("keeps the food at home when the stockpile is only at target", () => {
+  it("stocks a standing facility while the settlement is still short of food", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    world.stockpile.food = (RATION_BELOW_FOOD_DAYS - 1) * dailyFoodNeed(world);
+
+    expect(foodDaysRemaining(world)).toBeLessThan(RATION_BELOW_FOOD_DAYS);
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: facility.id, resource: "food" },
+    ]);
+  });
+
+  it("keeps the food at home when the stockpile holds only the day's meals", () => {
     const { world, agent } = createFacilityWorld();
-    world.stockpile.food = STOCKPILE_TARGET_FOOD * world.agents.length;
+    world.stockpile.food = FACILITY_STOCK_RESERVE_DAYS * dailyFoodNeed(world);
     const facility = world.buildings[0];
     if (facility === undefined) throw new Error("missing facility");
     facility.complete = true;
