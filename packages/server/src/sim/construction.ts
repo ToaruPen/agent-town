@@ -6,8 +6,10 @@ import {
   FACILITY_FOOD_CAPACITY,
   type Facility,
   isFacility,
+  MARKET_IMPORT_WOOD,
   type ResourceKind,
   type SpatialDemand,
+  STOCKPILE_TARGET_FOOD,
   type WorldState,
 } from "@agent-town/shared";
 
@@ -95,30 +97,54 @@ export function applyFacilityMaintenance(facility: Facility, work: number): numb
   return applied;
 }
 
-function transferTask(facility: Facility): AgentTask {
-  return { kind: "transferToFacility", facilityId: facility.id, resource: "wood" };
+function transferTask(facility: Facility, resource: ResourceKind): AgentTask {
+  return { kind: "transferToFacility", facilityId: facility.id, resource };
 }
 
-function facilityTask(world: WorldState, facility: Facility): AgentTask | null {
-  if (facility.complete) {
-    return facility.maintenanceDue > 0
-      ? { kind: "maintainFacility", facilityId: facility.id }
-      : null;
-  }
+function constructionTask(world: WorldState, facility: Facility): AgentTask | null {
+  if (facility.complete) return null;
   if (facilityWoodRemaining(world, facility) === 0) {
     return { kind: "buildFacility", facilityId: facility.id };
   }
-  return world.stockpile.wood > 0 ? transferTask(facility) : null;
+  return world.stockpile.wood > 0 ? transferTask(facility, "wood") : null;
+}
+
+/** Only a settlement with food to spare stocks a facility from its own table. */
+function hasSurplusFood(world: WorldState): boolean {
+  return world.stockpile.food > STOCKPILE_TARGET_FOOD * world.agents.length;
+}
+
+function needsTradingWood(facility: Facility): boolean {
+  return (
+    facility.kind === "grainMarket" &&
+    facility.operation === "active" &&
+    facility.inventory.wood < MARKET_IMPORT_WOOD
+  );
+}
+
+function serviceTask(world: WorldState, facility: Facility): AgentTask | null {
+  if (!facility.complete) return null;
+  if (facility.maintenanceDue > 0) return { kind: "maintainFacility", facilityId: facility.id };
+  if (needsTradingWood(facility) && world.stockpile.wood > 0) {
+    return transferTask(facility, "wood");
+  }
+  const hasRoom = facility.inventory.food < FACILITY_FOOD_CAPACITY[facility.kind];
+  return hasSurplusFood(world) && hasRoom ? transferTask(facility, "food") : null;
 }
 
 /**
- * Institution work in creation order, so a settlement finishes one facility
- * before scattering its labour across the next.
+ * Every site is raised before any is stocked, so a settlement finishes what it
+ * started instead of scattering its labour across half-built plots.
  */
 export function planFacilityTasks(world: WorldState, agent: AgentState): AgentTask[] | null {
   void agent;
-  for (const facility of world.buildings.filter(isFacility)) {
-    const task = facilityTask(world, facility);
+  const sites = world.buildings.filter(isFacility);
+  for (const facility of sites) {
+    const task = constructionTask(world, facility);
+    if (task !== null) return [task];
+  }
+  for (const facility of sites) {
+    const task = serviceTask(world, facility);
     if (task !== null) return [task];
   }
   return null;

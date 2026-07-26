@@ -8,6 +8,7 @@ import {
   INSTITUTION_CULTURE_WEIGHT,
   INSTITUTION_DESIRE_WEIGHT,
   INSTITUTION_KINDS,
+  RATION_SUPPORT_PENALTY,
   SEASONS,
   TICKS_PER_DAY,
 } from "@agent-town/shared";
@@ -160,6 +161,24 @@ describe("institution support", () => {
     expect(support.map(({ kind }) => kind)).toEqual(INSTITUTION_KINDS);
     expect(communalGranary.score).toBeGreaterThan(grainMarket.score);
     expect(communalGranary.score).toBeGreaterThan(rationControl.score);
+  });
+
+  it("erodes support for rationing alone as the strain of it accumulates", () => {
+    const world = setHomelandCulture("mutualAid");
+    const agent = firstAgent(world);
+    const scoreFor = (support: ReturnType<typeof institutionSupportForAgent>, kind: string) =>
+      support.find((entry) => entry.kind === kind)?.score ?? Number.NaN;
+
+    const baseline = institutionSupportForAgent(world, { ...agent, rationStrain: 0 });
+    const strained = institutionSupportForAgent(world, { ...agent, rationStrain: 1 });
+
+    expect(scoreFor(strained, "rationControl")).toBeCloseTo(
+      Math.max(0, scoreFor(baseline, "rationControl") - RATION_SUPPORT_PENALTY),
+    );
+    expect(scoreFor(strained, "communalGranaryStore")).toBe(
+      scoreFor(baseline, "communalGranaryStore"),
+    );
+    expect(scoreFor(strained, "grainMarket")).toBe(scoreFor(baseline, "grainMarket"));
   });
 
   it("returns deeply equal support for the same input twice", () => {

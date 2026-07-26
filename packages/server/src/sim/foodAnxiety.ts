@@ -19,6 +19,7 @@ import {
   INSTITUTION_OPPOSITION_THRESHOLD,
   INSTITUTION_SUPPORT_THRESHOLD,
   type InstitutionKind,
+  RATION_SUPPORT_PENALTY,
   SEASONS,
   TICKS_PER_DAY,
   type WorldState,
@@ -115,7 +116,9 @@ export function institutionSupportForAgent(
 ): InstitutionSupport[] {
   const culture = homelandCulture(world);
   return INSTITUTION_KINDS.map((kind) => {
-    const score = institutionSupportScore(kind, culture, agent.desires);
+    const strainPenalty =
+      kind === "rationControl" ? clampUnit(agent.rationStrain) * RATION_SUPPORT_PENALTY : 0;
+    const score = clampUnit(institutionSupportScore(kind, culture, agent.desires) - strainPenalty);
     return {
       kind,
       score,

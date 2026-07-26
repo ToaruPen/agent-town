@@ -32,6 +32,7 @@ import {
   findFacility,
   withdrawFacilityTransfer,
 } from "./construction.js";
+import { applyMealFromStore, chooseFoodStore, foodStorePos } from "./facilityOperation.js";
 import { moveTicksForTrail, type Traversal, trailLevelAt } from "./traffic.js";
 
 type MovingActivity = Extract<AgentActivity, { kind: "moving" }>;
@@ -240,19 +241,15 @@ function stepToward(
 }
 
 function stepEat(world: WorldState, agent: AgentState, step: StepContext): void {
-  if (world.stockpile.food < FOOD_PER_MEAL) {
+  const store = chooseFoodStore(world, agent);
+  if (store === null) {
     finishHeadTask(agent);
     return;
   }
 
-  if (!isAdjacentOrOn(agent.pos, world.stockpile.pos)) {
-    stepToward(
-      world,
-      agent,
-      world.stockpile.pos,
-      (pos) => isAdjacentOrOn(pos, world.stockpile.pos),
-      step,
-    );
+  const counter = foodStorePos(store);
+  if (!isAdjacentOrOn(agent.pos, counter)) {
+    stepToward(world, agent, counter, (pos) => isAdjacentOrOn(pos, counter), step);
     return;
   }
 
@@ -263,8 +260,7 @@ function stepEat(world: WorldState, agent: AgentState, step: StepContext): void 
   agent.activity.ticksRemaining -= 1;
   if (agent.activity.ticksRemaining > 0) return;
 
-  world.stockpile.food -= FOOD_PER_MEAL;
-  agent.hunger = Math.min(HUNGER_MAX, agent.hunger + HUNGER_PER_MEAL);
+  applyMealFromStore(world, agent, store);
   finishHeadTask(agent);
 }
 

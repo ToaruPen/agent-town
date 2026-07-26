@@ -3,16 +3,22 @@ import {
   CARRY_CAPACITY,
   EAT_TICKS,
   FACILITY_BUILD_TICKS,
+  FACILITY_MAINTENANCE_PER_DAY,
   FACILITY_WOOD_COST,
   FATIGUE_MAX,
   FATIGUE_REST_RECOVERY_PER_DAY,
   type Facility,
+  type FacilityKind,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
+  HUNGER_PER_MEAL,
   MOVE_TICKS_PER_TILE,
+  RATION_FOOD_PER_MEAL,
+  RATION_HUNGER_PER_MEAL,
+  RATION_STRAIN_PER_MEAL,
   type ResourceKind,
   type Terrain,
   TICKS_PER_DAY,
@@ -869,5 +875,94 @@ describe("stepAgent facility actions", () => {
 
     expect(world.trailCells[1]?.dominantPurpose).toBe("facilityService");
     expect(world.trailCells[1]?.causedByFacilityIds).toEqual([facility.id]);
+  });
+});
+
+describe("stepAgent meal routing", () => {
+  /** A finished, working store the resident has to walk to. */
+  function addStore(world: WorldState, kind: FacilityKind, x: number, food: number): Facility {
+    const facility = makeFacilityFixture(kind, { x, y: 0 });
+    facility.complete = true;
+    facility.operation = "active";
+    facility.inventory.food = food;
+    world.buildings.push(facility);
+    return facility;
+  }
+
+  function eatUntilDone(world: WorldState, agent: AgentState): void {
+    for (let tick = 0; tick < 200 && agent.tasks.length > 0; tick += 1) {
+      stepAgent(world, agent, 1);
+    }
+  }
+
+  it("walks to the ration depot while the settlement is short", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 5;
+    const depot = addStore(world, "rationDepot", 5, 10);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    expect(depot.inventory.food).toBe(10 - RATION_FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + RATION_HUNGER_PER_MEAL);
+    expect(agent.rationStrain).toBeCloseTo(RATION_STRAIN_PER_MEAL);
+    expect(world.stockpile.food).toBe(5);
+  });
+
+  it("opens the granary when the stockpile is empty and the reserve may be released", () => {
+    const world = createWorld(8, 1);
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    expect(granary.inventory.food).toBe(100 - FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+    expect(granary.statsToday.visits).toBe(1);
+  });
+
+  it("eats from the stockpile while the reserve stays shut", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 40;
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ pos: { x: 4, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(world.stockpile.food).toBe(40 - FOOD_PER_MEAL);
+    expect(granary.inventory.food).toBe(100);
+  });
+
+  it("passes over a nearer blocked store for a reachable one", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 40;
+    const depot = addStore(world, "rationDepot", 5, 40);
+    depot.maintenanceDue = FACILITY_MAINTENANCE_PER_DAY.rationDepot + 1;
+    const agent = createAgent({ pos: { x: 4, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(depot.inventory.food).toBe(40);
+    expect(world.stockpile.food).toBe(40 - FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+  });
+
+  it("drops the meal when no store holds one", () => {
+    const world = createWorld(4, 1);
+    world.stockpile.food = FOOD_PER_MEAL - 1;
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent, 1);
+
+    expect(agent.tasks).toEqual([]);
+    expect(agent.hunger).toBe(10);
   });
 });

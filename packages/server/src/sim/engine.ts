@@ -8,7 +8,6 @@ import {
   FATIGUE_MAX,
   FATIGUE_REST_THRESHOLD,
   FATIGUE_SLOWDOWN,
-  FOOD_PER_MEAL,
   foodDaysRemaining,
   HEALTH_MAX,
   HOUSE_CAPACITY,
@@ -34,6 +33,7 @@ import {
 
 import { findNearestReachable } from "./astar.js";
 import { stepAgent } from "./executor.js";
+import { chooseFoodStore, runFacilityDay, runFacilityInterval } from "./facilityOperation.js";
 import type { Planner } from "./fakePlanner.js";
 import { updateFoodSecurityDesires } from "./foodAnxiety.js";
 import { advanceSociety, createSocietyMemory } from "./society.js";
@@ -72,7 +72,7 @@ function maybeInterruptForHunger(world: WorldState, agent: AgentState): boolean 
   }
 
   let foodTask: AgentTask | undefined;
-  if (world.stockpile.food >= FOOD_PER_MEAL) {
+  if (chooseFoodStore(world, agent) !== null) {
     foodTask = { kind: "eat" };
   } else {
     const target = findNearestFood(world, agent.pos);
@@ -156,6 +156,7 @@ function burnWinterWood(world: WorldState): void {
 }
 
 function runDailyHooks(world: WorldState, berryCaps: (number | null)[]): void {
+  runFacilityDay(world);
   regrowResources(world, berryCaps);
   burnWinterWood(world);
   maybeImmigrate(world);
@@ -286,6 +287,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       for (const agent of [...world.agents]) {
         advanceAgent(world, agent, planner);
       }
+      runFacilityInterval(world);
       world.tick += 1;
       updateFoodSecurityDesires(world);
       advanceSociety(world, societyMemory);

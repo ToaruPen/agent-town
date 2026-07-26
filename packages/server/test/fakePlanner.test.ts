@@ -1,6 +1,7 @@
 import {
   type AgentState,
   DAYS_PER_SEASON,
+  FACILITY_FOOD_CAPACITY,
   FACILITY_WOOD_COST,
   FATIGUE_REST_THRESHOLD,
   type Facility,
@@ -331,6 +332,77 @@ describe("FakePlanner facility priorities", () => {
     expect(planner.plan(world, agent)).toEqual([
       { kind: "maintainFacility", facilityId: facility.id },
     ]);
+  });
+
+  /** A second, finished institution site so the two planner passes can be told apart. */
+  function addStandingMarket(world: WorldState): Facility {
+    const market = makeFacilityFixture("grainMarket", { x: 2, y: 0 });
+    market.complete = true;
+    market.operation = "active";
+    market.maintenanceDue = 4;
+    world.buildings.push(market);
+    world.spatialDemands.push(makeDemandFixture("grainMarket", { x: 2, y: 0 }));
+    return market;
+  }
+
+  it("raises every site before repairing one that already stands", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    addStandingMarket(world);
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: facility.id, resource: "wood" },
+    ]);
+  });
+
+  it("stocks a finished facility once the settlement has food to spare", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    const planner = new FakePlanner(() => 0);
+
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: facility.id, resource: "food" },
+    ]);
+  });
+
+  it("keeps the food at home when the stockpile is only at target", () => {
+    const { world, agent } = createFacilityWorld();
+    world.stockpile.food = STOCKPILE_TARGET_FOOD * world.agents.length;
+    const facility = world.buildings[0];
+    if (facility === undefined) throw new Error("missing facility");
+    facility.complete = true;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)[0]?.kind).not.toBe("transferToFacility");
+  });
+
+  it("refuses to stock a facility that is already full", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    facility.inventory.food = FACILITY_FOOD_CAPACITY.communalGranary;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)[0]?.kind).not.toBe("transferToFacility");
+  });
+
+  it("hauls trading wood to a market that cannot pay for an import", () => {
+    const agent = createAgent();
+    const tiles: Tile[] = Array.from({ length: 4 }, () => ({ terrain: "plains", resource: null }));
+    const world = createWorld(agent, tiles);
+    world.stockpile.wood = HOUSE_WOOD_COST * 10;
+    const market = addStandingMarket(world);
+    market.maintenanceDue = 0;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
+      { kind: "transferToFacility", facilityId: market.id, resource: "wood" },
+    ]);
+  });
+
+  it("feeds the resident before touching any facility work", () => {
+    const { world, agent, facility } = createFacilityWorld();
+    facility.complete = true;
+    facility.maintenanceDue = 4;
+    agent.hunger = HUNGER_EAT_THRESHOLD - 1;
+
+    expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([{ kind: "eat" }]);
   });
 
   it("ignores a standing facility that needs nothing", () => {

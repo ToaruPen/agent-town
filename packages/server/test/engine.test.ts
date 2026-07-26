@@ -28,6 +28,7 @@ import {
   SEASONS,
   SOCIETY_UPDATE_INTERVAL_TICKS,
   STARVATION_HEALTH_PER_DAY,
+  STOCKPILE_FOOD_SPOILAGE_RATE,
   TICKS_PER_DAY,
   TREE_REGROWTH_CAP,
   TREE_REGROWTH_PER_DAY,
@@ -90,10 +91,11 @@ function runSingleAgentYear(wood: number): WorldState {
   return world;
 }
 
+/** Stores food so the day's stockpile spoilage leaves exactly `days` behind for immigration. */
 function setFoodDays(world: WorldState, days: number): void {
   const dailyNeed =
     Math.max(world.agents.length, 1) * FOOD_PER_MEAL * (HUNGER_DECAY_PER_DAY / HUNGER_PER_MEAL);
-  world.stockpile.food = dailyNeed * days;
+  world.stockpile.food = (dailyNeed * days) / (1 - STOCKPILE_FOOD_SPOILAGE_RATE);
 }
 
 function immigrationWorld(): WorldState {
