@@ -1,5 +1,7 @@
 import type { Position, WorldState } from "../../../shared/src/world.js";
 
+import { pathCostForTrail, trailLevelAt } from "./traffic.js";
+
 interface SearchNode {
   pos: Position;
   distance: number;
@@ -12,6 +14,9 @@ interface SearchState {
   distances: Map<string, number>;
   visited: Set<string>;
 }
+
+/** The cheapest a single step can ever be, which keeps the heuristic admissible. */
+const MIN_PATH_COST = pathCostForTrail("establishedTrail");
 
 const DIRECTIONS: readonly Position[] = [
   { x: 0, y: -1 },
@@ -30,6 +35,14 @@ function positionsEqual(left: Position, right: Position): boolean {
 
 function manhattanDistance(from: Position, to: Position): number {
   return Math.abs(from.x - to.x) + Math.abs(from.y - to.y);
+}
+
+function stepCost(world: WorldState, pos: Position): number {
+  return pathCostForTrail(trailLevelAt(world, pos));
+}
+
+function estimate(from: Position, to: Position): number {
+  return manhattanDistance(from, to) * MIN_PATH_COST;
 }
 
 export function isWalkable(world: WorldState, pos: Position): boolean {
@@ -74,7 +87,7 @@ function neighbors(pos: Position): Position[] {
 
 function createSearchState(from: Position, to: Position): SearchState {
   return {
-    open: [{ pos: from, distance: 0, estimatedTotal: manhattanDistance(from, to) }],
+    open: [{ pos: from, distance: 0, estimatedTotal: estimate(from, to) }],
     cameFrom: new Map(),
     distances: new Map([[positionKey(from), 0]]),
     visited: new Set(),
@@ -93,16 +106,12 @@ function updateNeighbor(
   const nextKey = positionKey(next);
   if (state.visited.has(nextKey)) return;
 
-  const distance = current.distance + 1;
+  const distance = current.distance + stepCost(world, next);
   if (distance >= (state.distances.get(nextKey) ?? Number.POSITIVE_INFINITY)) return;
 
   state.cameFrom.set(nextKey, current.pos);
   state.distances.set(nextKey, distance);
-  state.open.push({
-    pos: next,
-    distance,
-    estimatedTotal: distance + manhattanDistance(next, to),
-  });
+  state.open.push({ pos: next, distance, estimatedTotal: distance + estimate(next, to) });
 }
 
 function expandNode(

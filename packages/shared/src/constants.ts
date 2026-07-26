@@ -279,6 +279,14 @@ export const TRAIL_LEVEL_WEAR = {
   establishedTrail: 24,
 } as const satisfies Readonly<Record<TrailLevel, number>>;
 
+export const MOVEMENT_PURPOSES = [
+  "survival",
+  "gathering",
+  "construction",
+  "facilityService",
+  "wandering",
+] as const satisfies readonly MovementPurpose[];
+
 export const TRAIL_PURPOSE_WEAR = {
   survival: 0.5,
   gathering: 0.65,

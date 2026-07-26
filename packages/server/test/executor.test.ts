@@ -14,11 +14,14 @@ import {
   type Terrain,
   TICKS_PER_DAY,
   type Tile,
+  TRAIL_LEVEL_WEAR,
+  TRAIL_PURPOSE_WEAR,
   type WorldState,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { stepAgent } from "../src/sim/executor.js";
+import { moveTicksForTrail, recordTraversal, type Traversal } from "../src/sim/traffic.js";
 import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
@@ -575,5 +578,108 @@ describe("stepAgent", () => {
     restWorld.agents.push(rester);
     stepAgent(restWorld, rester, 0.5);
     expect(rester.fatigue).toBeCloseTo(FATIGUE_REST_RECOVERY_PER_DAY / TICKS_PER_DAY, 10);
+  });
+});
+
+describe("stepAgent traversal recording", () => {
+  function recorder() {
+    const traversals: Traversal[] = [];
+    return { traversals, record: (traversal: Traversal) => traversals.push(traversal) };
+  }
+
+  it("stays silent until a tile step actually completes", () => {
+    const world = createWorld(3, 1);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE - 1; tick += 1) {
+      stepAgent(world, agent, 1, record);
+    }
+    expect(traversals).toEqual([]);
+    expect(agent.pos).toEqual({ x: 0, y: 0 });
+
+    stepAgent(world, agent, 1, record);
+    expect(traversals).toEqual([{ pos: { x: 1, y: 0 }, purpose: "wandering", facilityId: null }]);
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+  });
+
+  it("records no traversal when the path is blocked", () => {
+    const world = createWorld(3, 1, [{ pos: { x: 1, y: 0 }, terrain: "water" }]);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, record);
+    }
+
+    expect(traversals).toEqual([]);
+  });
+
+  it("records no traversal when the resident is already at the destination", () => {
+    const world = createWorld(2, 1);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 0, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    stepAgent(world, agent, 1, record);
+
+    expect(traversals).toEqual([]);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it.each([
+    ["gather", { kind: "gather", target: { x: 2, y: 0 }, resource: "wood" }, "gathering"],
+    ["build", { kind: "build", pos: { x: 2, y: 0 } }, "construction"],
+    ["forage", { kind: "forage", target: { x: 2, y: 0 } }, "survival"],
+  ] as const)("derives the %s purpose from the task the move serves", (_label, task, purpose) => {
+    const world = createWorld(3, 1, [
+      { pos: { x: 2, y: 0 }, terrain: "forest", resource: { kind: "wood", amount: 10 } },
+    ]);
+    world.stockpile.wood = HOUSE_WOOD_COST;
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }, task] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent, 1, record);
+
+    expect(traversals).toEqual([{ pos: { x: 1, y: 0 }, purpose, facilityId: null }]);
+  });
+
+  it("wears the approach to a house but never the house tile itself", () => {
+    const world = createWorld(3, 1);
+    world.buildings.push({ kind: "house", pos: { x: 2, y: 0 }, progress: 1, complete: true });
+    const agent = createAgent({ fatigue: 0, tasks: [{ kind: "rest" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => {
+        recordTraversal(world, traversal);
+      });
+    }
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+    expect(world.trailCells[1]?.wear).toBe(TRAIL_PURPOSE_WEAR.survival);
+    expect(world.trailCells[1]?.dominantPurpose).toBe("survival");
+    expect(world.trailCells[2]?.wear).toBe(0);
+  });
+
+  it("crosses a worn tile faster than untrodden ground", () => {
+    const world = createWorld(2, 1);
+    const worn = world.trailCells[1];
+    if (worn !== undefined) {
+      worn.wear = TRAIL_LEVEL_WEAR.establishedTrail;
+      worn.level = "establishedTrail";
+    }
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < Math.ceil(moveTicksForTrail("establishedTrail")); tick += 1) {
+      stepAgent(world, agent, 1);
+    }
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(Math.ceil(moveTicksForTrail("establishedTrail"))).toBeLessThan(MOVE_TICKS_PER_TILE);
   });
 });

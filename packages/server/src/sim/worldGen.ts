@@ -23,6 +23,7 @@ import {
 
 import { generateWorldHistory } from "./historyGen.js";
 import { createRng } from "./rng.js";
+import { createTrailCells } from "./traffic.js";
 
 type ImpassableTerrain = Extract<Terrain, "water" | "rock">;
 
@@ -156,22 +157,7 @@ export function generateWorld(seed: number): WorldState {
     collectives: [],
     institutions: [],
     spatialDemands: [],
-    trailCells: Array.from({ length: MAP_WIDTH * MAP_HEIGHT }, () => ({
-      wear: 0,
-      level: "none" as const,
-      passagesToday: 0,
-      purposeWear: {
-        survival: 0,
-        gathering: 0,
-        construction: 0,
-        facilityService: 0,
-        wandering: 0,
-      },
-      dominantPurpose: null,
-      facilityWear: {},
-      causedByFacilityIds: [],
-      lastUsedAtTick: null,
-    })),
+    trailCells: createTrailCells(MAP_WIDTH, MAP_HEIGHT),
     history: generateWorldHistory(seed, {
       width: MAP_WIDTH,
       height: MAP_HEIGHT,

@@ -16,7 +16,7 @@ import {
   HUNGER_MAX,
   HUNGER_PER_MEAL,
   isHouse,
-  MOVE_TICKS_PER_TILE,
+  type MovementPurpose,
   type Position,
   TICKS_PER_DAY,
   type Tile,
@@ -24,8 +24,60 @@ import {
 } from "@agent-town/shared";
 
 import { findNearestReachable, findPath, isWalkable } from "./astar.js";
+import { moveTicksForTrail, type Traversal, trailLevelAt } from "./traffic.js";
 
 type MovingActivity = Extract<AgentActivity, { kind: "moving" }>;
+
+export type TraversalRecorder = (traversal: Traversal) => void;
+
+/** Bundles what every movement step needs, so recording can never diverge per task. */
+interface StepContext {
+  speed: number;
+  record: TraversalRecorder;
+}
+
+const FACILITY_TASK_KINDS = ["transferToFacility", "buildFacility", "maintainFacility"] as const;
+
+type FacilityTask = Extract<AgentTask, { kind: (typeof FACILITY_TASK_KINDS)[number] }>;
+
+function isFacilityTask(task: AgentTask | undefined): task is FacilityTask {
+  return task !== undefined && FACILITY_TASK_KINDS.some((kind) => kind === task.kind);
+}
+
+/** A move on its own says nothing; the task it serves is what wears the ground. */
+function intentTask(tasks: AgentTask[]): AgentTask | undefined {
+  return tasks[0]?.kind === "moveTo" ? tasks[1] : tasks[0];
+}
+
+function movementPurpose(tasks: AgentTask[]): MovementPurpose {
+  const task = intentTask(tasks);
+  if (task?.kind === "build" || task?.kind === "buildFacility") return "construction";
+  if (isFacilityTask(task)) return "facilityService";
+  if (task?.kind === "gather") return "gathering";
+  if (task?.kind === "eat" || task?.kind === "forage" || task?.kind === "rest") {
+    return "survival";
+  }
+  return "wandering";
+}
+
+function movementFacilityId(tasks: AgentTask[]): string | null {
+  const task = intentTask(tasks);
+  return isFacilityTask(task) ? task.facilityId : null;
+}
+
+/** The one place a resident's position changes, so every completed step leaves wear. */
+function commitStep(agent: AgentState, next: Position, step: StepContext): void {
+  agent.pos = next;
+  step.record({
+    pos: next,
+    purpose: movementPurpose(agent.tasks),
+    facilityId: movementFacilityId(agent.tasks),
+  });
+}
+
+function hasCompletedStep(world: WorldState, activity: MovingActivity, next: Position): boolean {
+  return activity.ticksIntoStep >= moveTicksForTrail(trailLevelAt(world, next));
+}
 
 interface GatherTarget {
   tile: Tile;
@@ -71,7 +123,7 @@ function stepMoveTo(
   world: WorldState,
   agent: AgentState,
   task: Extract<AgentTask, { kind: "moveTo" }>,
-  speed: number,
+  step: StepContext,
 ): void {
   const activity = prepareMovement(world, agent, task);
   if (activity === null) return;
@@ -82,11 +134,11 @@ function stepMoveTo(
     return;
   }
 
-  activity.ticksIntoStep += speed;
-  if (activity.ticksIntoStep < MOVE_TICKS_PER_TILE) return;
+  activity.ticksIntoStep += step.speed;
+  if (!hasCompletedStep(world, activity, next)) return;
 
   activity.path.shift();
-  agent.pos = next;
+  commitStep(agent, next, step);
   if (activity.path.length === 0) {
     finishHeadTask(agent);
     return;
@@ -150,7 +202,7 @@ function stepToward(
   agent: AgentState,
   dest: Position,
   hasArrived: (pos: Position) => boolean,
-  speed: number,
+  step: StepContext,
 ): void {
   if (agent.activity.kind !== "moving") {
     const path = findPath(world, agent.pos, dest);
@@ -167,11 +219,11 @@ function stepToward(
     return;
   }
 
-  agent.activity.ticksIntoStep += speed;
-  if (agent.activity.ticksIntoStep < MOVE_TICKS_PER_TILE) return;
+  agent.activity.ticksIntoStep += step.speed;
+  if (!hasCompletedStep(world, agent.activity, next)) return;
 
   agent.activity.path.shift();
-  agent.pos = next;
+  commitStep(agent, next, step);
   if (hasArrived(agent.pos)) {
     agent.activity = { kind: "idle" };
     return;
@@ -179,7 +231,7 @@ function stepToward(
   agent.activity.ticksIntoStep = 0;
 }
 
-function stepEat(world: WorldState, agent: AgentState, speed: number): void {
+function stepEat(world: WorldState, agent: AgentState, step: StepContext): void {
   if (world.stockpile.food < FOOD_PER_MEAL) {
     finishHeadTask(agent);
     return;
@@ -191,7 +243,7 @@ function stepEat(world: WorldState, agent: AgentState, speed: number): void {
       agent,
       world.stockpile.pos,
       (pos) => isAdjacentOrOn(pos, world.stockpile.pos),
-      speed,
+      step,
     );
     return;
   }
@@ -212,7 +264,7 @@ function stepForage(
   world: WorldState,
   agent: AgentState,
   task: Extract<AgentTask, { kind: "forage" }>,
-  speed: number,
+  step: StepContext,
 ): void {
   const tile = tileAt(world, task.target);
   if (tile?.resource?.kind !== "food" || tile.resource.amount <= 0) {
@@ -221,7 +273,7 @@ function stepForage(
   }
 
   if (!positionsEqual(agent.pos, task.target)) {
-    stepToward(world, agent, task.target, (pos) => positionsEqual(pos, task.target), speed);
+    stepToward(world, agent, task.target, (pos) => positionsEqual(pos, task.target), step);
     return;
   }
 
@@ -297,7 +349,7 @@ function stepBuild(
   world: WorldState,
   agent: AgentState,
   task: Extract<AgentTask, { kind: "build" }>,
-  speed: number,
+  step: StepContext,
 ): void {
   const existing = houseAt(world, task.pos);
   if (existing?.complete === true) {
@@ -318,7 +370,7 @@ function stepBuild(
       finishHeadTask(agent);
       return;
     }
-    stepToward(world, agent, approach, (pos) => positionsEqual(pos, approach), speed);
+    stepToward(world, agent, approach, (pos) => positionsEqual(pos, approach), step);
     return;
   }
 
@@ -341,14 +393,14 @@ function restTarget(world: WorldState, agent: AgentState): Position | null {
   );
 }
 
-function stepRest(world: WorldState, agent: AgentState, speed: number): void {
+function stepRest(world: WorldState, agent: AgentState, step: StepContext): void {
   const target = restTarget(world, agent);
   if (target === null) {
     finishHeadTask(agent);
     return;
   }
   if (!positionsEqual(agent.pos, target)) {
-    stepToward(world, agent, target, (pos) => positionsEqual(pos, target), speed);
+    stepToward(world, agent, target, (pos) => positionsEqual(pos, target), step);
     return;
   }
 
@@ -360,18 +412,24 @@ function stepRest(world: WorldState, agent: AgentState, speed: number): void {
   if (agent.fatigue === FATIGUE_MAX) finishHeadTask(agent);
 }
 
-export function stepAgent(world: WorldState, agent: AgentState, speed = 1): void {
+export function stepAgent(
+  world: WorldState,
+  agent: AgentState,
+  speed = 1,
+  record: TraversalRecorder = () => undefined,
+): void {
   const task = agent.tasks[0];
   if (task === undefined) {
     agent.activity = { kind: "idle" };
     return;
   }
 
-  if (task.kind === "moveTo") stepMoveTo(world, agent, task, speed);
+  const step: StepContext = { speed, record };
+  if (task.kind === "moveTo") stepMoveTo(world, agent, task, step);
   if (task.kind === "gather") stepGather(world, agent, task, speed);
-  if (task.kind === "eat") stepEat(world, agent, speed);
-  if (task.kind === "forage") stepForage(world, agent, task, speed);
-  if (task.kind === "build") stepBuild(world, agent, task, speed);
-  if (task.kind === "rest") stepRest(world, agent, speed);
+  if (task.kind === "eat") stepEat(world, agent, step);
+  if (task.kind === "forage") stepForage(world, agent, task, step);
+  if (task.kind === "build") stepBuild(world, agent, task, step);
+  if (task.kind === "rest") stepRest(world, agent, step);
   if (task.kind === "deposit") stepDeposit(world, agent);
 }
