@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { dayOfTick, foodDaysRemaining, isWinter, seasonOfTick } from "../src/time.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function worldWithFood(food: number, population: number): WorldState {
@@ -33,12 +34,16 @@ function worldWithFood(food: number, population: number): WorldState {
       hunger: 100,
       fatigue: 100,
       health: 100,
+      rationStrain: 0,
+      lastRationTick: null,
     })),
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food },
     buildings: [],
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(1, 1),
     history: {
       startYear: 0,
       currentYear: 0,

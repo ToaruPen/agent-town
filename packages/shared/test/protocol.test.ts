@@ -7,6 +7,7 @@ import {
   type ServerMessage,
 } from "../src/protocol.js";
 import type { WorldState } from "../src/world.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 
 describe("wire protocol", () => {
   it("round-trips a welcome server message", () => {
@@ -32,11 +33,15 @@ describe("wire protocol", () => {
           hunger: 42,
           fatigue: 37,
           health: 88,
+          rationStrain: 0.16,
+          lastRationTick: 900,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
       buildings: [{ kind: "house", pos: { x: 0, y: 0 }, progress: 12, complete: false }],
       deaths: [{ name: "シラカバ", tick: 7200, cause: "starvation" }],
+      spatialDemands: [],
+      trailCells: makeTrailCellsFixture(1, 1),
       collectives: [
         {
           id: "collective-communalGranaryStore-150",
@@ -184,6 +189,8 @@ describe("wire protocol", () => {
         deaths: [],
         collectives: [],
         institutions: [],
+        spatialDemands: [],
+        trailCells: makeTrailCellsFixture(1, 1),
         history: {
           startYear: -200,
           currentYear: 0,

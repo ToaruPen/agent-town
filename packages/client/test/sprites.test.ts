@@ -81,6 +81,8 @@ function movingAgent(nextX: number): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 

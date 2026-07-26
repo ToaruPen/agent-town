@@ -904,6 +904,8 @@ describe("createEngine", () => {
       hunger: HUNGER_MAX,
       fatigue: FATIGUE_MAX,
       health: HEALTH_MAX,
+      rationStrain: 0,
+      lastRationTick: null,
     });
   });
 

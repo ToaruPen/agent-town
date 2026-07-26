@@ -7,6 +7,7 @@ import {
   resolveKeyboardTarget,
 } from "../src/ui/keyboardNavigation.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeWorld(): WorldState {
@@ -37,6 +38,8 @@ function makeWorld(): WorldState {
         hunger: 100,
         fatigue: 100,
         health: 100,
+        rationStrain: 0,
+        lastRationTick: null,
       },
     ],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
@@ -44,6 +47,8 @@ function makeWorld(): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(2, 2),
     history: {
       startYear: 0,
       currentYear: 0,

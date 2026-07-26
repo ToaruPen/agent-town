@@ -1,4 +1,10 @@
-import type { AgentState, AgentTask, Position, WorldState } from "@agent-town/shared";
+import {
+  type AgentState,
+  type AgentTask,
+  isHouse,
+  type Position,
+  type WorldState,
+} from "@agent-town/shared";
 
 import { findNearestReachable, findPath } from "../sim/astar.js";
 
@@ -34,7 +40,10 @@ function buildApproaches(target: Position): Position[] {
 }
 
 function restTarget(world: WorldState, cursor: Position): Position | null {
-  const houses = world.buildings.filter(({ complete }) => complete).map(({ pos }) => pos);
+  const houses = world.buildings
+    .filter(isHouse)
+    .filter(({ complete }) => complete)
+    .map(({ pos }) => pos);
   return (
     findNearestReachable(world, cursor, houses) ??
     findNearestReachable(world, cursor, [world.stockpile.pos])

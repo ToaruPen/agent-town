@@ -1,4 +1,4 @@
-import type { House } from "@agent-town/shared";
+import { type Building, isHouse } from "@agent-town/shared";
 import { type Container, Sprite } from "pixi.js";
 
 import { TILE_SIZE } from "./mapLayer.js";
@@ -7,14 +7,14 @@ import { objectDepth, SPRITE_ASSETS } from "./sprites.js";
 const CONSTRUCTION_ALPHA = 0.45;
 const HOUSE_OBJECT_LABEL = "house-object";
 
-export function renderStructureLayer(layer: Container, buildings: House[]): void {
+export function renderStructureLayer(layer: Container, buildings: Building[]): void {
   for (const child of [...layer.children]) {
     if (child.label !== HOUSE_OBJECT_LABEL) continue;
     layer.removeChild(child);
     child.destroy({ children: true });
   }
 
-  for (const building of buildings) {
+  for (const building of buildings.filter(isHouse)) {
     const sprite = Sprite.from(SPRITE_ASSETS.house);
     sprite.anchor.set(0.5, 1);
     sprite.position.set(

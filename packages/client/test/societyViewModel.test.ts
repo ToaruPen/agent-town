@@ -12,6 +12,7 @@ import {
   currentSocialMilestone,
   updateSocialMilestoneSchedule,
 } from "../src/ui/societyViewModel.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(id: string, name: string, foodSecurity = 0): AgentState {
@@ -31,6 +32,8 @@ function makeAgent(id: string, name: string, foodSecurity = 0): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 
@@ -50,6 +53,8 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(1, 1),
     history: {
       startYear: 0,
       currentYear: 0,

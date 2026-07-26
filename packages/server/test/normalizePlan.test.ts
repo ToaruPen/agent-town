@@ -16,6 +16,7 @@ import {
   validateNormalizedPlanExecutability,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
@@ -35,6 +36,8 @@ function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 
@@ -64,6 +67,8 @@ function createWorld(agent: AgentState): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(width, height),
     history: {
       startYear: 0,
       currentYear: 0,

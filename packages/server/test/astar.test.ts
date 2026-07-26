@@ -2,6 +2,7 @@ import type { Terrain, WorldState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { filterReachable, findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createWorld(width: number, height: number, terrainAt: Map<string, Terrain> = new Map()) {
@@ -22,6 +23,8 @@ function createWorld(width: number, height: number, terrainAt: Map<string, Terra
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(width, height),
     history: {
       startYear: 0,
       currentYear: 0,

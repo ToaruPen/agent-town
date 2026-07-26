@@ -1,5 +1,6 @@
 import type { CulturalValue } from "./history.js";
 import type { InstitutionKind } from "./society.js";
+import type { FacilityKind, MovementPurpose, SiteFactor, TrailLevel } from "./spatial.js";
 import type { WorldMapTerrain } from "./worldMap.js";
 
 export const TICK_RATE = 10; // sim ticks per second
@@ -174,3 +175,113 @@ export const COLLECTIVE_DISSOLUTION_TICKS = 50;
 export const COLLECTIVE_DISSOLUTION_COHESION = 0.35;
 export const INSTITUTION_FOOD_PRESSURE_DAYS = 4;
 export const SOCIAL_MILESTONE_DURATION_TICKS = 50;
+
+export const FACILITY_KIND_BY_INSTITUTION = {
+  communalGranaryStore: "communalGranary",
+  grainMarket: "grainMarket",
+  rationControl: "rationDepot",
+} as const satisfies Readonly<Record<InstitutionKind, FacilityKind>>;
+
+export const FACILITY_NAMES = {
+  communalGranary: "共同穀倉",
+  grainMarket: "穀物市場",
+  rationDepot: "配給所",
+} as const satisfies Readonly<Record<FacilityKind, string>>;
+
+export const FACILITY_WOOD_COST = {
+  communalGranary: 15,
+  grainMarket: 12,
+  rationDepot: 10,
+} as const satisfies Readonly<Record<FacilityKind, number>>;
+
+export const FACILITY_BUILD_TICKS = {
+  communalGranary: 240,
+  grainMarket: 200,
+  rationDepot: 180,
+} as const satisfies Readonly<Record<FacilityKind, number>>;
+
+export const FACILITY_FOOD_CAPACITY = {
+  communalGranary: 120,
+  grainMarket: 80,
+  rationDepot: 80,
+} as const satisfies Readonly<Record<FacilityKind, number>>;
+
+export const FACILITY_MAINTENANCE_PER_DAY = {
+  communalGranary: 40,
+  grainMarket: 30,
+  rationDepot: 35,
+} as const satisfies Readonly<Record<FacilityKind, number>>;
+
+export const FACILITY_SITE_DISTANCE_CAP = 32;
+export const SPATIAL_DEMAND_RETRY_INTERVAL_TICKS = 100;
+
+export const FACILITY_SITE_WEIGHTS = {
+  communalGranary: {
+    foodAccess: 0.25,
+    residentAccess: 0.2,
+    stockpileAccess: 0.25,
+    existingTraffic: 0.05,
+    settlementEdgeAccess: 0,
+    openSpace: 0.15,
+    accessEquality: 0.1,
+  },
+  grainMarket: {
+    foodAccess: 0.05,
+    residentAccess: 0.2,
+    stockpileAccess: 0.1,
+    existingTraffic: 0.25,
+    settlementEdgeAccess: 0.2,
+    openSpace: 0.2,
+    accessEquality: 0,
+  },
+  rationDepot: {
+    foodAccess: 0.05,
+    residentAccess: 0.25,
+    stockpileAccess: 0.15,
+    existingTraffic: 0.1,
+    settlementEdgeAccess: 0,
+    openSpace: 0.15,
+    accessEquality: 0.3,
+  },
+} as const satisfies Readonly<Record<FacilityKind, Readonly<Record<SiteFactor, number>>>>;
+
+export const STOCKPILE_FOOD_SPOILAGE_RATE = 0.04;
+export const GRANARY_FOOD_SPOILAGE_RATE = 0.01;
+export const FACILITY_RESERVE_FOOD_DAYS = 4;
+export const MARKET_TRADE_INTERVAL_TICKS = 600;
+export const MARKET_IMPORT_WOOD = 5;
+export const MARKET_IMPORT_FOOD = 10;
+export const MARKET_EXPORT_FOOD = 10;
+export const MARKET_EXPORT_WOOD = 4;
+export const MARKET_IMPORT_BELOW_FOOD_DAYS = 3;
+export const MARKET_EXPORT_ABOVE_FOOD_DAYS = 7;
+export const RATION_FOOD_PER_MEAL = 4;
+export const RATION_HUNGER_PER_MEAL = 50;
+export const RATION_BELOW_FOOD_DAYS = 4;
+export const RATION_STRAIN_PER_MEAL = 0.08;
+export const RATION_STRAIN_RECOVERY_PER_DAY = 0.03;
+export const RATION_SUPPORT_PENALTY = 0.35;
+
+export const TRAIL_LEVEL_WEAR = {
+  none: 0,
+  trace: 2,
+  trail: 8,
+  establishedTrail: 24,
+} as const satisfies Readonly<Record<TrailLevel, number>>;
+
+export const TRAIL_PURPOSE_WEAR = {
+  survival: 0.5,
+  gathering: 0.65,
+  construction: 1,
+  facilityService: 1,
+  wandering: 0.05,
+} as const satisfies Readonly<Record<MovementPurpose, number>>;
+
+export const TRAIL_DAILY_DECAY = 0.85;
+export const TRAIL_MAX_CAUSE_FACILITIES = 3;
+export const TRAIL_MOVE_TICK_MULTIPLIER = {
+  none: 1,
+  trace: 0.95,
+  trail: 0.8,
+  establishedTrail: 0.65,
+} as const satisfies Readonly<Record<TrailLevel, number>>;

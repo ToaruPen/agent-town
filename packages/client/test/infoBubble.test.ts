@@ -31,6 +31,7 @@ import {
   resolveScreenBubblePlacement,
 } from "../src/ui/infoBubble.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -50,6 +51,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     hunger: 21.2,
     fatigue: 43.4,
     health: 88.1,
+    rationStrain: 0,
+    lastRationTick: null,
     ...overrides,
   };
 }
@@ -66,6 +69,8 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(2, 2),
     history: {
       startYear: 0,
       currentYear: 0,

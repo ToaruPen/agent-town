@@ -4,6 +4,7 @@ import {
   CARRY_CAPACITY,
   FOOD_PER_MEAL,
   HOUSE_WOOD_COST,
+  isHouse,
   MAX_PLAN_REASONING_CHARS,
   MAX_PLAN_TASKS,
   type Position,
@@ -311,6 +312,9 @@ function validateBuild(
   const lookup = findWalkableTile(world, pos);
   if (!lookup.ok) return lookup;
   const existing = world.buildings.find((building) => positionsEqual(building.pos, pos));
+  if (existing !== undefined && !isHouse(existing)) {
+    return { ok: false, error: "build site is occupied by a facility" };
+  }
   if (existing?.complete === true) return { ok: false, error: "house is already complete" };
   if (existing !== undefined) return { ok: true };
   return validateNewBuildSite(world, pos, budget);
@@ -332,7 +336,10 @@ function validateAutonomousTask(
 }
 
 function normalizedRestTarget(world: WorldState, cursor: Position): Position | null {
-  const houses = world.buildings.filter(({ complete }) => complete).map(({ pos }) => pos);
+  const houses = world.buildings
+    .filter(isHouse)
+    .filter(({ complete }) => complete)
+    .map(({ pos }) => pos);
   return (
     findNearestReachable(world, cursor, houses) ??
     findNearestReachable(world, cursor, [world.stockpile.pos])

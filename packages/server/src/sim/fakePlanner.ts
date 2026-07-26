@@ -6,6 +6,7 @@ import {
   HOUSE_CAPACITY,
   HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
+  isHouse,
   type Position,
   type ResourceKind,
   STOCKPILE_TARGET_FOOD,
@@ -75,7 +76,10 @@ function positionsEqual(left: Position, right: Position): boolean {
 }
 
 function incompleteHouseTarget(world: WorldState, agent: AgentState): Position | null {
-  const candidates = world.buildings.filter(({ complete }) => !complete).map(({ pos }) => pos);
+  const candidates = world.buildings
+    .filter(isHouse)
+    .filter(({ complete }) => !complete)
+    .map(({ pos }) => pos);
   return findNearestReachable(world, agent.pos, candidates);
 }
 
@@ -113,7 +117,7 @@ function newHouseTasks(
   winterWoodTarget: number,
 ): AgentTask[] | null {
   const completedCapacity =
-    world.buildings.filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+    world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
   const canAfford = world.stockpile.wood >= HOUSE_WOOD_COST + winterWoodTarget;
   if (completedCapacity > world.agents.length || !canAfford) return null;
   const site = newHouseSite(world, agent);

@@ -17,6 +17,7 @@ import {
   HUNGER_MAX,
   IMMIGRANT_NAMES,
   IMMIGRATION_FOOD_DAYS_MIN,
+  isHouse,
   isWinter,
   MAX_POPULATION,
   type PlanSource,
@@ -201,7 +202,7 @@ function nextAgentId(world: WorldState): string {
 }
 
 function hasImmigrationCapacity(world: WorldState): boolean {
-  const completedHouses = world.buildings.filter(({ complete }) => complete).length;
+  const completedHouses = world.buildings.filter(isHouse).filter(({ complete }) => complete).length;
   return completedHouses * HOUSE_CAPACITY > world.agents.length;
 }
 
@@ -226,6 +227,8 @@ function maybeImmigrate(world: WorldState): void {
     lastThought: null,
     desires: { foodSecurity: 0 },
     lastHungerInterruptTick: null,
+    rationStrain: 0,
+    lastRationTick: null,
     hunger: HUNGER_MAX,
     fatigue: FATIGUE_MAX,
     health: HEALTH_MAX,

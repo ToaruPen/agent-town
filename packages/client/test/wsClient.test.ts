@@ -2,6 +2,7 @@ import type { ServerMessage, WorldState } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { connect, getWebSocketUrl, type WebSocketLike } from "../src/net/wsClient.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 class MockWebSocket implements WebSocketLike {
@@ -59,6 +60,8 @@ function makeWorld(): WorldState {
         },
       },
     ],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(2, 1),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -100,6 +103,8 @@ describe("connect", () => {
           hunger: 80,
           fatigue: 70,
           health: 90,
+          rationStrain: 0,
+          lastRationTick: null,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
@@ -167,6 +172,8 @@ describe("connect", () => {
           hunger: 80,
           fatigue: 70,
           health: 90,
+          rationStrain: 0,
+          lastRationTick: null,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },

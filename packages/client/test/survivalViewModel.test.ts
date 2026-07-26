@@ -14,6 +14,7 @@ import {
   latestDeathEvent,
   updateDeathEventSchedule,
 } from "../src/ui/survivalViewModel.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -33,6 +34,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
     ...overrides,
   };
 }
@@ -49,6 +52,8 @@ function makeWorld(overrides: Partial<WorldState> = {}): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(8, 8),
     history: {
       startYear: 0,
       currentYear: 0,

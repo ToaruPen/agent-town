@@ -5,6 +5,7 @@ import {
   HOUSE_BUILD_TICKS,
   HOUSE_CAPACITY,
   type House,
+  isHouse,
   isWinter,
   type Position,
   type ResourceKind,
@@ -287,10 +288,10 @@ function appendTombstoneHits(
 
 function appendHouseHits(
   hits: InfoBubbleTarget[],
-  houses: WorldState["buildings"],
+  buildings: WorldState["buildings"],
   tilePosition: Position,
 ): void {
-  for (const house of houses.toReversed()) {
+  for (const house of buildings.filter(isHouse).toReversed()) {
     if (positionsEqual(house.pos, tilePosition)) hits.push({ kind: "house", pos: house.pos });
   }
 }
@@ -437,7 +438,7 @@ function houseBubble(
   target: Extract<InfoBubbleTarget, { kind: "house" }>,
   world: WorldState,
 ): InfoBubbleViewModel | null {
-  const house = world.buildings.find(({ pos }) => positionsEqual(pos, target.pos));
+  const house = world.buildings.filter(isHouse).find(({ pos }) => positionsEqual(pos, target.pos));
   return house === undefined
     ? null
     : textBubble(buildHouseBubbleText(house), tilePlacement(house.pos));

@@ -15,6 +15,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { buildPlanPrompt } from "../src/llm/planPrompt.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -34,6 +35,8 @@ function createAgent(overrides: Partial<AgentState> = {}): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
     ...overrides,
   };
 }
@@ -73,6 +76,8 @@ function createWorld(agent: AgentState): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(width, height),
     history: {
       startYear: 0,
       currentYear: 0,

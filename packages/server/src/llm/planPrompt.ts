@@ -5,6 +5,7 @@ import {
   foodDaysRemaining,
   HOUSE_CAPACITY,
   HOUSE_WOOD_COST,
+  isHouse,
   MAX_PLAN_TASKS,
   type ResourceKind,
   SEASONS,
@@ -71,7 +72,7 @@ function daysUntilWinter(tick: number): number {
 }
 
 function completedHousingCapacity(world: WorldState): number {
-  return world.buildings.filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+  return world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
 }
 
 function futureWinterBurnDays(tick: number): number {

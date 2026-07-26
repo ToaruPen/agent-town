@@ -2,6 +2,7 @@ import {
   type AgentActivity,
   type AgentState,
   type AgentTask,
+  type Building,
   CARRY_CAPACITY,
   EAT_TICKS,
   FATIGUE_MAX,
@@ -11,8 +12,10 @@ import {
   GATHER_TICKS,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
+  type House,
   HUNGER_MAX,
   HUNGER_PER_MEAL,
+  isHouse,
   MOVE_TICKS_PER_TILE,
   type Position,
   TICKS_PER_DAY,
@@ -235,8 +238,12 @@ function stepForage(
   finishHeadTask(agent);
 }
 
-function findHouse(world: WorldState, pos: Position): WorldState["buildings"][number] | undefined {
+function buildingAt(world: WorldState, pos: Position): Building | undefined {
   return world.buildings.find((building) => positionsEqual(building.pos, pos));
+}
+
+function houseAt(world: WorldState, pos: Position): House | undefined {
+  return world.buildings.filter(isHouse).find((house) => positionsEqual(house.pos, pos));
 }
 
 function buildApproachPositions(
@@ -257,18 +264,14 @@ function buildApproachPositions(
 function isValidNewHouseSite(world: WorldState, target: Position): boolean {
   const tile = tileAt(world, target);
   if (!isWalkable(world, target) || tile?.resource !== null) return false;
-  if (positionsEqual(target, world.stockpile.pos) || findHouse(world, target) !== undefined) {
+  if (positionsEqual(target, world.stockpile.pos) || buildingAt(world, target) !== undefined) {
     return false;
   }
   return !world.agents.some((agent) => positionsEqual(agent.pos, target));
 }
 
-function beginOrResumeHouse(
-  world: WorldState,
-  agent: AgentState,
-  pos: Position,
-): WorldState["buildings"][number] | null {
-  const existing = findHouse(world, pos);
+function beginOrResumeHouse(world: WorldState, agent: AgentState, pos: Position): House | null {
+  const existing = houseAt(world, pos);
   if (existing !== undefined) return existing;
   if (world.stockpile.wood < HOUSE_WOOD_COST) {
     finishHeadTask(agent);
@@ -283,7 +286,7 @@ function beginOrResumeHouse(
 function canContinueBuildTask(
   world: WorldState,
   pos: Position,
-  existing: WorldState["buildings"][number] | undefined,
+  existing: House | undefined,
 ): boolean {
   if (!isWalkable(world, pos)) return false;
   if (existing !== undefined) return true;
@@ -296,7 +299,7 @@ function stepBuild(
   task: Extract<AgentTask, { kind: "build" }>,
   speed: number,
 ): void {
-  const existing = findHouse(world, task.pos);
+  const existing = houseAt(world, task.pos);
   if (existing?.complete === true) {
     finishHeadTask(agent);
     return;
@@ -328,7 +331,10 @@ function stepBuild(
 }
 
 function restTarget(world: WorldState, agent: AgentState): Position | null {
-  const completeHouses = world.buildings.filter(({ complete }) => complete).map(({ pos }) => pos);
+  const completeHouses = world.buildings
+    .filter(isHouse)
+    .filter(({ complete }) => complete)
+    .map(({ pos }) => pos);
   return (
     findNearestReachable(world, agent.pos, completeHouses) ??
     findNearestReachable(world, agent.pos, [world.stockpile.pos])
