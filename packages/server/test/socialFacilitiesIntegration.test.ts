@@ -5,6 +5,7 @@ import {
   FACILITY_FOOD_CAPACITY,
   type Facility,
   type FacilityKind,
+  HOUSE_BUILD_TICKS,
   type InstitutionKind,
   isFacility,
   type Position,
@@ -155,6 +156,25 @@ function isLoopClosed(world: WorldState, kind: FacilityKind): boolean {
   return hasRecordedEffectAndCost(world, facility) && hasWornTrail(world);
 }
 
+/** Keeps this social scenario's one-house workload without leaving a second house in demand. */
+function addRemoteCompletedHouse(world: WorldState): void {
+  for (let index = world.tiles.length - 1; index >= 0; index -= 1) {
+    const pos = { x: index % world.width, y: Math.floor(index / world.width) };
+    const tile = world.tiles[index];
+    if (tile?.resource !== null || !isWalkable(world, pos)) continue;
+    if (positionsEqual(pos, world.stockpile.pos)) continue;
+    if (world.agents.some((agent) => positionsEqual(agent.pos, pos))) continue;
+    world.buildings.push({
+      kind: "house",
+      pos,
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    });
+    return;
+  }
+  throw new Error("missing remote housing site");
+}
+
 function scenarioWorld(culturalValue: CulturalValue): WorldState {
   const world = generateWorld(SEED);
   const homelandId = world.history.settlementOrigin?.homelandPolityId;
@@ -166,6 +186,7 @@ function scenarioWorld(culturalValue: CulturalValue): WorldState {
   );
   world.stockpile.wood = START_WOOD;
   world.stockpile.food = SCARCE_START_FOOD;
+  addRemoteCompletedHouse(world);
   return world;
 }
 

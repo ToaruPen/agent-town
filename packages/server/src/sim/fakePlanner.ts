@@ -114,15 +114,23 @@ function priorityTasks(world: WorldState, agent: AgentState): AgentTask[] | null
   return incompleteTarget === null ? null : [{ kind: "build", pos: incompleteTarget }];
 }
 
+function wantsHouse(world: WorldState): boolean {
+  const completedCapacity =
+    world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+  return completedCapacity <= world.agents.length;
+}
+
+/** Wood the settlement is currently trying to hold: the winter reserve, plus a house when one is wanted. */
+export function woodTarget(world: WorldState, winterWoodTarget: number): number {
+  return winterWoodTarget + (wantsHouse(world) ? HOUSE_WOOD_COST : 0);
+}
+
 function newHouseTasks(
   world: WorldState,
   agent: AgentState,
   winterWoodTarget: number,
 ): AgentTask[] | null {
-  const completedCapacity =
-    world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
-  const canAfford = world.stockpile.wood >= HOUSE_WOOD_COST + winterWoodTarget;
-  if (completedCapacity > world.agents.length || !canAfford) return null;
+  if (!wantsHouse(world) || world.stockpile.wood < woodTarget(world, winterWoodTarget)) return null;
   const site = newHouseSite(world, agent);
   return site === null ? null : [{ kind: "build", pos: site }];
 }
@@ -132,7 +140,7 @@ function resourceTasks(
   agent: AgentState,
   winterWoodTarget: number,
 ): AgentTask[] | null {
-  if (world.stockpile.wood < winterWoodTarget) {
+  if (world.stockpile.wood < woodTarget(world, winterWoodTarget)) {
     const target = findNearestResource(world, agent, "wood");
     return target === null ? null : gatherTasks("wood", target);
   }
