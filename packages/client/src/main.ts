@@ -17,7 +17,7 @@ import {
 } from "pixi.js";
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
-import { renderAgentLayer } from "./render/agentLayer.js";
+import { interpolateAgentLayer, renderAgentLayer } from "./render/agentLayer.js";
 import { renderDeathMarkerLayer } from "./render/deathLayer.js";
 import { renderHistoryLayer } from "./render/historyLayer.js";
 import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
@@ -751,9 +751,10 @@ function renderScreenLayers(currentState: WorldState): void {
   }
 }
 
-app.ticker.add(() => {
+app.ticker.add((ticker) => {
   if (state === null) return;
   expireSpeechBubbles(performance.now(), state);
+  interpolateAgentLayer(objectLayer, ticker.deltaMS);
   renderDirtyWorldLayers(state);
   renderActiveInfoBubble(state);
   renderScreenLayers(state);

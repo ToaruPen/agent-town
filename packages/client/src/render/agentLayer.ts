@@ -4,6 +4,7 @@ import { Container, Graphics, Rectangle, Sprite, Text } from "pixi.js";
 import type { ThoughtBubble } from "../ui/inspectPanel.js";
 import { AGENT_LABEL_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
+import { easeFactor, RESIDENT_MOTION_HALF_LIFE_MS, SNAP_DISTANCE_TILES } from "./motion.js";
 import { shadowGraphic } from "./shadow.js";
 import {
   agentDepth,
@@ -32,9 +33,25 @@ const BUBBLE_STROKE_COLOR = 0x34302a;
 const BUBBLE_TEXT_COLOR = 0x241f1a;
 const AGENT_OBJECT_LABEL = "agent-object";
 
+interface AgentRenderState {
+  container: Container;
+  targetX: number;
+  targetY: number;
+}
+
 export interface AgentLayerInteractions {
   selectedAgentId: string | null;
   hoveredAgentId: string | null;
+}
+
+const agentRendersByLayer = new WeakMap<Container, Map<string, AgentRenderState>>();
+
+function agentRenders(layer: Container): Map<string, AgentRenderState> {
+  const existing = agentRendersByLayer.get(layer);
+  if (existing !== undefined) return existing;
+  const created = new Map<string, AgentRenderState>();
+  agentRendersByLayer.set(layer, created);
+  return created;
 }
 
 function createSpeechBubble(bubble: ThoughtBubble): Container {
@@ -75,32 +92,28 @@ function bubbleOffset(agent: AgentState): number {
   return -AGENT_HALF_SIZE - indicatorHeight - 2;
 }
 
-function createAgentContainer(agent: AgentState, offset: { x: number; y: number }): Container {
+function createAgentContainer(): Container {
   const container = new Container();
-  container.position.set(
-    agent.pos.x * TILE_SIZE + TILE_SIZE / 2 + offset.x,
-    agent.pos.y * TILE_SIZE + TILE_SIZE / 2 + offset.y,
-  );
   container.label = AGENT_OBJECT_LABEL;
-  container.zIndex = agentDepth(agent.pos.y, offset.y);
   container.eventMode = "static";
   container.hitArea = new Rectangle(-AGENT_HALF_SIZE, -AGENT_HALF_SIZE, TILE_SIZE, TILE_SIZE);
   container.cursor = "pointer";
-  const shadow = shadowGraphic(AGENT_SHADOW_WIDTH_RATIO);
-  shadow.position.set(0, AGENT_HALF_SIZE - 2);
-  container.addChild(shadow);
   return container;
 }
 
+function clearAgentVisuals(container: Container): void {
+  for (const child of container.removeChildren()) child.destroy({ children: true });
+}
+
 function drawAgent(
-  layer: Container,
+  container: Container,
   agent: AgentState,
-  offset: { x: number; y: number },
   bubble: ThoughtBubble | undefined,
   interactions: AgentLayerInteractions,
 ): void {
-  const container = createAgentContainer(agent, offset);
-  layer.addChild(container);
+  const shadow = shadowGraphic(AGENT_SHADOW_WIDTH_RATIO);
+  shadow.position.set(0, AGENT_HALF_SIZE - 2);
+  container.addChild(shadow);
 
   if (agent.planSource === "llm") {
     const ring = new Graphics()
@@ -154,18 +167,85 @@ function drawAgent(
   }
 }
 
+function authoritativePosition(
+  agent: AgentState,
+  offset: { x: number; y: number },
+): { x: number; y: number } {
+  return {
+    x: agent.pos.x * TILE_SIZE + TILE_SIZE / 2 + offset.x,
+    y: agent.pos.y * TILE_SIZE + TILE_SIZE / 2 + offset.y,
+  };
+}
+
+function setAgentTarget(
+  renderState: AgentRenderState,
+  agent: AgentState,
+  offset: { x: number; y: number },
+): void {
+  const target = authoritativePosition(agent, offset);
+  const distanceTiles =
+    Math.hypot(
+      target.x - renderState.container.position.x,
+      target.y - renderState.container.position.y,
+    ) / TILE_SIZE;
+  renderState.targetX = target.x;
+  renderState.targetY = target.y;
+  if (distanceTiles > SNAP_DISTANCE_TILES) renderState.container.position.set(target.x, target.y);
+  // Presentation easing must never change authoritative row ordering.
+  renderState.container.zIndex = agentDepth(agent.pos.y, offset.y);
+}
+
+function createAgentRender(
+  layer: Container,
+  agent: AgentState,
+  offset: { x: number; y: number },
+): AgentRenderState {
+  const container = createAgentContainer();
+  const target = authoritativePosition(agent, offset);
+  container.position.set(target.x, target.y);
+  layer.addChild(container);
+  return { container, targetX: target.x, targetY: target.y };
+}
+
+function removeDepartedAgents(
+  layer: Container,
+  renders: Map<string, AgentRenderState>,
+  activeIds: ReadonlySet<string>,
+): void {
+  for (const [agentId, renderState] of renders) {
+    if (activeIds.has(agentId)) continue;
+    layer.removeChild(renderState.container);
+    renderState.container.destroy({ children: true });
+    renders.delete(agentId);
+  }
+}
+
 export function renderAgentLayer(
   layer: Container,
   agents: AgentState[],
   bubbles: ReadonlyMap<string, ThoughtBubble>,
   interactions: AgentLayerInteractions,
 ): void {
-  for (const child of [...layer.children]) {
-    if (child.label !== AGENT_OBJECT_LABEL) continue;
-    layer.removeChild(child);
-    child.destroy({ children: true });
-  }
+  const renders = agentRenders(layer);
+  removeDepartedAgents(layer, renders, new Set(agents.map(({ id }) => id)));
   layoutAgentsOnTiles(agents).forEach(({ agent, offset }) => {
-    drawAgent(layer, agent, offset, bubbles.get(agent.id), interactions);
+    const existing = renders.get(agent.id);
+    const renderState = existing ?? createAgentRender(layer, agent, offset);
+    if (existing === undefined) renders.set(agent.id, renderState);
+    setAgentTarget(renderState, agent, offset);
+    clearAgentVisuals(renderState.container);
+    drawAgent(renderState.container, agent, bubbles.get(agent.id), interactions);
   });
+}
+
+export function interpolateAgentLayer(layer: Container, deltaMs: number): void {
+  const factor = easeFactor(deltaMs, RESIDENT_MOTION_HALF_LIFE_MS);
+  const renders = agentRendersByLayer.get(layer);
+  if (renders === undefined) return;
+  for (const { container, targetX, targetY } of renders.values()) {
+    container.position.set(
+      container.position.x + (targetX - container.position.x) * factor,
+      container.position.y + (targetY - container.position.y) * factor,
+    );
+  }
 }
