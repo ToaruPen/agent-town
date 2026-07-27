@@ -418,7 +418,7 @@ describe("completeDirective", () => {
       kind: "clearFarmland",
       targetCityId: null,
       want: {
-        foodProductionDelta: 10,
+        foodProductionDelta: 25,
         materialProductionDelta: 0,
         stockDeltas: { food: 0, materials: 0, wealth: 0 },
         stabilityDelta: 0,

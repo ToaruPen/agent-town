@@ -449,7 +449,7 @@ export const NATION_DIRECTIVE_TABOO_AFFINITY = -0.75;
 /** Maximum development level reachable by a nation city. */
 export const NATION_CITY_DEVELOPMENT_CAP = 5;
 /** Permanent food-production increase when farmland clearing completes. */
-export const NATION_CLEAR_FARMLAND_FOOD_PRODUCTION_BONUS = 10;
+export const NATION_CLEAR_FARMLAND_FOOD_PRODUCTION_BONUS = 25;
 /** Permanent material-production increase when timber development completes. */
 export const NATION_DEVELOP_TIMBER_MATERIAL_PRODUCTION_BONUS = 8;
 /** Permanent material-production increase when mine development completes. */
@@ -478,15 +478,15 @@ export const NATION_PROSPERITY_STABILITY_WEIGHT = 0.15;
 /** Culture contribution to the prosperity total. */
 export const NATION_PROSPERITY_CULTURE_WEIGHT = 0.1;
 /** Population at which the prosperity population component reaches one. */
-export const NATION_PROSPERITY_POPULATION_REFERENCE = 20_000;
+export const NATION_PROSPERITY_POPULATION_REFERENCE = 10_000;
 /** Combined food and material capacity at which the production component reaches one. */
-export const NATION_PROSPERITY_PRODUCTION_REFERENCE = 1_000;
+export const NATION_PROSPERITY_PRODUCTION_REFERENCE = 700;
 /** Stored wealth at which the prosperity wealth component reaches one. */
 export const NATION_PROSPERITY_WEALTH_REFERENCE = 5_000;
 /** Stability at which the prosperity stability component reaches one. */
 export const NATION_PROSPERITY_STABILITY_REFERENCE = 100;
 /** Culture at which the prosperity culture component reaches one. */
-export const NATION_PROSPERITY_CULTURE_REFERENCE = 100;
+export const NATION_PROSPERITY_CULTURE_REFERENCE = 500;
 /** Maximum weighted prosperity total exposed to clients. */
 export const NATION_PROSPERITY_SCORE_MAX = 1_000;
 /** Neutral stability before the live nation's population history is applied. */

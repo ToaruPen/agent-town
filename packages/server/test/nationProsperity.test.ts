@@ -9,12 +9,12 @@ function nationFixture(overrides: Partial<NationState> = {}): NationState {
     controller: "agent",
     autoPilot: true,
     stocks: { food: 0, materials: 0, wealth: 2_500 },
-    cities: [{ cityId: "capital", population: 10_000, developmentLevel: 0 }],
+    cities: [{ cityId: "capital", population: 5_000, developmentLevel: 0 }],
     territoryCellCount: 100,
-    population: 10_000,
+    population: 5_000,
     stability: 50,
-    culture: 50,
-    foodProduction: 400,
+    culture: 250,
+    foodProduction: 500,
     materialProduction: 100,
     activeDirectives: [],
     prosperity: {
@@ -48,7 +48,7 @@ describe("computeProsperity", () => {
         stocks: { food: 0, materials: 0, wealth: 50_000 },
         population: 100_000,
         stability: 200,
-        culture: 200,
+        culture: 1_000,
         foodProduction: 10_000,
         materialProduction: 10_000,
       }),
@@ -65,8 +65,8 @@ describe("computeProsperity", () => {
   });
 
   it("uses seasonal per-capita food output in the production component", () => {
-    const score = computeProsperity(nationFixture({ population: 5_000 }));
+    const score = computeProsperity(nationFixture({ population: 2_500 }));
 
-    expect(score.production).toBe(0.3);
+    expect(score.production).toBeCloseTo(0.321_428_571_428_571_45);
   });
 });

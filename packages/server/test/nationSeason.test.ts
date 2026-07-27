@@ -164,14 +164,14 @@ describe("resolveSeason", () => {
     const secondReport = second.reports.get("a");
     if (secondNation === undefined || secondReport === undefined) throw new Error("missing nation");
 
-    expect(secondNation.foodProduction).toBe(20);
+    expect(secondNation.foodProduction).toBe(35);
     expect(secondNation.activeDirectives).toEqual([]);
     expect(secondReport.completedDirectiveIds).toEqual(["farmland-1"]);
     expect(
       secondReport.entries.find(
         ({ metric, reason }) => metric === "food" && reason === "baseProduction",
       )?.delta,
-    ).toBeCloseTo(0.202);
+    ).toBeCloseTo(0.3535);
     expect(secondReport.entries.some(({ reason }) => reason === "directiveCost")).toBe(false);
   });
 
