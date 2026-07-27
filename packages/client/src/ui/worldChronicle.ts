@@ -1,5 +1,6 @@
-import type { CulturalValue, HistoryEventKind, Polity, WorldHistory } from "@agent-town/shared";
+import type { HistoryEventKind, Polity, WorldHistory } from "@agent-town/shared";
 
+import { culturalValueLabel } from "./nationText.js";
 import {
   buildWorldMapViewModel,
   hexColor,
@@ -7,17 +8,6 @@ import {
   renderWorldMapCanvas,
   worldMapPositionFromPointer,
 } from "./worldMapView.js";
-
-const CULTURAL_VALUE_LABELS: Record<CulturalValue, string> = {
-  commerce: "交易",
-  faith: "信仰",
-  knowledge: "知識",
-  kinship: "血縁",
-  mutualAid: "相互扶助",
-  order: "秩序",
-  stewardship: "保全",
-  valor: "武勇",
-};
 
 export interface ChronicleOriginViewModel {
   homelandName: string;
@@ -91,7 +81,7 @@ function valueCauses(history: WorldHistory, eventIds: string[]): ChronicleValueC
 
 function rankedValues(history: WorldHistory, polity: Polity): ChronicleValueViewModel[] {
   return strongestValues(polity).map(({ value, changedByEventIds }) => ({
-    label: CULTURAL_VALUE_LABELS[value],
+    label: culturalValueLabel(value),
     strengthenedBy: valueCauses(history, changedByEventIds),
   }));
 }
@@ -108,7 +98,7 @@ function originView(history: WorldHistory): ChronicleOriginViewModel | null {
   return {
     homelandName: homeland.name,
     reason: origin.reason,
-    inheritedValues: origin.inheritedValues.map((value) => CULTURAL_VALUE_LABELS[value]),
+    inheritedValues: origin.inheritedValues.map((value) => culturalValueLabel(value)),
   };
 }
 

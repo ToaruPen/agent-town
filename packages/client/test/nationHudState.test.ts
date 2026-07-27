@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import { buildNationClockViewModel } from "../src/ui/nationClockViewModel.js";
 import {
-  adoptPlayerNation,
+  applyOrders,
   applyUpdate,
   applyWelcome,
+  autoPilotCommandForKey,
+  cancelDirectiveCommand,
   initialNationHudState,
+  issueDirectiveCommand,
   selectableNations,
   selectNationCommand,
   speedCommandForKey,
 } from "../src/ui/nationHudState.js";
-import { historyFixture, nationFixture, worldFixture } from "./nationFixture.js";
+import { historyFixture, nationFixture, ordersFixture, worldFixture } from "./nationFixture.js";
 
 const welcomed = () => applyWelcome(initialNationHudState(), worldFixture());
 
@@ -158,16 +161,24 @@ describe("claiming a nation", () => {
       initialNationHudState(),
       worldFixture({ playerNationId: null }),
     );
-    const claimed = adoptPlayerNation(spectating, "polity-1");
+    const claimed = applyOrders(spectating, ordersFixture());
 
     expect(claimed.playerNationId).toBe("polity-1");
     expect(selectableNations(claimed)).toEqual([]);
   });
 
-  it("leaves state untouched when the acknowledged nation is the one already held", () => {
-    const before = welcomed();
+  /**
+   * This used to assert referential identity, on the reasoning that re-acknowledging the nation the
+   * player already holds is not news. It cannot any more: `orders` carries the candidate list, the
+   * queued order and any refusal, so every message is new information even when the nation id repeats.
+   * What still has to hold is that the id does not wobble and the payload lands.
+   */
+  it("keeps the held nation and stores the desk when the nation id repeats", () => {
+    const orders = ordersFixture();
+    const after = applyOrders(welcomed(), orders);
 
-    expect(adoptPlayerNation(before, "polity-1")).toBe(before);
+    expect(after.playerNationId).toBe("polity-1");
+    expect(after.orders).toBe(orders);
   });
 
   it("names the nation in the command it sends", () => {
@@ -176,9 +187,9 @@ describe("claiming a nation", () => {
 
   /** A welcome that already names the player's nation must not put the picker back on screen. */
   it("does not re-offer selection after a reconnect that comes back with a nation", () => {
-    const claimed = adoptPlayerNation(
+    const claimed = applyOrders(
       applyWelcome(initialNationHudState(), worldFixture({ playerNationId: null })),
-      "polity-1",
+      ordersFixture(),
     );
 
     expect(selectableNations(applyWelcome(claimed, worldFixture()))).toEqual([]);
@@ -244,5 +255,93 @@ describe("speedCommandForKey", () => {
 
   it("pauses on P from a welcome that arrived running", () => {
     expect(speedCommandForKey("p", welcomed())).toEqual({ type: "setSpeed", speed: 0 });
+  });
+});
+
+describe("the order commands", () => {
+  it("names the kind and the target in an issue", () => {
+    expect(issueDirectiveCommand("growCity", "city-polity-1-1")).toEqual({
+      type: "issueDirective",
+      kind: "growCity",
+      targetCityId: "city-polity-1-1",
+    });
+  });
+
+  it("sends a null target for the kinds that have none", () => {
+    expect(issueDirectiveCommand("holdFestival", null)).toEqual({
+      type: "issueDirective",
+      kind: "holdFestival",
+      targetCityId: null,
+    });
+  });
+
+  it("cancels by directive id", () => {
+    expect(cancelDirectiveCommand("directive-3")).toEqual({
+      type: "cancelDirective",
+      directiveId: "directive-3",
+    });
+  });
+});
+
+/**
+ * The toggle is computed from the server's last echo, never from a local mode flag. That is what bullet 4
+ * asks for, and it matters most at speed 0: no boundary is coming along to correct a lamp that guessed.
+ */
+describe("autoPilotCommandForKey", () => {
+  const withOrders = (autoPilot: boolean) => applyOrders(welcomed(), ordersFixture({ autoPilot }));
+
+  it("asks for the opposite of what the server last reported", () => {
+    expect(autoPilotCommandForKey("a", withOrders(true))).toEqual({
+      type: "setAutoPilot",
+      enabled: false,
+    });
+    expect(autoPilotCommandForKey("a", withOrders(false))).toEqual({
+      type: "setAutoPilot",
+      enabled: true,
+    });
+  });
+
+  it("accepts an upper-case A as well", () => {
+    expect(autoPilotCommandForKey("A", withOrders(true))).toEqual({
+      type: "setAutoPilot",
+      enabled: false,
+    });
+  });
+
+  /**
+   * `sim/nation/bootstrap.ts` starts nations with `autoPilot: true`, so guessing "off" before the first
+   * echo would turn autopilot *on* for a nation that already had it, inverting the key.
+   */
+  it("refuses to guess before the first orders message", () => {
+    expect(autoPilotCommandForKey("a", welcomed())).toBeNull();
+  });
+
+  it("ignores every other key", () => {
+    expect(autoPilotCommandForKey("d", withOrders(true))).toBeNull();
+    expect(autoPilotCommandForKey("1", withOrders(true))).toBeNull();
+  });
+});
+
+describe("a welcome after a reconnect", () => {
+  /**
+   * The server sends nothing but `welcome` on connect, so dropping the candidate list would leave the
+   * desk empty at speed 0 with no action available that would refill it. The list survives; the server
+   * re-validates anything issued from it.
+   */
+  it("keeps the candidate list so the desk is not empty at speed 0", () => {
+    const desked = applyOrders(welcomed(), ordersFixture());
+
+    expect(applyWelcome(desked, worldFixture()).orders?.options).toHaveLength(6);
+  });
+
+  /** A refusal answers an action from before the gap, so it must not survive one. */
+  it("drops a refusal that belonged to the previous connection", () => {
+    const refused = applyOrders(welcomed(), ordersFixture({ rejected: "insufficientWealth" }));
+
+    expect(applyWelcome(refused, worldFixture()).orders?.rejected).toBeNull();
+  });
+
+  it("has no desk to carry when none had arrived", () => {
+    expect(applyWelcome(welcomed(), worldFixture()).orders).toBeNull();
   });
 });

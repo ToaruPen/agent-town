@@ -1,6 +1,12 @@
-import type { NationId, NationState, NationWorldState, Polity } from "@agent-town/shared";
+import type { NationState, NationWorldState, Polity } from "@agent-town/shared";
 
 import type { SendClientMessage } from "../net/wsClient.js";
+import { createDirectivePanel, type DirectivePanelController } from "./directivePanel.js";
+import {
+  buildDirectiveListViewModel,
+  type DirectiveListViewModel,
+  ordersAnnouncement,
+} from "./directiveViewModel.js";
 import { createNationClockBar, type NationClockBarController } from "./nationClockBar.js";
 import { buildNationClockViewModel } from "./nationClockViewModel.js";
 import { createNationDashboard, type NationDashboardController } from "./nationDashboard.js";
@@ -9,11 +15,12 @@ import {
   type NationDashboardViewModel,
 } from "./nationDashboardViewModel.js";
 import {
-  adoptPlayerNation,
+  applyOrders,
   applyUpdate,
   applyWelcome,
   initialNationHudState,
   type NationHudState,
+  type NationOrders,
   selectableNations,
 } from "./nationHudState.js";
 import { createNationSelect, type NationSelectController } from "./nationSelect.js";
@@ -24,6 +31,8 @@ export interface NationHudRoots {
   clock: HTMLElement;
   dashboard: HTMLElement;
   ranking: HTMLElement;
+  /** The candidate list, opened on demand. */
+  directives: HTMLElement;
   /** The start-of-game picker, shown only while the player holds no nation. */
   select: HTMLElement;
   /** The existing `#world-status` live region; announcements go through it, the countdown never does. */
@@ -33,8 +42,11 @@ export interface NationHudRoots {
 export interface NationHudController {
   applyWelcome(world: NationWorldState, now: number): void;
   applyUpdate(world: NationWorldState, now: number): void;
-  /** Takes only `nationId` — the server's acknowledgement that a `selectNation` landed. */
-  applyOrdersNation(nationId: NationId): void;
+  /** The whole order desk: the candidate list, what commits next, the mode, and any refusal. */
+  applyOrders(orders: NationOrders): void;
+  toggleDirectives(): void;
+  /** True when a panel was open and has now been closed, so `Escape` can stop there. */
+  closeTopPanel(): boolean;
   /** Called from a `requestAnimationFrame` loop and short-circuited here, not by the caller. */
   tick(now: number): void;
   state(): NationHudState;
@@ -44,6 +56,7 @@ interface Panels {
   clock: NationClockBarController;
   dashboard: NationDashboardController;
   ranking: ProsperityRankingController;
+  directives: DirectivePanelController;
   select: NationSelectController;
 }
 
@@ -56,7 +69,26 @@ function ownPair(state: NationHudState): { nation: NationState; polity: Polity }
 
 function dashboardView(state: NationHudState): NationDashboardViewModel | null {
   const own = ownPair(state);
-  return own === null ? null : buildNationDashboardViewModel(own.nation, own.polity, true);
+  return own === null
+    ? null
+    : buildNationDashboardViewModel(own.nation, own.polity, true, state.orders);
+}
+
+/** City names for `growCity`'s per-city cards; `NationCityState` carries only the id. */
+function cityNames(state: NationHudState): ReadonlyMap<string, string> {
+  return new Map((state.history?.worldMap.cities ?? []).map(({ id, name }) => [id, name] as const));
+}
+
+function directiveView(state: NationHudState): DirectiveListViewModel | null {
+  const own = ownPair(state);
+  if (own === null || state.orders === null) return null;
+  return buildDirectiveListViewModel(
+    state.orders,
+    own.nation,
+    own.polity,
+    cityNames(state),
+    state.speed,
+  );
 }
 
 /**
@@ -74,10 +106,17 @@ export function createNationHud(
   let clockKey: string | null = null;
   let announcedSpeed: number | null = null;
 
+  const directives = createDirectivePanel(roots.directives, send);
   const panels: Panels = {
     clock: createNationClockBar(roots.clock, send),
-    dashboard: createNationDashboard(roots.dashboard),
+    dashboard: createNationDashboard(roots.dashboard, {
+      send,
+      openDirectives: () => {
+        if (!directives.isOpen()) directives.toggle();
+      },
+    }),
     ranking: createProsperityRanking(roots.ranking),
+    directives,
     select: createNationSelect(roots.select, send),
   };
 
@@ -88,6 +127,8 @@ export function createNationHud(
   const renderPanels = (): void => {
     panels.select.render(selectableNations(state), state.history);
     panels.dashboard.render(dashboardView(state), state.generation);
+    panels.directives.render(directiveView(state), state.generation);
+    panels.clock.renderAutoPilot(state.orders?.autoPilot ?? null);
     if (state.history !== null) {
       panels.ranking.render(
         buildProsperityRankingViewModel(state.nations, state.history, state.playerNationId),
@@ -134,11 +175,28 @@ export function createNationHud(
       }
     },
 
-    applyOrdersNation(nationId: NationId): void {
+    applyOrders(orders: NationOrders): void {
       const claimed = state.playerNationId === null;
-      state = adoptPlayerNation(state, nationId);
+      const previous = state.orders;
+      const activeIds = ownPair(state)?.nation.activeDirectives.map(({ id }) => id) ?? [];
+      state = applyOrders(state, orders);
       renderPanels();
-      if (claimed) announce("国を選びました。");
+      if (claimed) {
+        announce("国を選びました。");
+        return;
+      }
+      const message = ordersAnnouncement(previous, orders, activeIds);
+      if (message !== null) announce(message);
+    },
+
+    toggleDirectives(): void {
+      panels.directives.toggle();
+    },
+
+    closeTopPanel(): boolean {
+      if (!panels.directives.isOpen()) return false;
+      panels.directives.close();
+      return true;
     },
 
     tick(now: number): void {

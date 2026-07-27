@@ -3,7 +3,7 @@ import { Application, Assets, TextureStyle } from "pixi.js";
 import { connect, getWebSocketUrl, type SendClientMessage } from "./net/wsClient.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { createNationHud, type NationHudRoots } from "./ui/nationHud.js";
-import { bindNationSpeedKeys } from "./ui/nationKeyboard.js";
+import { bindNationKeys } from "./ui/nationKeyboard.js";
 
 /**
  * The nation HUD's roots, or null when the page does not provide them. Absent roots mean this is not
@@ -14,11 +14,12 @@ function findNationHudRoots(): NationHudRoots | null {
   const clock = document.getElementById("nation-clock");
   const dashboard = document.getElementById("nation-dashboard");
   const ranking = document.getElementById("nation-ranking");
+  const directives = document.getElementById("directive-panel");
   const select = document.getElementById("nation-select");
   const status = document.getElementById("world-status");
   if (clock === null || dashboard === null || ranking === null) return null;
-  if (select === null || status === null) return null;
-  return { clock, dashboard, ranking, select, status };
+  if (directives === null || select === null || status === null) return null;
+  return { clock, dashboard, ranking, directives, select, status };
 }
 
 /**
@@ -58,9 +59,7 @@ function mountNationHud(roots: NationHudRoots): void {
       hud.applyUpdate(state, Date.now());
     },
     onOrders: (message) => {
-      // The order desk is C1-4. Only the nation id is read here, because it is the sole place the
-      // server confirms a `selectNation`; the candidate list and the queued order are that slice's.
-      hud.applyOrdersNation(message.nationId);
+      hud.applyOrders(message);
     },
     onDisconnected: () => {
       // Deliberately not "paused": a HUD keeps its last payload on screen, so a dropped socket looks
@@ -68,7 +67,12 @@ function mountNationHud(roots: NationHudRoots): void {
       boot.show("接続が切れました。再接続しています…");
     },
   });
-  bindNationSpeedKeys(post, () => hud.state());
+  bindNationKeys(post, () => hud.state(), {
+    toggleDirectives: () => {
+      hud.toggleDirectives();
+    },
+    closeTopPanel: () => hud.closeTopPanel(),
+  });
 
   // The countdown's own loop, deliberately not Pixi's ticker: that belongs to a scene which may be
   // unmounted. `tick` short-circuits itself while paused, so a paused game repaints nothing.

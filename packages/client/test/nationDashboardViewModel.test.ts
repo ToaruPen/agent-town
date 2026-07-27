@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { buildNationDashboardViewModel } from "../src/ui/nationDashboardViewModel.js";
-import { ledgerEntry, nationFixture, polityFixture, reportFixture } from "./nationFixture.js";
+import type { NationOrders } from "../src/ui/nationHudState.js";
+import {
+  ledgerEntry,
+  nationFixture,
+  ordersFixture,
+  polityFixture,
+  reportFixture,
+} from "./nationFixture.js";
 
 function rowFor(metric: string, nation = nationFixture()) {
-  const view = buildNationDashboardViewModel(nation, polityFixture(), true);
+  const view = buildNationDashboardViewModel(nation, polityFixture(), true, null);
   const row = view.metrics.find((candidate) => candidate.metric === metric);
   if (row === undefined) throw new Error(`no row for ${metric}`);
   return row;
@@ -12,18 +19,18 @@ function rowFor(metric: string, nation = nationFixture()) {
 
 describe("buildNationDashboardViewModel", () => {
   it("names the nation from the polity, since NationState carries no name", () => {
-    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true);
+    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true, null);
 
     expect(view.name).toBe("ヴェルディン侯国");
   });
 
   it("marks the player's own nation so the dashboard can say 自国", () => {
-    expect(buildNationDashboardViewModel(nationFixture(), polityFixture(), true).isPlayer).toBe(
-      true,
-    );
-    expect(buildNationDashboardViewModel(nationFixture(), polityFixture(), false).isPlayer).toBe(
-      false,
-    );
+    expect(
+      buildNationDashboardViewModel(nationFixture(), polityFixture(), true, null).isPlayer,
+    ).toBe(true);
+    expect(
+      buildNationDashboardViewModel(nationFixture(), polityFixture(), false, null).isPlayer,
+    ).toBe(false);
   });
 
   /**
@@ -48,7 +55,7 @@ describe("buildNationDashboardViewModel", () => {
   });
 
   it("lists the six metrics in the order the design fixes, so rows never reshuffle", () => {
-    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true);
+    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true, null);
 
     expect(view.metrics.map(({ metric }) => metric)).toEqual([
       "food",
@@ -65,7 +72,7 @@ describe("buildNationDashboardViewModel", () => {
    * season resolved when none has, which is why the correct first-run state is a dash.
    */
   it("reads every delta as a dash while no season has resolved", () => {
-    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true);
+    const view = buildNationDashboardViewModel(nationFixture(), polityFixture(), true, null);
 
     expect(view.waitingForFirstReport).toBe(true);
     expect(view.metrics.map(({ deltaLabel }) => deltaLabel)).toEqual([
@@ -151,7 +158,7 @@ describe("buildNationDashboardViewModel", () => {
         },
       ],
     });
-    const view = buildNationDashboardViewModel(nation, polityFixture(), true);
+    const view = buildNationDashboardViewModel(nation, polityFixture(), true, null);
 
     expect(view.activeDirectives).toEqual([
       {
@@ -178,14 +185,111 @@ describe("buildNationDashboardViewModel", () => {
         },
       ],
     });
-    const view = buildNationDashboardViewModel(nation, polityFixture(), true);
+    const view = buildNationDashboardViewModel(nation, polityFixture(), true, null);
 
     expect(view.activeDirectives[0]?.progressLabel).toBe("●● 残0季");
   });
 
   it("has no directive rows when the nation is doing nothing", () => {
     expect(
-      buildNationDashboardViewModel(nationFixture(), polityFixture(), true).activeDirectives,
+      buildNationDashboardViewModel(nationFixture(), polityFixture(), true, null).activeDirectives,
     ).toEqual([]);
+  });
+});
+
+/**
+ * The four states of 次の決算, pinned against the server's real rule rather than the design's.
+ *
+ * hud.md §3.2 tabulated three states on the assumption that autopilot "fills the gap", so a queued order
+ * would commit even with autopilot on. It does not: `sim/nation/engine.ts` `selectDirective` tests
+ * `autoPilot` first and the chancellor's branch consumes no queued id. Measured against a live server at
+ * x8: a queued order sat through three boundaries with autopilot on, then committed at the first boundary
+ * after it went off. §3.2 anticipated this outcome and asked for the order to read as overridden.
+ */
+describe("the commit slot", () => {
+  const slotFor = (orders: NationOrders | null) =>
+    buildNationDashboardViewModel(nationFixture(), polityFixture(), true, orders).commitSlot;
+
+  const queued = { id: "directive-1" as const, kind: "holdFestival" as const, targetCityId: null };
+
+  it("says the chancellor commits whenever autopilot is on", () => {
+    const slot = slotFor(ordersFixture({ autoPilot: true, queued: null }));
+
+    expect(slot.kind).toBe("chancellor");
+    expect(slot.headline).toBe("備蓄奨励（宰相の既定）");
+    expect(slot.detail).toBeNull();
+  });
+
+  /** The state the design's table had no room for, and the one a fresh player is dropped into. */
+  it("still says the chancellor commits when autopilot is on and an order is queued", () => {
+    const slot = slotFor(ordersFixture({ autoPilot: true, queued }));
+
+    expect(slot.kind).toBe("chancellor");
+    expect(slot.headline).toBe("備蓄奨励（宰相の既定）");
+    expect(slot.detail).toBe("あなたの発令「祭礼」は自動運転を切るまで待機します");
+  });
+
+  it("says the player's order commits once autopilot is off", () => {
+    const slot = slotFor(ordersFixture({ autoPilot: false, queued }));
+
+    expect(slot.kind).toBe("queued");
+    expect(slot.headline).toBe("祭礼（あなたの発令）");
+    expect(slot.detail).toBeNull();
+  });
+
+  /** The warning state: it has to be visible before the boundary, not discovered in the report after. */
+  it("warns that nothing commits with autopilot off and no order", () => {
+    const slot = slotFor(ordersFixture({ autoPilot: false, queued: null }));
+
+    expect(slot.kind).toBe("idle");
+    expect(slot.headline).toBe("この季は何も実行されません");
+    expect(slot.emphasis).toBe(true);
+  });
+
+  it("offers to cancel a queued order in both modes, because the server accepts it in both", () => {
+    expect(slotFor(ordersFixture({ autoPilot: true, queued })).cancelDirectiveId).toBe(
+      "directive-1",
+    );
+    expect(slotFor(ordersFixture({ autoPilot: false, queued })).cancelDirectiveId).toBe(
+      "directive-1",
+    );
+  });
+
+  it("has nothing to cancel when no order is queued", () => {
+    expect(slotFor(ordersFixture({ queued: null })).cancelDirectiveId).toBeNull();
+  });
+
+  /** A rival's dashboard, and the gap before the first `orders`: no decision to report, so none claimed. */
+  it("reports a pending sync rather than a decision when no orders have arrived", () => {
+    const slot = slotFor(null);
+
+    expect(slot.kind).toBe("unknown");
+    expect(slot.headline).toBe("同期を待っています");
+    expect(slot.emphasis).toBe(false);
+  });
+
+  /**
+   * `wsServer.orders` calls `chooseDirective` unconditionally, so `chancellorChoice` is non-null even
+   * with autopilot off. Gating the slot on the choice being present instead of on the mode would put the
+   * chancellor's pick on screen as what commits in a season where nothing does.
+   */
+  it("does not fall back to the chancellor's pick with autopilot off", () => {
+    const slot = slotFor(
+      ordersFixture({
+        autoPilot: false,
+        queued: null,
+        chancellorChoice: { kind: "holdFestival", targetCityId: null },
+      }),
+    );
+
+    expect(slot.kind).toBe("idle");
+    expect(slot.headline).not.toContain("祭礼");
+  });
+
+  it("does not claim a decision when autopilot is on but the chancellor picked nothing", () => {
+    const slot = slotFor(ordersFixture({ autoPilot: true, chancellorChoice: null }));
+
+    expect(slot.kind).toBe("chancellor");
+    expect(slot.headline).toBe("宰相は今季なにも選べません");
   });
 });

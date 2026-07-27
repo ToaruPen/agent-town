@@ -13,6 +13,7 @@ describe("nation HUD shell", () => {
     expect(html).toContain('id="nation-clock"');
     expect(html).toContain('id="nation-dashboard"');
     expect(html).toContain('id="nation-ranking"');
+    expect(html).toContain('id="directive-panel"');
     expect(html).toContain('id="nation-select"');
     // Announcements reuse the existing live region rather than adding a second one.
     expect(html).toContain('id="world-status"');
@@ -24,16 +25,37 @@ describe("nation HUD shell", () => {
     expect(html).toMatch(/id="nation-select"[\s\S]*?hidden[\s\S]*?>/);
   });
 
+  it("starts the directive panel closed, since it opens on demand", () => {
+    expect(html).toMatch(/id="directive-panel"[\s\S]*?hidden[\s\S]*?>/);
+  });
+
   it("labels the HUD regions for a screen reader", () => {
     expect(html).toContain('aria-label="暦と進行速度"');
     expect(html).toContain('aria-label="自国の状況"');
     expect(html).toContain('aria-label="繁栄度の順位"');
+    expect(html).toContain('aria-label="施策の選択"');
     expect(html).toContain('aria-label="国の選択"');
   });
 
   it("keeps the 44px touch target the rest of the UI already promises", () => {
     expect(html).toMatch(/\.nation-clock__speed\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
     expect(html).toMatch(/\.nation-select__option\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+    expect(html).toMatch(/\.nation-clock__autopilot\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+    expect(html).toMatch(/\.directive-panel__submit\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+  });
+
+  /**
+   * The blocked-option rule in CSS terms: a blocked card is styled through `aria-disabled`, so the
+   * selector existing is evidence the markup uses the attribute rather than the `disabled` property that
+   * would drop the option — and its explanation — out of the tab order.
+   */
+  it("styles blocked options through aria-disabled rather than removing them", () => {
+    expect(html).toContain('.directive-panel__submit[aria-disabled="true"]');
+    expect(html).toContain(".directive-panel__option--blocked");
+  });
+
+  it("gives the refusal banner a look of its own, since at speed 0 it is the only feedback", () => {
+    expect(html).toContain(".directive-panel__refusal");
   });
 
   it("styles the metric deltas by direction so the diff is not carried by colour alone", () => {

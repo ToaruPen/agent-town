@@ -1,4 +1,5 @@
 import type {
+  DirectiveOption,
   NationState,
   NationWorldState,
   Polity,
@@ -6,6 +7,8 @@ import type {
   SeasonReport,
   WorldHistory,
 } from "@agent-town/shared";
+
+import type { NationOrders } from "../src/ui/nationHudState.js";
 
 /**
  * Hand-built nation state for the HUD view models, following `worldMapFixture.ts` and
@@ -81,6 +84,80 @@ export function historyFixture(polities: readonly Polity[] = [polityFixture()]):
       borderChanges: [],
       settlementFrontierPos: { x: 0, y: 0 },
     },
+  };
+}
+
+/**
+ * The candidate list as the live server actually sends it, transcribed from a probe at seed 12345:
+ * every kind present, `openMine` blocked on terrain, affinities carrying their real float noise
+ * (0.4169999999999999, not 0.42). Round numbers would hide exactly the formatting bugs this list
+ * exists to catch.
+ */
+export function optionsFixture(): DirectiveOption[] {
+  return [
+    {
+      kind: "clearFarmland",
+      targetCityId: null,
+      cost: { food: 20, materials: 30, wealth: 10 },
+      seasons: 2,
+      affinity: 0.4169999999999999,
+      blockedReason: null,
+    },
+    {
+      kind: "developTimber",
+      targetCityId: null,
+      cost: { food: 10, materials: 20, wealth: 15 },
+      seasons: 2,
+      affinity: 0,
+      blockedReason: null,
+    },
+    {
+      kind: "openMine",
+      targetCityId: null,
+      cost: { food: 15, materials: 50, wealth: 30 },
+      seasons: 3,
+      affinity: 0.402,
+      blockedReason: "missingTerrain",
+    },
+    {
+      kind: "growCity",
+      targetCityId: "city-polity-1-1",
+      cost: { food: 30, materials: 40, wealth: 50 },
+      seasons: 3,
+      affinity: 0.689,
+      blockedReason: null,
+    },
+    {
+      kind: "encourageStores",
+      targetCityId: null,
+      cost: { food: 10, materials: 10, wealth: 20 },
+      seasons: 2,
+      affinity: 0.6229999999999999,
+      blockedReason: null,
+    },
+    {
+      kind: "holdFestival",
+      targetCityId: null,
+      cost: { food: 20, materials: 0, wealth: 40 },
+      seasons: 1,
+      affinity: 0.794,
+      blockedReason: null,
+    },
+  ];
+}
+
+/** `autoPilot: true` matches the server's bootstrap default, which is the state a real player meets. */
+export function ordersFixture(overrides: Partial<NationOrders> = {}): NationOrders {
+  return {
+    type: "orders",
+    tick: 254_927,
+    nationId: "polity-1",
+    autoPilot: true,
+    options: optionsFixture(),
+    queued: null,
+    chancellorChoice: { kind: "encourageStores", targetCityId: null },
+    rejected: null,
+    ...overrides,
   };
 }
 

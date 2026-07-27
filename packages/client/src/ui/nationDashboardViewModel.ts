@@ -1,11 +1,13 @@
 import type {
   ActiveDirective,
+  DirectiveId,
   NationState,
   Polity,
   SeasonMetric,
   SeasonReport,
 } from "@agent-town/shared";
 
+import type { NationOrders } from "./nationHudState.js";
 import { directiveKindLabel, metricLabel } from "./nationText.js";
 
 export type MetricDirection = "up" | "down" | "flat" | "unknown";
@@ -30,12 +32,32 @@ export interface NationActiveDirectiveRow {
   progressLabel: string;
 }
 
+/**
+ * `chancellor` covers both "autopilot, nothing queued" and "autopilot, an order waiting" — in each case
+ * the chancellor is what commits, and the waiting order is reported in `detail` rather than by a state of
+ * its own, because the slot answers exactly one question.
+ */
+export type CommitSlotKind = "queued" | "chancellor" | "idle" | "unknown";
+
+export interface NationCommitSlotViewModel {
+  kind: CommitSlotKind;
+  /** What commits at the next boundary, in one line. Never empty. */
+  headline: string;
+  /** The waiting-order note, set only when autopilot is overriding a queued order. */
+  detail: string | null;
+  /** True only for the warning state: no autopilot and nothing queued, so the season is wasted. */
+  emphasis: boolean;
+  /** Non-null whenever an order is queued — a waiting order stays cancellable under autopilot (measured). */
+  cancelDirectiveId: DirectiveId | null;
+}
+
 export interface NationDashboardViewModel {
   name: string;
   isPlayer: boolean;
   metrics: NationMetricRow[];
   activeDirectives: NationActiveDirectiveRow[];
   waitingForFirstReport: boolean;
+  commitSlot: NationCommitSlotViewModel;
 }
 
 /** Fixed so rows never reshuffle between renders; matches the always-on layout in hud.md §4.1. */
@@ -124,14 +146,81 @@ function directiveRow(directive: ActiveDirective): NationActiveDirectiveRow {
   };
 }
 
+function unknownSlot(): NationCommitSlotViewModel {
+  return {
+    kind: "unknown",
+    headline: "同期を待っています",
+    detail: null,
+    emphasis: false,
+    cancelDirectiveId: null,
+  };
+}
+
+function chancellorSlot(orders: NationOrders): NationCommitSlotViewModel {
+  const choice = orders.chancellorChoice;
+  const waiting = orders.queued;
+  return {
+    kind: "chancellor",
+    headline:
+      choice === null
+        ? "宰相は今季なにも選べません"
+        : `${directiveKindLabel(choice.kind)}（宰相の既定）`,
+    detail:
+      waiting === null
+        ? null
+        : `あなたの発令「${directiveKindLabel(waiting.kind)}」は自動運転を切るまで待機します`,
+    emphasis: false,
+    cancelDirectiveId: waiting?.id ?? null,
+  };
+}
+
+/**
+ * What commits at the next boundary.
+ *
+ * The branch order is the *server's*, read off `sim/nation/engine.ts` `selectDirective`: it tests
+ * `autoPilot` before it ever looks at the queued list, and the chancellor's branch reports no consumed
+ * queued id — so with autopilot on the chancellor decides every season and the player's order is neither
+ * read nor discarded. It waits, and commits at the first boundary after autopilot goes off.
+ *
+ * hud.md §3.2 assumed the opposite ("autopilot fills the gap", so a queued order would win even with
+ * autopilot on) and pre-specified this branch for the case the assumption failed. It failed; the table
+ * here was measured against a running server, not inferred. If the simulation is later changed to match
+ * the spec, this function and its tests are the whole of the client-side change.
+ */
+function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
+  if (orders === null) return unknownSlot();
+  if (orders.autoPilot) return chancellorSlot(orders);
+  const queued = orders.queued;
+  if (queued !== null) {
+    return {
+      kind: "queued",
+      headline: `${directiveKindLabel(queued.kind)}（あなたの発令）`,
+      detail: null,
+      emphasis: false,
+      cancelDirectiveId: queued.id,
+    };
+  }
+  return {
+    kind: "idle",
+    headline: "この季は何も実行されません",
+    detail: null,
+    emphasis: true,
+    cancelDirectiveId: null,
+  };
+}
+
 /**
  * The always-on dashboard for one nation. Takes `(nation, polity)` because `NationState` has no name
  * and no colour — those live on `Polity`, joined by id, the same join `worldMapView.buildCells` does.
+ *
+ * `orders` is null for a rival's panel and before the first `orders` message; the commit slot then reads
+ * 同期を待っています rather than guessing at a decision the server has not stated.
  */
 export function buildNationDashboardViewModel(
   nation: NationState,
   polity: Polity,
   isPlayer: boolean,
+  orders: NationOrders | null,
 ): NationDashboardViewModel {
   return {
     name: polity.name,
@@ -139,5 +228,6 @@ export function buildNationDashboardViewModel(
     metrics: METRIC_ORDER.map((metric) => metricRow(nation, metric)),
     activeDirectives: nation.activeDirectives.map(directiveRow),
     waitingForFirstReport: nation.lastReport === null,
+    commitSlot: commitSlot(orders),
   };
 }

@@ -2,12 +2,17 @@ import { SPEED_MULTIPLIERS, type SpeedMultiplier } from "@agent-town/shared";
 
 import type { SendClientMessage } from "../net/wsClient.js";
 import type { NationClockViewModel } from "./nationClockViewModel.js";
-import { setSpeedCommand } from "./nationHudState.js";
+import { setAutoPilotCommand, setSpeedCommand } from "./nationHudState.js";
 import { speedLabel } from "./nationText.js";
 import { element } from "./worldChronicle.js";
 
 export interface NationClockBarController {
   render(view: NationClockViewModel, speed: SpeedMultiplier): void;
+  /**
+   * Null until the first `orders` arrives. Kept off `render` on purpose: that one runs up to 10×/s from
+   * the countdown, and autopilot changes once a season at most.
+   */
+  renderAutoPilot(autoPilot: boolean | null): void;
 }
 
 /** Key hints on the buttons, so `0`–`8` and `P` are discoverable from the control itself (§3.5). */
@@ -28,6 +33,48 @@ function speedButton(speed: SpeedMultiplier, send: SendClientMessage): HTMLButto
     send(setSpeedCommand(speed));
   });
   return button;
+}
+
+/**
+ * Handing control back is one action, and this is it — the label says which way it will go, not merely
+ * which state the nation is in, because "ON" alone does not tell a player what pressing it does.
+ *
+ * The pressed state is set from the server's `orders` echo and never from the click, so a toggle that
+ * the server has not yet acknowledged keeps showing the truth. At speed 0 that matters: no boundary is
+ * coming along to correct an optimistic lamp.
+ */
+function autoPilotButton(
+  readAutoPilot: () => boolean | null,
+  send: SendClientMessage,
+): HTMLButtonElement {
+  const button = element("button", "nation-clock__autopilot");
+  button.type = "button";
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", () => {
+    const current = readAutoPilot();
+    if (current === null) return;
+    send(setAutoPilotCommand(!current));
+  });
+  return button;
+}
+
+function paintAutoPilot(button: HTMLButtonElement, autoPilot: boolean | null): void {
+  if (autoPilot === null) {
+    button.textContent = "自動運転 同期中";
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-disabled", "true");
+    button.setAttribute("aria-label", "自動運転の状態を同期しています");
+    return;
+  }
+  button.removeAttribute("aria-disabled");
+  button.textContent = autoPilot ? "自動運転 ●ON" : "自動運転 ○OFF";
+  button.setAttribute("aria-pressed", String(autoPilot));
+  button.setAttribute(
+    "aria-label",
+    autoPilot
+      ? "自動運転を切る（A）。今は毎季かならず宰相が決めます"
+      : "自動運転を入れる（A）。今はあなたの発令だけが実行されます",
+  );
 }
 
 /**
@@ -58,7 +105,11 @@ export function createNationClockBar(
     speedGroup.append(button);
   }
 
-  root.replaceChildren(headline, countdownLabel, progress, countdown, speedGroup);
+  let autoPilot: boolean | null = null;
+  const autoPilotToggle = autoPilotButton(() => autoPilot, send);
+  paintAutoPilot(autoPilotToggle, autoPilot);
+
+  root.replaceChildren(headline, countdownLabel, progress, countdown, speedGroup, autoPilotToggle);
 
   return {
     render(view: NationClockViewModel, speed: SpeedMultiplier): void {
@@ -75,6 +126,12 @@ export function createNationClockBar(
       for (const [candidate, button] of speeds) {
         button.setAttribute("aria-pressed", String(candidate === speed));
       }
+    },
+
+    renderAutoPilot(next: boolean | null): void {
+      if (next === autoPilot) return;
+      autoPilot = next;
+      paintAutoPilot(autoPilotToggle, autoPilot);
     },
   };
 }
