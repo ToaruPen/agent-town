@@ -51,7 +51,8 @@ export interface DirectiveCardViewModel {
 
 export interface DirectiveListViewModel {
   cards: DirectiveCardViewModel[];
-  autoPilot: boolean;
+  /** Null between a `welcome` and the next `orders`: the mode is a server fact and no echo has arrived. */
+  autoPilot: boolean | null;
   autoPilotLabel: string;
   /** Spells out what the mode actually does, which is not what its name suggests. */
   autoPilotDescription: string;
@@ -126,8 +127,8 @@ function optionLabel(option: DirectiveOption, cityNames: ReadonlyMap<string, str
   return `${base}（${cityNames.get(option.targetCityId) ?? option.targetCityId}）`;
 }
 
-function isChancellorChoice(option: DirectiveOption, orders: NationOrders): boolean {
-  const choice = orders.chancellorChoice;
+function isChancellorChoice(option: DirectiveOption, orders: NationOrders | null): boolean {
+  const choice = orders?.chancellorChoice ?? null;
   if (choice === null) return false;
   return choice.kind === option.kind && choice.targetCityId === option.targetCityId;
 }
@@ -147,7 +148,7 @@ function accessibleName(card: Omit<DirectiveCardViewModel, "accessibleName">): s
 
 function buildCard(
   option: DirectiveOption,
-  orders: NationOrders,
+  orders: NationOrders | null,
   nation: NationState,
   polity: Polity,
   cityNames: ReadonlyMap<string, string>,
@@ -186,6 +187,18 @@ const AUTOPILOT_ON_DESCRIPTION =
   "自動運転が入っている間は、毎季かならず宰相が決めます。あなたの発令は取り消されず、自動運転を切った次の決算で実行されます。";
 const AUTOPILOT_OFF_DESCRIPTION =
   "あなたの発令がそのまま実行されます。発令がない季は何も実行されません。";
+const AUTOPILOT_UNKNOWN_DESCRIPTION =
+  "どちらの運転になっているかは、次の応答を受け取るまで分かりません。発令はいま送れます。";
+
+function autoPilotLabel(autoPilot: boolean | null): string {
+  if (autoPilot === null) return "自動運転 同期中";
+  return autoPilot ? "自動運転 ON（宰相が決めます）" : "自動運転 OFF（あなたが決めます）";
+}
+
+function autoPilotDescription(autoPilot: boolean | null): string {
+  if (autoPilot === null) return AUTOPILOT_UNKNOWN_DESCRIPTION;
+  return autoPilot ? AUTOPILOT_ON_DESCRIPTION : AUTOPILOT_OFF_DESCRIPTION;
+}
 
 /**
  * What the `#world-status` live region says about a new `orders`, or null when it says nothing.
@@ -223,28 +236,30 @@ export function ordersAnnouncement(
 }
 
 /**
- * The candidate list plus the mode it is issued into.
+ * The candidate list plus the mode it is issued into — passed separately because they have different
+ * lifetimes. `options` outlives a reconnect; `orders` does not (see `nationHudState.applyWelcome`), and
+ * with `orders` null the list still renders and is still submittable while the mode, the chancellor's
+ * star and any refusal all read as unknown rather than as stale facts.
  *
- * `orders.options` is rendered whole: every `DirectiveKind` arrives every season, blocked ones carrying
- * their reason, so the list is a stable thing to learn rather than a menu that reshuffles as stocks move.
- * Nothing is filtered here — hiding a blocked option would hide precisely the explanation the panel is for.
+ * The list is rendered whole: every `DirectiveKind` arrives every season, blocked ones carrying their
+ * reason, so it is a stable thing to learn rather than a menu that reshuffles as stocks move. Nothing is
+ * filtered here — hiding a blocked option would hide precisely the explanation the panel is for.
  */
 export function buildDirectiveListViewModel(
-  orders: NationOrders,
+  options: readonly DirectiveOption[],
+  orders: NationOrders | null,
   nation: NationState,
   polity: Polity,
   cityNames: ReadonlyMap<string, string>,
   speed: SpeedMultiplier,
 ): DirectiveListViewModel {
+  const autoPilot = orders?.autoPilot ?? null;
+  const rejected = orders?.rejected ?? null;
   return {
-    cards: orders.options.map((option) =>
-      buildCard(option, orders, nation, polity, cityNames, speed),
-    ),
-    autoPilot: orders.autoPilot,
-    autoPilotLabel: orders.autoPilot
-      ? "自動運転 ON（宰相が決めます）"
-      : "自動運転 OFF（あなたが決めます）",
-    autoPilotDescription: orders.autoPilot ? AUTOPILOT_ON_DESCRIPTION : AUTOPILOT_OFF_DESCRIPTION,
-    refusal: orders.rejected === null ? null : refusalText(orders.rejected),
+    cards: options.map((option) => buildCard(option, orders, nation, polity, cityNames, speed)),
+    autoPilot,
+    autoPilotLabel: autoPilotLabel(autoPilot),
+    autoPilotDescription: autoPilotDescription(autoPilot),
+    refusal: rejected === null ? null : refusalText(rejected),
   };
 }

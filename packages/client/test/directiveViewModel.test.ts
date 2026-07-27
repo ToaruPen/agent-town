@@ -24,7 +24,7 @@ const polity = () =>
   });
 
 function build(orders: NationOrders = ordersFixture(), nation = nationFixture()) {
-  return buildDirectiveListViewModel(orders, nation, polity(), CITY_NAMES, 1);
+  return buildDirectiveListViewModel(orders.options, orders, nation, polity(), CITY_NAMES, 1);
 }
 
 function cardFor(
@@ -105,8 +105,15 @@ describe("buildDirectiveListViewModel", () => {
   /** The player's budget is wall clock, not seasons, and it changes with the speed they are running. */
   it("converts the duration to seconds at the current speed", () => {
     const orders = ordersFixture();
-    const at1 = buildDirectiveListViewModel(orders, nationFixture(), polity(), CITY_NAMES, 1);
-    const at8 = buildDirectiveListViewModel(orders, nationFixture(), polity(), CITY_NAMES, 8);
+    const at1 = build(orders);
+    const at8 = buildDirectiveListViewModel(
+      orders.options,
+      orders,
+      nationFixture(),
+      polity(),
+      CITY_NAMES,
+      8,
+    );
 
     expect(at1.cards.find((card) => card.kind === "clearFarmland")?.durationDetail).toBe(
       "2季 = 約60秒（x1 のとき）",
@@ -118,6 +125,7 @@ describe("buildDirectiveListViewModel", () => {
 
   it("does not promise a duration in seconds while the clock is stopped", () => {
     const paused = buildDirectiveListViewModel(
+      ordersFixture().options,
       ordersFixture(),
       nationFixture(),
       polity(),
@@ -199,6 +207,49 @@ describe("the autopilot mode text", () => {
     expect(view.autoPilot).toBe(false);
     expect(view.autoPilotLabel).toBe("自動運転 OFF（あなたが決めます）");
     expect(view.autoPilotDescription).toContain("発令がない季は何も実行されません");
+  });
+});
+
+/**
+ * After a `welcome`, the client holds a candidate list but no `orders` — the server sends only `welcome`
+ * on connect, so the mode, the chancellor's pick and any refusal all belong to a season that may be over.
+ * The list stays usable so the desk is not dead at speed 0; everything that is a claim goes quiet.
+ */
+describe("a candidate list with no orders behind it", () => {
+  const listOnly = () =>
+    buildDirectiveListViewModel(
+      ordersFixture().options,
+      null,
+      nationFixture(),
+      polity(),
+      CITY_NAMES,
+      1,
+    );
+
+  it("still renders every option, so the desk is not dead until the next season", () => {
+    expect(listOnly().cards).toHaveLength(6);
+    expect(listOnly().cards.some((card) => card.canSubmit)).toBe(true);
+  });
+
+  it("keeps the cost, duration and fit, which are facts about the kind rather than the season", () => {
+    const card = listOnly().cards.find((candidate) => candidate.kind === "holdFestival");
+
+    expect(card?.costLabel).toBe("食料 −20　資材 0　富 −40");
+    expect(card?.affinityNote).toBe("相互扶助・信仰に沿う");
+  });
+
+  it("reports the mode as unknown instead of guessing which way it was left", () => {
+    expect(listOnly().autoPilot).toBeNull();
+    expect(listOnly().autoPilotLabel).toBe("自動運転 同期中");
+    expect(listOnly().autoPilotDescription).toContain("次の応答を受け取るまで分かりません");
+  });
+
+  it("stars nothing, because the chancellor's pick was for a season that may be over", () => {
+    expect(listOnly().cards.some((card) => card.isChancellorChoice)).toBe(false);
+  });
+
+  it("shows no refusal, since any refusal it held answered an action from before the gap", () => {
+    expect(listOnly().refusal).toBeNull();
   });
 });
 

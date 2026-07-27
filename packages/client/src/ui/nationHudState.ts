@@ -2,6 +2,7 @@ import {
   type ClientMessage,
   type DirectiveId,
   type DirectiveKind,
+  type DirectiveOption,
   type NationId,
   type NationState,
   type NationWorldState,
@@ -29,9 +30,16 @@ export interface NationHudState {
    */
   clock: NationClockSnapshot | null;
   /**
-   * The last `orders` message, or null before the first one. Every part of the order desk — the
-   * candidate list, what commits at the next boundary, the autopilot lamp, the last refusal — is read
-   * from here, so the desk can never show a state the server did not send.
+   * The candidate list on its own, because it is the one part of an `orders` message that survives a
+   * reconnect. Every kind is present every season and the server re-validates anything issued from it,
+   * so a carried-over list is usable rather than a claim.
+   */
+  options: readonly DirectiveOption[];
+  /**
+   * The server's assertions about the *next boundary* — what is queued, which way autopilot is running,
+   * what the chancellor picked, what was just refused. Null before the first `orders` and again after a
+   * `welcome`, because none of it is knowable across a gap. The commit slot reads only this, so it
+   * cannot name a decision the server has not stated for the season that is actually running.
    */
   orders: NationOrders | null;
   /** Which speed button is lit. Seeded by `welcome` so the control is honest before the first update. */
@@ -55,6 +63,7 @@ export function initialNationHudState(): NationHudState {
     nations: [],
     playerNationId: null,
     clock: null,
+    options: [],
     orders: null,
     speed: 0,
     lastNonZeroSpeed: DEFAULT_RESUME_SPEED,
@@ -69,11 +78,17 @@ function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier):
 /**
  * Re-establishes everything. The HUD must not assume it saw the seasons that passed during a gap.
  *
- * The candidate list survives; only the refusal is dropped. The server sends nothing but `welcome` on
- * connect (`net/wsServer.ts` `startServer`), so clearing `orders` outright would leave the desk with no
- * options at speed 0 — and with no options there is no action to take that would fetch new ones. Keeping
- * the list is safe because the server re-validates every issue and refuses a stale target with a reason;
- * keeping the *refusal* would not be, since it answers an action from before the gap.
+ * The two halves of the order desk part company here, which is why they are stored apart. The candidate
+ * list survives: the server sends nothing but `welcome` on connect (`net/wsServer.ts` `startServer`), so
+ * dropping it would leave the desk with no options at speed 0 — and with no options there is no action to
+ * take that would fetch new ones. Carrying it is safe because it is not a claim; the server re-validates
+ * every issue and refuses a stale target with a reason.
+ *
+ * `orders` does not survive, because every field in it is an assertion about the next boundary and a gap
+ * of unknown length just passed. The queued order may have committed or been cleared (`selectNation` nulls
+ * it), autopilot may have been flipped from another connection — `playerNationId` and `autoPilot` live on
+ * the shared runtime, not the session — and the chancellor's pick was for a season that may be over. The
+ * slot reads 同期中 until the next `orders`, which is the one thing here that is true.
  */
 export function applyWelcome(state: NationHudState, world: NationWorldState): NationHudState {
   return {
@@ -82,7 +97,8 @@ export function applyWelcome(state: NationHudState, world: NationWorldState): Na
     nations: world.nations,
     playerNationId: world.playerNationId,
     clock: null,
-    orders: state.orders === null ? null : { ...state.orders, rejected: null },
+    options: state.options,
+    orders: null,
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
     generation: state.generation + 1,
@@ -124,7 +140,7 @@ export function applyUpdate(
  * exactly as the server still holds it (measured — a refusal never disturbs `queued`).
  */
 export function applyOrders(state: NationHudState, orders: NationOrders): NationHudState {
-  return { ...state, playerNationId: orders.nationId, orders };
+  return { ...state, playerNationId: orders.nationId, options: orders.options, orders };
 }
 
 export function issueDirectiveCommand(
@@ -142,13 +158,17 @@ export function setAutoPilotCommand(enabled: boolean): ClientMessage {
   return { type: "setAutoPilot", enabled };
 }
 
+function isAutoPilotKey(key: string): boolean {
+  return key === "a" || key === "A";
+}
+
 /**
  * `A` toggles autopilot against the server's last echo, never against a local guess. With no `orders`
  * yet there is nothing to toggle — sending `enabled: true` on the assumption that the default is off
  * would flip a nation that already starts autopiloted (`sim/nation/bootstrap.ts` sets `autoPilot: true`).
  */
 export function autoPilotCommandForKey(key: string, state: NationHudState): ClientMessage | null {
-  if (key !== "a" && key !== "A") return null;
+  if (!isAutoPilotKey(key)) return null;
   if (state.orders === null) return null;
   return setAutoPilotCommand(!state.orders.autoPilot);
 }
@@ -179,4 +199,17 @@ export function speedCommandForKey(key: string, state: NationHudState): ClientMe
   const requested = Number(key);
   if (Number.isNaN(requested) || !isSpeedMultiplier(requested)) return null;
   return setSpeedCommand(requested);
+}
+
+/**
+ * The whole server half of the key map, routed by owner rather than by first non-null answer.
+ *
+ * `A` is dispatched on the key, not on whether a command came back, so a key that autopilot owns can
+ * never reach the speed handler. Chaining the two with `??` would send `A` on to `speedCommandForKey`
+ * whenever no `orders` had arrived yet, where today it is stopped only by `Number("a")` being `NaN` —
+ * safe by coincidence, and a coincidence no test could hold in place.
+ */
+export function nationKeyCommand(key: string, state: NationHudState): ClientMessage | null {
+  if (isAutoPilotKey(key)) return autoPilotCommandForKey(key, state);
+  return speedCommandForKey(key, state);
 }

@@ -9,6 +9,7 @@ import {
   cancelDirectiveCommand,
   initialNationHudState,
   issueDirectiveCommand,
+  nationKeyCommand,
   selectableNations,
   selectNationCommand,
   speedCommandForKey,
@@ -322,26 +323,74 @@ describe("autoPilotCommandForKey", () => {
   });
 });
 
+/**
+ * The routing the key handler actually uses, tested here rather than through a `keydown` — there is no DOM
+ * test environment, and the branch worth pinning is which owner a key goes to, not how the event arrives.
+ *
+ * `A` is dispatched on the key itself. Routing on "whichever handler answers first" would send `A` to the
+ * speed handler in exactly the state where autopilot declines to guess, and it is stopped there today only
+ * because `Number("a")` is `NaN` — an accident, not a decision.
+ */
+describe("nationKeyCommand", () => {
+  const withOrders = (autoPilot: boolean) => applyOrders(welcomed(), ordersFixture({ autoPilot }));
+
+  it("routes A to autopilot rather than to the speed keys", () => {
+    expect(nationKeyCommand("a", withOrders(true))).toEqual({
+      type: "setAutoPilot",
+      enabled: false,
+    });
+  });
+
+  it("sends nothing at all for A before the first orders, and no speed either", () => {
+    expect(nationKeyCommand("a", welcomed())).toBeNull();
+    expect(nationKeyCommand("A", welcomed())).toBeNull();
+  });
+
+  it("still routes the speed half of the map", () => {
+    expect(nationKeyCommand("4", withOrders(true))).toEqual({ type: "setSpeed", speed: 4 });
+    expect(nationKeyCommand("p", withOrders(true))).toEqual({ type: "setSpeed", speed: 0 });
+  });
+
+  /** `D` and `Escape` act on a panel, so the server half of the map must not answer for them. */
+  it("leaves the panel keys to the panel handler", () => {
+    expect(nationKeyCommand("d", withOrders(true))).toBeNull();
+    expect(nationKeyCommand("Escape", withOrders(true))).toBeNull();
+  });
+});
+
+/**
+ * The candidate list and the boundary claims are stored apart precisely so a reconnect can keep one and
+ * drop the other. Keeping both would leave the commit slot naming a decision for a season that may have
+ * resolved during the gap; dropping both would leave the desk empty at speed 0, with no action available
+ * that would refill it.
+ */
 describe("a welcome after a reconnect", () => {
-  /**
-   * The server sends nothing but `welcome` on connect, so dropping the candidate list would leave the
-   * desk empty at speed 0 with no action available that would refill it. The list survives; the server
-   * re-validates anything issued from it.
-   */
   it("keeps the candidate list so the desk is not empty at speed 0", () => {
     const desked = applyOrders(welcomed(), ordersFixture());
 
-    expect(applyWelcome(desked, worldFixture()).orders?.options).toHaveLength(6);
+    expect(applyWelcome(desked, worldFixture()).options).toHaveLength(6);
   });
 
-  /** A refusal answers an action from before the gap, so it must not survive one. */
-  it("drops a refusal that belonged to the previous connection", () => {
-    const refused = applyOrders(welcomed(), ordersFixture({ rejected: "insufficientWealth" }));
+  /**
+   * Every field of `orders` is an assertion about the next boundary. The queued order may have committed
+   * or been cleared, autopilot may have been flipped from another connection — both live on the shared
+   * runtime rather than the session — and a refusal answers an action from before the gap.
+   */
+  it("drops every claim about the next boundary, refusal included", () => {
+    const refused = applyOrders(
+      welcomed(),
+      ordersFixture({
+        autoPilot: false,
+        queued: { id: "directive-1", kind: "holdFestival", targetCityId: null },
+        rejected: "insufficientWealth",
+      }),
+    );
 
-    expect(applyWelcome(refused, worldFixture()).orders?.rejected).toBeNull();
+    expect(applyWelcome(refused, worldFixture()).orders).toBeNull();
   });
 
-  it("has no desk to carry when none had arrived", () => {
+  it("has no candidate list to carry when none had arrived", () => {
+    expect(applyWelcome(welcomed(), worldFixture()).options).toEqual([]);
     expect(applyWelcome(welcomed(), worldFixture()).orders).toBeNull();
   });
 });

@@ -79,10 +79,19 @@ function cityNames(state: NationHudState): ReadonlyMap<string, string> {
   return new Map((state.history?.worldMap.cities ?? []).map(({ id, name }) => [id, name] as const));
 }
 
-function directiveView(state: NationHudState): DirectiveListViewModel | null {
+/**
+ * Null only while there is nothing to choose from: no nation held, or no `orders` has ever arrived.
+ *
+ * Exported because this gate is where the reconnect rule actually lands. Gating on `state.orders` instead
+ * would empty the panel after every `welcome` — the server sends no `orders` on connect — and at speed 0
+ * there is no action left that would refill it. Gating on the list keeps the desk usable while `orders`
+ * being null is what makes the mode, the star and the refusal read as unknown.
+ */
+export function directiveView(state: NationHudState): DirectiveListViewModel | null {
   const own = ownPair(state);
-  if (own === null || state.orders === null) return null;
+  if (own === null || state.options.length === 0) return null;
   return buildDirectiveListViewModel(
+    state.options,
     state.orders,
     own.nation,
     own.polity,

@@ -1,6 +1,6 @@
 import type { SendClientMessage } from "../net/wsClient.js";
 import type { NationHudState } from "./nationHudState.js";
-import { autoPilotCommandForKey, speedCommandForKey } from "./nationHudState.js";
+import { nationKeyCommand } from "./nationHudState.js";
 
 /** The panel half of the §3.5 key map, kept separate because these act on the DOM, not the server. */
 export interface NationPanelKeys {
@@ -62,8 +62,7 @@ function handleNationKey(
     if (runPanelAction(action, panels)) event.preventDefault();
     return;
   }
-  const state = readState();
-  const command = autoPilotCommandForKey(event.key, state) ?? speedCommandForKey(event.key, state);
+  const command = nationKeyCommand(event.key, readState());
   if (command === null) return;
   event.preventDefault();
   send(command);
