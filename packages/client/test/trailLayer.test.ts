@@ -102,4 +102,31 @@ describe("renderTrailLayer", () => {
     expect(layer.children).toContain(foreign);
     expect(foreign.destroyed).toBe(false);
   });
+
+  it("optionally raises alpha in proportion to wear without changing the two-argument default", () => {
+    const world = makeWorld();
+    wear(world.trailCells, 1, "trace");
+    const cell = world.trailCells[1];
+    if (cell === undefined) throw new Error("missing test trail");
+    cell.wear = 12;
+    const normalLayer = new Container();
+    const overlayLayer = new Container();
+
+    renderTrailLayer(normalLayer, world);
+    renderTrailLayer(overlayLayer, world, true);
+
+    const normal = normalLayer.children[0];
+    const overlay = overlayLayer.children[0];
+    if (!(normal instanceof Graphics) || !(overlay instanceof Graphics)) {
+      throw new Error("missing trail graphics");
+    }
+    const normalInstruction = normal.context.instructions[0];
+    const overlayInstruction = overlay.context.instructions[0];
+    if (normalInstruction?.action !== "fill" || overlayInstruction?.action !== "fill") {
+      throw new Error("missing trail fill");
+    }
+    expect(normalInstruction.data.style.alpha).toBe(0.45);
+    expect(overlayInstruction.data.style.alpha).toBeCloseTo(0.725);
+    expect(cell.wear).toBe(12);
+  });
 });

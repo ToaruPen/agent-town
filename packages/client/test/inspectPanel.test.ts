@@ -2,11 +2,13 @@ import type { AgentState, WorldState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import {
-  buildInspectPanelViewModel,
+  buildAgentInspectPanelViewModel,
+  createInspectPanel,
   createThoughtBubbleSchedule,
+  resolveInspectPanelViewModel,
   updateThoughtBubbleSchedule,
 } from "../src/ui/inspectPanel.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -36,7 +38,7 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
   };
 }
 
-function makeWorld(agents: AgentState[]): WorldState {
+function makeWorld(agents: AgentState[], overrides: Partial<WorldState> = {}): WorldState {
   return {
     tick: 200,
     width: 1,
@@ -90,10 +92,11 @@ function makeWorld(agents: AgentState[]): WorldState {
       settlementOrigin: null,
       worldMap: makeWorldMapFixture(),
     },
+    ...overrides,
   };
 }
 
-describe("buildInspectPanelViewModel", () => {
+describe("buildAgentInspectPanelViewModel", () => {
   it("formats activity and task targets while preserving lastThought verbatim", () => {
     const selectedAgent = makeAgent({
       desires: { foodSecurity: 0.624 },
@@ -111,7 +114,8 @@ describe("buildInspectPanelViewModel", () => {
       makeAgent({ id: "cedar", name: "スギ" }),
     ]);
 
-    expect(buildInspectPanelViewModel(selectedAgent, world)).toEqual({
+    expect(buildAgentInspectPanelViewModel(selectedAgent, world)).toEqual({
+      kind: "agent",
       name: "トネリコ",
       providerBadge: { label: "クロード", tone: "llm" },
       activityKind: "moving",
@@ -129,6 +133,7 @@ describe("buildInspectPanelViewModel", () => {
         { kind: "health", label: "健康", value: 100, max: 100, valueLabel: "100" },
       ],
       foodSecurity: "62%",
+      rationStrain: "0%",
       society: {
         collectives: [
           {
@@ -150,6 +155,235 @@ describe("buildInspectPanelViewModel", () => {
       },
       lastThought: "日暮れまでに木材を集める。\nそれから挨拶する。",
     });
+  });
+});
+
+describe("generic inspect panel view models", () => {
+  it("resolves facility and trail targets and returns null only for genuinely missing targets", () => {
+    const agent = makeAgent({ rationStrain: 0.376 });
+    const granary = {
+      ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }),
+      id: "facility-granary",
+      institutionId: "institution-communalGranaryStore-200",
+      inventory: { wood: 0, food: 33.6 },
+      statsToday: {
+        ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }).statsToday,
+        visits: 4,
+        foodPreserved: 4.8,
+        maintenanceWork: 2,
+      },
+      siteRationale: {
+        score: 0.75,
+        contributions: [{ factor: "foodAccess" as const, value: 0.8, weightedScore: 0.2 }],
+      },
+    };
+    const world = makeWorld([agent, makeAgent({ id: "birch", name: "シラカバ" })], {
+      width: 2,
+      height: 2,
+      tiles: Array.from({ length: 4 }, () => ({
+        terrain: "plains" as const,
+        resource: null,
+      })),
+      buildings: [granary],
+      trailCells: makeTrailCellsFixture(2, 2),
+    });
+    world.trailCells[3] = {
+      ...world.trailCells[3],
+      level: "trail",
+      wear: 9,
+      passagesToday: 4,
+      dominantPurpose: "facilityService",
+      causedByFacilityIds: [granary.id],
+      lastUsedAtTick: 100,
+    };
+
+    expect(resolveInspectPanelViewModel({ kind: "agent", agentId: agent.id }, world)).toEqual(
+      expect.objectContaining({
+        kind: "agent",
+        name: "トネリコ",
+        rationStrain: "38%",
+        providerBadge: { label: "クロード", tone: "llm" },
+        society: expect.any(Object),
+      }),
+    );
+    expect(
+      resolveInspectPanelViewModel({ kind: "facility", facilityId: granary.id }, world),
+    ).toEqual(
+      expect.objectContaining({
+        kind: "facility",
+        name: "共同穀倉",
+        foundedBy: "共同備蓄",
+        effects: expect.arrayContaining([expect.stringContaining("腐敗を防いだ")]),
+      }),
+    );
+    expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 3 }, world)).toEqual(
+      expect.objectContaining({
+        kind: "trail",
+        name: "小道",
+        linkedFacilities: ["共同穀倉"],
+      }),
+    );
+    expect(
+      resolveInspectPanelViewModel({ kind: "facility", facilityId: "missing" }, world),
+    ).toBeNull();
+    expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 99 }, world)).toBeNull();
+
+    world.trailCells[3] = {
+      ...world.trailCells[3],
+      level: "none",
+      wear: 0,
+    };
+    expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 3 }, world)).toEqual(
+      expect.objectContaining({ kind: "trail", name: "草地", level: "草地" }),
+    );
+  });
+});
+
+class FakeElement {
+  readonly attributes = new Map<string, string>();
+  readonly children: FakeElement[] = [];
+  className = "";
+  hidden = false;
+  id = "";
+  max = 0;
+  type = "";
+  value = 0;
+  private ownText = "";
+  private readonly listeners = new Map<string, () => void>();
+
+  get textContent(): string {
+    return `${this.ownText}${this.children.map((child) => child.textContent).join("")}`;
+  }
+
+  set textContent(value: string) {
+    this.ownText = value;
+    this.children.length = 0;
+  }
+
+  addEventListener(type: string, listener: () => void): void {
+    this.listeners.set(type, listener);
+  }
+
+  append(...children: FakeElement[]): void {
+    this.children.push(...children);
+  }
+
+  click(): void {
+    this.listeners.get("click")?.();
+  }
+
+  findByAttribute(name: string, value: string): FakeElement | null {
+    if (this.attributes.get(name) === value) return this;
+    for (const child of this.children) {
+      const found = child.findByAttribute(name, value);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  replaceChildren(...children: FakeElement[]): void {
+    this.ownText = "";
+    this.children.length = 0;
+    this.children.push(...children);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+}
+
+function installFakeDocument(): void {
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => new FakeElement(),
+    } as unknown as Document,
+  });
+}
+
+describe("createInspectPanel", () => {
+  it("renders all target variants into one root and closes from the shared button", () => {
+    installFakeDocument();
+    const agent = makeAgent({ rationStrain: 0.25 });
+    const granary = {
+      ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }),
+      id: "facility-granary",
+      institutionId: "institution-communalGranaryStore-200",
+      inventory: { wood: 0, food: 34 },
+      statsToday: {
+        ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }).statsToday,
+        visits: 4,
+        foodPreserved: 4.8,
+        maintenanceWork: 2,
+      },
+      siteRationale: {
+        score: 0.75,
+        contributions: [{ factor: "foodAccess" as const, value: 0.8, weightedScore: 0.2 }],
+      },
+    };
+    const world = makeWorld([agent, makeAgent({ id: "birch", name: "シラカバ" })], {
+      width: 2,
+      height: 2,
+      tiles: Array.from({ length: 4 }, () => ({
+        terrain: "plains" as const,
+        resource: null,
+      })),
+      buildings: [granary],
+      trailCells: makeTrailCellsFixture(2, 2),
+    });
+    world.trailCells[3] = {
+      ...world.trailCells[3],
+      level: "trail",
+      wear: 9,
+      passagesToday: 4,
+      dominantPurpose: "facilityService",
+      causedByFacilityIds: [granary.id],
+      lastUsedAtTick: 100,
+    };
+    const root = new FakeElement();
+    let closed = 0;
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => {
+      closed += 1;
+    });
+
+    controller.show({ kind: "facility", facilityId: granary.id }, world);
+    expect(root.textContent).toContain("共同穀倉");
+    expect(root.textContent).toContain("共同備蓄");
+    expect(root.textContent).toContain("敷地を選んだ理由");
+    expect(root.textContent).toContain("腐敗を防いだ");
+    expect(root.textContent).toContain("関連する小道");
+
+    controller.show({ kind: "trail", tileIndex: 3 }, world);
+    expect(root.textContent).toContain("小道");
+    expect(root.textContent).toContain("本日の通行4回");
+    expect(root.textContent).toContain("共同穀倉");
+    expect(root.textContent).toContain("移動時間20.0%短縮");
+
+    controller.show({ kind: "agent", agentId: "ash" }, world);
+    expect(root.textContent).toContain("トネリコ");
+    expect(root.textContent).toContain("クロード");
+    expect(root.textContent).toContain("配給疲弊");
+    expect(root.textContent).toContain("食料安定への関心");
+    expect(root.textContent).toContain("集団");
+    expect(root.textContent).toContain("制度");
+
+    root.findByAttribute("aria-label", "観察パネルを閉じる")?.click();
+    expect(closed).toBe(1);
+  });
+
+  it("closes for a missing object but keeps a decayed trail selected as grass", () => {
+    installFakeDocument();
+    const world = makeWorld([makeAgent()]);
+    const root = new FakeElement();
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
+
+    controller.show({ kind: "trail", tileIndex: 0 }, world);
+    expect(root.hidden).toBe(false);
+    expect(root.textContent).toContain("草地");
+
+    controller.show({ kind: "facility", facilityId: "missing" }, world);
+    expect(root.hidden).toBe(true);
+    expect(root.textContent).toBe("");
   });
 });
 

@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildSocietyViewModel,
   createSocialMilestoneSchedule,
+  currentMilestone,
   currentSocialMilestone,
+  mergeMilestoneQueues,
   updateSocialMilestoneSchedule,
 } from "../src/ui/societyViewModel.js";
 import { makeTrailCellsFixture } from "./spatialFixture.js";
@@ -283,5 +285,79 @@ describe("social milestone schedule", () => {
       "proposal",
     );
     expect(currentSocialMilestone(schedule, 10 + SOCIAL_MILESTONE_DURATION_TICKS * 2)).toBeNull();
+  });
+});
+
+describe("combined milestone queue", () => {
+  it("merges simultaneous social and spatial events by causal kind and stable ID", () => {
+    const socialEvents = [
+      {
+        id: "recognition:z",
+        kind: "recognition" as const,
+        text: "危機認識",
+        visibleFromTick: 10,
+        expiresAtTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS,
+      },
+      {
+        id: "proposal:a",
+        kind: "proposal" as const,
+        text: "制度提案",
+        visibleFromTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS,
+        expiresAtTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS * 2,
+      },
+    ];
+    const spatialEvents = [
+      {
+        id: "demand:b",
+        kind: "demand" as const,
+        text: "施設需要B",
+        visibleFromTick: 10,
+        expiresAtTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS,
+      },
+      {
+        id: "demand:a",
+        kind: "demand" as const,
+        text: "施設需要A",
+        visibleFromTick: 10,
+        expiresAtTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS,
+      },
+    ];
+
+    const merged = mergeMilestoneQueues(socialEvents, spatialEvents);
+
+    expect(merged.map(({ id }) => id)).toEqual([
+      "recognition:z",
+      "demand:a",
+      "demand:b",
+      "proposal:a",
+    ]);
+    expect(merged.map(({ visibleFromTick }) => visibleFromTick)).toEqual([
+      10,
+      10 + SOCIAL_MILESTONE_DURATION_TICKS,
+      10 + SOCIAL_MILESTONE_DURATION_TICKS * 2,
+      10 + SOCIAL_MILESTONE_DURATION_TICKS * 3,
+    ]);
+  });
+
+  it("keeps an already-visible message when a later update appends another event", () => {
+    const recognition = {
+      id: "recognition",
+      kind: "recognition" as const,
+      text: "危機認識",
+      visibleFromTick: 10,
+      expiresAtTick: 10 + SOCIAL_MILESTONE_DURATION_TICKS,
+    };
+    const demand = {
+      id: "demand",
+      kind: "demand" as const,
+      text: "施設需要",
+      visibleFromTick: 11,
+      expiresAtTick: 11 + SOCIAL_MILESTONE_DURATION_TICKS,
+    };
+
+    expect(currentMilestone(mergeMilestoneQueues([recognition], []), 11)?.id).toBe("recognition");
+    expect(currentMilestone(mergeMilestoneQueues([recognition], [demand]), 11)?.id).toBe(
+      "recognition",
+    );
   });
 });

@@ -5,6 +5,7 @@ import {
   HOUSE_BUILD_TICKS,
   HOUSE_CAPACITY,
   type House,
+  isFacility,
   isHouse,
   isWinter,
   type Position,
@@ -17,8 +18,11 @@ import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from
 
 import { TILE_SIZE } from "../render/mapLayer.js";
 import { layoutAgentsFrontToBack, layoutAgentsOnTiles } from "../render/sprites.js";
+import { wornLevel } from "../render/trailLayer.js";
 import { activityLabel, resourceLabel, terrainLabel } from "./displayText.js";
+import type { InspectTarget } from "./inspectPanel.js";
 import { buildProviderBadge } from "./providerBadge.js";
+import { buildFacilityViewModel, buildTrailViewModel } from "./spatialViewModel.js";
 import {
   buildSurvivalHudViewModel,
   type DeathEvent,
@@ -43,10 +47,12 @@ export const INFO_BUBBLE_LABEL = "info-bubble";
 export type InfoBubbleTarget =
   | { kind: "agent"; agentId: string }
   | { kind: "tombstone"; eventId: string }
+  | { kind: "facility"; facilityId: string }
   | { kind: "house"; pos: Position }
   | { kind: "landmark"; landmarkId: string }
   | { kind: "stockpile" }
   | { kind: "resource"; tileIndex: number; resourceKind: ResourceKind }
+  | { kind: "trail"; tileIndex: number }
   | { kind: "terrain"; tileIndex: number };
 
 export interface AgentBubbleText {
@@ -101,17 +107,19 @@ export interface InfoBubbleRenderGate {
 }
 
 export interface InfoBubbleViewModel extends AgentBubbleText {
-  agentId: string | null;
+  inspectTarget: InspectTarget | null;
   placement: InfoBubblePlacement;
 }
 
 const HIT_PRIORITIES: Record<InfoBubbleTarget["kind"], number> = {
-  agent: 7,
-  tombstone: 6,
-  house: 5,
-  landmark: 4,
-  stockpile: 3,
-  resource: 2,
+  agent: 9,
+  tombstone: 8,
+  facility: 7,
+  house: 6,
+  landmark: 5,
+  stockpile: 4,
+  resource: 3,
+  trail: 2,
   terrain: 1,
 };
 
@@ -296,6 +304,18 @@ function appendHouseHits(
   }
 }
 
+function appendFacilityHits(
+  hits: InfoBubbleTarget[],
+  buildings: WorldState["buildings"],
+  tilePosition: Position,
+): void {
+  for (const facility of buildings.filter(isFacility).toReversed()) {
+    if (positionsEqual(facility.pos, tilePosition)) {
+      hits.push({ kind: "facility", facilityId: facility.id });
+    }
+  }
+}
+
 function appendLandmarkHits(
   hits: InfoBubbleTarget[],
   landmarks: WorldHistory["landmarks"],
@@ -322,11 +342,13 @@ export function resolveInfoBubbleTarget(
 
   const hits: InfoBubbleTarget[] = agentHits(world, point);
   appendTombstoneHits(hits, deathEvents, tilePosition);
+  appendFacilityHits(hits, world.buildings, tilePosition);
   appendHouseHits(hits, world.buildings, tilePosition);
   appendLandmarkHits(hits, world.history.landmarks, tilePosition);
   if (positionsEqual(world.stockpile.pos, tilePosition)) hits.push({ kind: "stockpile" });
   const resourceKind = resourceKindAt(tile, tileIndex, knownResourceKinds);
   if (resourceKind !== null) hits.push({ kind: "resource", tileIndex, resourceKind });
+  if (wornLevel(world, tilePosition) !== null) hits.push({ kind: "trail", tileIndex });
   hits.push({ kind: "terrain", tileIndex });
   return resolveHitPriority(hits);
 }
@@ -397,8 +419,12 @@ function tilePlacement(position: Position): InfoBubblePlacement {
   };
 }
 
-function textBubble(text: string, placement: InfoBubblePlacement): InfoBubbleViewModel {
-  return { title: text, badge: "", lines: [], agentId: null, placement };
+function textBubble(
+  text: string,
+  placement: InfoBubblePlacement,
+  inspectTarget: InspectTarget | null = null,
+): InfoBubbleViewModel {
+  return { title: text, badge: "", lines: [], inspectTarget, placement };
 }
 
 function agentBubble(
@@ -413,13 +439,13 @@ function agentBubble(
   };
   return {
     ...buildAgentBubbleText(placed.agent),
-    agentId: placed.agent.id,
+    inspectTarget: { kind: "agent", agentId: placed.agent.id },
     placement: { x: center.x, top: center.y - TILE_SIZE / 2, bottom: center.y + TILE_SIZE / 2 },
   };
 }
 
 function tileFromTarget(
-  target: Extract<InfoBubbleTarget, { kind: "resource" | "terrain" }>,
+  target: Extract<InfoBubbleTarget, { kind: "resource" | "trail" | "terrain" }>,
   world: WorldState,
 ): { tile: Tile; position: Position } | null {
   const tile = world.tiles[target.tileIndex];
@@ -427,6 +453,38 @@ function tileFromTarget(
   return {
     tile,
     position: { x: target.tileIndex % world.width, y: Math.floor(target.tileIndex / world.width) },
+  };
+}
+
+function facilityBubble(
+  target: Extract<InfoBubbleTarget, { kind: "facility" }>,
+  world: WorldState,
+): InfoBubbleViewModel | null {
+  const facility = world.buildings.filter(isFacility).find(({ id }) => id === target.facilityId);
+  const viewModel = buildFacilityViewModel(world, target.facilityId);
+  if (facility === undefined || viewModel === null) return null;
+  return {
+    title: viewModel.name,
+    badge: "",
+    lines: [`${viewModel.status} · ${viewModel.inventory}`],
+    inspectTarget: target,
+    placement: tilePlacement(facility.pos),
+  };
+}
+
+function trailBubble(
+  target: Extract<InfoBubbleTarget, { kind: "trail" }>,
+  world: WorldState,
+): InfoBubbleViewModel | null {
+  const selected = tileFromTarget(target, world);
+  const viewModel = buildTrailViewModel(world, target.tileIndex);
+  if (selected === null || viewModel === null) return null;
+  return {
+    title: viewModel.name,
+    badge: "",
+    lines: [viewModel.passages],
+    inspectTarget: target,
+    placement: tilePlacement(selected.position),
   };
 }
 
@@ -484,9 +542,11 @@ export function buildInfoBubbleViewModel(
 ): InfoBubbleViewModel | null {
   if (target.kind === "agent") return agentBubble(target, world);
   if (target.kind === "stockpile") return stockpileBubble(world);
+  if (target.kind === "facility") return facilityBubble(target, world);
   if (target.kind === "house") return houseBubble(target, world);
   if (target.kind === "tombstone") return tombstoneBubble(target, deathEvents);
   if (target.kind === "landmark") return landmarkBubble(target, world);
+  if (target.kind === "trail") return trailBubble(target, world);
   return tileBubble(target, world);
 }
 
@@ -542,13 +602,13 @@ export function endInfoBubbleInteraction(
 
 export function activateInfoBubble(
   event: PropagatingEvent,
-  agentId: string | null,
+  target: InspectTarget | null,
   clearGestureHistory: () => void,
-  onAgentOpen: (agentId: string) => void,
+  onInspectOpen: (target: InspectTarget) => void,
   canActivate: () => boolean = () => true,
 ): void {
   beginInfoBubbleInteraction(event, clearGestureHistory);
-  if (agentId !== null && canActivate()) onAgentOpen(agentId);
+  if (target !== null && canActivate()) onInspectOpen(target);
 }
 
 function bubbleBackground(width: number, height: number, below: boolean): Graphics {
@@ -569,7 +629,7 @@ export function renderInfoBubble(
   layer: Container,
   viewModel: InfoBubbleViewModel | null,
   viewport: ScreenBounds,
-  onAgentOpen: (agentId: string) => void,
+  onInspectOpen: (target: InspectTarget) => void,
   clearGestureHistory: () => void,
   onInteractionStart: (event: FederatedPointerEvent) => void,
   onInteractionEnd: (event: FederatedPointerEvent, releasedInside: boolean) => void,
@@ -601,7 +661,7 @@ export function renderInfoBubble(
   bubble.label = INFO_BUBBLE_LABEL;
   bubble.eventMode = "static";
   bubble.interactiveChildren = false;
-  bubble.cursor = viewModel.agentId === null ? "default" : "pointer";
+  bubble.cursor = viewModel.inspectTarget === null ? "default" : "pointer";
   bubble.hitArea = new Rectangle(-width / 2, boxY, width, height);
   bubble.position.set(placement.x, placement.y);
   bubble.on("pointerdown", (event: FederatedPointerEvent) => {
@@ -613,7 +673,13 @@ export function renderInfoBubble(
     });
   }
   bubble.on("pointertap", (event: FederatedPointerEvent) => {
-    activateInfoBubble(event, viewModel.agentId, clearGestureHistory, onAgentOpen, canActivate);
+    activateInfoBubble(
+      event,
+      viewModel.inspectTarget,
+      clearGestureHistory,
+      onInspectOpen,
+      canActivate,
+    );
   });
   bubble.addChild(bubbleBackground(width, height, below), label);
   layer.addChild(bubble);

@@ -266,6 +266,38 @@
           transform 140ms ease;
       }
 
+      .traffic-overlay-toggle {
+        position: fixed;
+        z-index: 8;
+        top: calc(5.4rem + env(safe-area-inset-top));
+        left: calc(1rem + env(safe-area-inset-left));
+        min-height: 44px;
+        padding: 0.55rem 0.8rem;
+        color: var(--world-parchment);
+        background: rgb(29 36 40 / 94%);
+        border: 1px solid var(--world-verdigris);
+        box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 28%);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition:
+          color 140ms ease,
+          background 140ms ease,
+          transform 140ms ease;
+      }
+
+      .traffic-overlay-toggle:hover {
+        color: #fff8dc;
+        transform: translate(-1px, -1px);
+      }
+
+      .traffic-overlay-toggle[aria-pressed="true"] {
+        color: var(--world-peat);
+        background: var(--world-verdigris);
+      }
+
       .chronicle-toggle:hover {
         color: #fff8dc;
         border-color: var(--world-parchment);
@@ -273,6 +305,7 @@
       }
 
       .chronicle-toggle:focus-visible,
+      .traffic-overlay-toggle:focus-visible,
       .world-chronicle__close:focus-visible,
       .world-chronicle__tab:focus-visible {
         outline: 2px solid #fff176;
@@ -670,7 +703,8 @@
 
       @media (prefers-reduced-motion: reduce) {
         .world-chronicle,
-        .chronicle-toggle {
+        .chronicle-toggle,
+        .traffic-overlay-toggle {
           transition: none;
         }
       }
@@ -688,6 +722,11 @@
 
         .chronicle-toggle {
           right: calc(0.65rem + env(safe-area-inset-right));
+        }
+
+        .traffic-overlay-toggle {
+          top: calc(5.4rem + env(safe-area-inset-top));
+          left: calc(0.65rem + env(safe-area-inset-left));
         }
 
         .world-chronicle {
@@ -736,6 +775,14 @@
       hidden
     >
       旧世界を見る
+    </button>
+    <button
+      id="traffic-overlay-toggle"
+      class="traffic-overlay-toggle"
+      type="button"
+      aria-pressed="false"
+    >
+      通行量を表示
     </button>
     <aside
       id="world-chronicle"

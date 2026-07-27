@@ -1,4 +1,9 @@
-import type { Position, TrailLevel, WorldState } from "@agent-town/shared";
+import {
+  type Position,
+  TRAIL_LEVEL_WEAR,
+  type TrailLevel,
+  type WorldState,
+} from "@agent-town/shared";
 import { type Container, Graphics } from "pixi.js";
 
 import { TRAIL_COLORS } from "./colors.js";
@@ -28,17 +33,28 @@ function positionAt(world: WorldState, index: number): Position {
 }
 
 /** Only open ground shows wear; stone, water, and anything built over hide it. */
-function isVisibleGround(world: WorldState, pos: Position): boolean {
+export function isVisibleGround(world: WorldState, pos: Position): boolean {
   if (pos.x < 0 || pos.y < 0 || pos.x >= world.width || pos.y >= world.height) return false;
   const terrain = world.tiles[pos.y * world.width + pos.x]?.terrain;
   if (terrain !== "plains" && terrain !== "forest") return false;
   return !world.buildings.some((building) => building.pos.x === pos.x && building.pos.y === pos.y);
 }
 
-function wornLevel(world: WorldState, pos: Position): Exclude<TrailLevel, "none"> | null {
+export function wornLevel(world: WorldState, pos: Position): Exclude<TrailLevel, "none"> | null {
   if (!isVisibleGround(world, pos)) return null;
   const level = world.trailCells[pos.y * world.width + pos.x]?.level;
   return level === undefined || level === "none" ? null : level;
+}
+
+function trafficVisual(
+  level: Exclude<TrailLevel, "none">,
+  wear: number,
+  showTrafficOverlay: boolean,
+): TrailVisual {
+  const visual = trailVisual(level);
+  if (!showTrafficOverlay) return visual;
+  const intensity = Math.min(1, Math.max(0, wear / TRAIL_LEVEL_WEAR.establishedTrail));
+  return { ...visual, alpha: visual.alpha + (1 - visual.alpha) * intensity };
 }
 
 /** Draws the walked strip down the tile; a full-height bar keeps a column continuous. */
@@ -56,12 +72,22 @@ function drawJoin(graphic: Graphics, visual: TrailVisual, neighbour: TrailVisual
     .fill({ color: visual.color, alpha: visual.alpha });
 }
 
-function trailGraphic(world: WorldState, pos: Position, level: Exclude<TrailLevel, "none">) {
-  const visual = trailVisual(level);
+function trailGraphic(
+  world: WorldState,
+  pos: Position,
+  level: Exclude<TrailLevel, "none">,
+  showTrafficOverlay: boolean,
+) {
+  const cell = world.trailCells[pos.y * world.width + pos.x];
+  const visual = trafficVisual(level, cell?.wear ?? 0, showTrafficOverlay);
   const graphic = new Graphics();
   drawSegment(graphic, visual);
-  const rightLevel = wornLevel(world, { x: pos.x + 1, y: pos.y });
-  if (rightLevel !== null) drawJoin(graphic, visual, trailVisual(rightLevel));
+  const rightPos = { x: pos.x + 1, y: pos.y };
+  const rightLevel = wornLevel(world, rightPos);
+  if (rightLevel !== null) {
+    const rightCell = world.trailCells[rightPos.y * world.width + rightPos.x];
+    drawJoin(graphic, visual, trafficVisual(rightLevel, rightCell?.wear ?? 0, showTrafficOverlay));
+  }
   graphic.position.set(pos.x * TILE_SIZE, pos.y * TILE_SIZE);
   graphic.label = TRAIL_OBJECT_LABEL;
   return graphic;
@@ -75,13 +101,17 @@ function clearTrails(layer: Container): void {
   }
 }
 
-export function renderTrailLayer(layer: Container, world: WorldState): void {
+export function renderTrailLayer(
+  layer: Container,
+  world: WorldState,
+  showTrafficOverlay = false,
+): void {
   clearTrails(layer);
 
   for (let index = 0; index < world.trailCells.length; index += 1) {
     const pos = positionAt(world, index);
     const level = wornLevel(world, pos);
     if (level === null) continue;
-    layer.addChild(trailGraphic(world, pos, level));
+    layer.addChild(trailGraphic(world, pos, level, showTrafficOverlay));
   }
 }

@@ -12,6 +12,7 @@ import {
   beginInfoBubbleInteraction,
   buildAgentBubbleText,
   buildHouseBubbleText,
+  buildInfoBubbleViewModel,
   buildLandmarkBubbleText,
   buildResourceBubbleText,
   buildStockpileBubbleText,
@@ -31,7 +32,7 @@ import {
   resolveScreenBubblePlacement,
 } from "../src/ui/infoBubble.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -199,17 +200,32 @@ describe("info bubble text builders", () => {
 });
 
 describe("resolveHitPriority", () => {
-  it("selects agent above tombstone, house, stockpile, resource, and terrain", () => {
+  it("keeps inspection priority independent from render depth", () => {
     const targets: InfoBubbleTarget[] = [
       { kind: "terrain", tileIndex: 0 },
+      { kind: "trail", tileIndex: 0 },
       { kind: "resource", tileIndex: 0, resourceKind: "wood" },
       { kind: "stockpile" },
+      { kind: "landmark", landmarkId: "landmark" },
       { kind: "house", pos: { x: 0, y: 0 } },
+      { kind: "facility", facilityId: "facility" },
       { kind: "tombstone", eventId: "death" },
       { kind: "agent", agentId: "ash" },
     ];
 
     expect(resolveHitPriority(targets)).toEqual({ kind: "agent", agentId: "ash" });
+    expect(resolveHitPriority(targets.slice(0, -1))).toEqual({
+      kind: "tombstone",
+      eventId: "death",
+    });
+    expect(resolveHitPriority(targets.slice(0, -2))).toEqual({
+      kind: "facility",
+      facilityId: "facility",
+    });
+    expect(resolveHitPriority(targets.slice(0, -3))).toEqual({
+      kind: "house",
+      pos: { x: 0, y: 0 },
+    });
   });
 
   it("preserves topmost order within one priority and returns null without hits", () => {
@@ -298,6 +314,71 @@ describe("resolveInfoBubbleTarget", () => {
       "古き黒貂国境砦 — 黒貂・金環国境戦争の後に築かれた（−80年）",
     );
   });
+
+  it("selects a facility and gives its compact Japanese causal summary", () => {
+    const granary = {
+      ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }),
+      inventory: { wood: 0, food: 33.6 },
+    };
+    const world = makeWorld({
+      agents: [],
+      stockpile: { pos: { x: 1, y: 1 }, wood: 0, food: 0 },
+      buildings: [granary],
+    });
+    const target = resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 });
+
+    expect(target).toEqual({ kind: "facility", facilityId: granary.id });
+    if (target === null) throw new Error("missing facility target");
+    expect(buildInfoBubbleViewModel(target, world, [])).toEqual({
+      title: "共同穀倉",
+      badge: "",
+      lines: ["稼働中 · 食料34 / 120"],
+      inspectTarget: { kind: "facility", facilityId: granary.id },
+      placement: { x: 8, top: 0, bottom: 16 },
+    });
+  });
+
+  it("selects only a visible trail and leaves none or built-over wear behind terrain", () => {
+    const trailWorld = makeWorld({
+      agents: [],
+      stockpile: { pos: { x: 1, y: 1 }, wood: 0, food: 0 },
+      buildings: [],
+    });
+    trailWorld.trailCells[0] = {
+      ...trailWorld.trailCells[0],
+      level: "trail",
+      wear: 9,
+      passagesToday: 4,
+    };
+    const target = resolveInfoBubbleTarget(trailWorld, [], new Map(), { x: 8, y: 8 });
+
+    expect(target).toEqual({ kind: "trail", tileIndex: 0 });
+    if (target === null) throw new Error("missing trail target");
+    expect(buildInfoBubbleViewModel(target, trailWorld, [])).toEqual({
+      title: "小道",
+      badge: "",
+      lines: ["本日の通行4回"],
+      inspectTarget: { kind: "trail", tileIndex: 0 },
+      placement: { x: 8, top: 0, bottom: 16 },
+    });
+
+    trailWorld.trailCells[0] = {
+      ...trailWorld.trailCells[0],
+      level: "none",
+      wear: 0,
+    };
+    expect(resolveInfoBubbleTarget(trailWorld, [], new Map(), { x: 8, y: 8 })?.kind).toBe(
+      "terrain",
+    );
+
+    trailWorld.trailCells[0] = {
+      ...trailWorld.trailCells[0],
+      level: "trail",
+      wear: 9,
+    };
+    trailWorld.buildings = [{ kind: "house", pos: { x: 0, y: 0 }, progress: 0, complete: false }];
+    expect(resolveInfoBubbleTarget(trailWorld, [], new Map(), { x: 8, y: 8 })?.kind).toBe("house");
+  });
 });
 
 describe("resolveHoveredAgentId", () => {
@@ -369,7 +450,7 @@ describe("info bubble gesture isolation", () => {
     const mainHistory = createDoubleTapHistory();
     const cameraHistory = createDoubleTapHistory();
     const stopCalls: string[] = [];
-    let openedAgentId: string | null = null;
+    let openedTarget: InfoBubbleTarget | null = null;
     const event = { stopPropagation: () => stopCalls.push("stopped") };
     const clearHistories = () => {
       mainHistory.clear();
@@ -379,11 +460,12 @@ describe("info bubble gesture isolation", () => {
     cameraHistory.register({ x: 100, y: 100, at: 100 });
 
     beginInfoBubbleInteraction(event, clearHistories);
-    activateInfoBubble(event, "ash", clearHistories, (agentId) => {
-      openedAgentId = agentId;
+    const target = { kind: "agent", agentId: "ash" } as const;
+    activateInfoBubble(event, target, clearHistories, (inspectTarget) => {
+      openedTarget = inspectTarget;
     });
 
-    expect(openedAgentId).toBe("ash");
+    expect(openedTarget).toEqual(target);
     expect(stopCalls).toEqual(["stopped", "stopped"]);
     expect(mainHistory.register({ x: 110, y: 100, at: 250 })).toBe(false);
     expect(cameraHistory.register({ x: 110, y: 100, at: 250 })).toBe(false);
@@ -402,7 +484,7 @@ describe("info bubble gesture isolation", () => {
     endInfoBubbleInteraction(event, gate.end);
     activateInfoBubble(
       event,
-      "ash",
+      { kind: "agent", agentId: "ash" },
       () => undefined,
       () => {
         opened += 1;
@@ -443,7 +525,7 @@ describe("info bubble gesture isolation", () => {
       endInfoBubbleInteraction(event, gate.end);
       activateInfoBubble(
         event,
-        "ash",
+        { kind: "agent", agentId: "ash" },
         () => undefined,
         () => {
           opened += 1;
