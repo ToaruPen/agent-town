@@ -1,6 +1,8 @@
 # AGENTS.md
 
-Colony-sim game where residents are LLM agents. Spec: docs/superpowers/specs/ (Japanese). Current milestone plan: docs/superpowers/plans/.
+Real-time strategy game where LLM agents and the player each rule a nation and compete for prosperity. Spec: docs/superpowers/specs/ (Japanese); current direction is `2026-07-27-nation-rulers-realtime-design.md`. Current milestone plan: docs/superpowers/plans/2026-07-27-n1-living-nations.md. Delegation model: docs/superpowers/handoff/2026-07-27-codex-delegation.md.
+
+The resident-scale colony simulation (server sim/engine, executor, astar, society, foodAnxiety; client resident layers) is frozen: it stays in the tree with its tests green, but the live loop no longer runs it.
 
 ## Layout
 - packages/shared — domain types, wire protocol, game constants. No runtime deps.
