@@ -45,18 +45,32 @@ nothing made optional.
 - `main` is green through S5 (social facilities and trails), V3 (readable settlement), the farming slice
   and N1 Tasks 1–5: `just check`, `just test`, client build, secretlint, and the `Date.now`/`Math.random`
   determinism scan all pass. `origin/main` matches, and CI is green.
-- **`just check` does not type-check any test file.** All three package tsconfigs include only
-  `src/**/*.ts`, so a test can assert against a contract shape that no longer exists and stay green — which
-  silently weakens the per-task contract verification below. **Still open.** A first attempt was dispatched
-  and abandoned — the `tooling-typecheck-tests` branch and worktree exist but sit at their base commit with
-  nothing committed, so do not read them as work in progress.
-  Measured on main at `6be468a`: adding `test/**/*.ts` to each package's `include` and running `tsc` yields
-  **0 errors in all three packages**. So the fix is a clean-window change today, not an excavation, and the
-  window closes as soon as a worker merges a test that only ever ran untyped. Two cautions for whoever takes
-  it. Sibling worktrees on older bases *do* have errors — `wsClient.test.ts` there fails against the
-  pre-`c8215cf` protocol — so enumerate inside the branch's own worktree and do not treat another worktree's
-  errors as main's. And bring `lib`/`target` along: test files already use syntax like `Array.prototype.at`
-  that a `lib` predating `es2022` rejects, which turns the gate red on code that is fine.
+- **`just check` now type-checks test files. Closed by `22950e1`.** Each package's tsconfig `include` gained
+  `test/**/*.ts`. Until then a test could assert against a contract shape that no longer existed and stay
+  green, which silently weakened the per-task contract verification below. Closing it required fixing 80 real
+  type errors — 59 in server, 21 in client, 0 in shared — with no `any`, no `@ts-expect-error`, and no
+  weakened or deleted assertion: guard-and-throw helpers for `noUncheckedIndexedAccess`, a shared spawn-mock
+  type for the `child_process` fakes, `satisfies`/tuple typing against literal widening, and a Pixi type
+  predicate. The client also gained `@types/node` as a devDependency plus `"types": ["node"]`, because a test
+  reads `index.html` from disk. That is a standing looseness — the gate can no longer object to Node globals
+  in client `src/` either — accepted deliberately over a second tsconfig, with a follow-up owed: a
+  deterministic guard that fails if anything under `packages/client/src/` imports `node:*` or touches
+  `process`/`Buffer`/`__dirname`. Nothing in `src/` uses them today; that was grepped, not assumed.
+- **Two ways this document got the above wrong, both worth not repeating.** It first claimed a tooling task
+  was in progress when the branch sat at its base commit with nothing committed — the work was in fact
+  running and simply had not committed yet, so "no commit" was read as "abandoned". Then it claimed the fix
+  would surface **0 errors in all three packages**. That measurement was a probe that never executed: it
+  invoked `packages/<pkg>/node_modules/.bin/tsc`, which does not exist because pnpm hoists the binary to the
+  repo root, so it exited 127, and an `|| echo 0` around the error count turned "the command failed" into
+  "zero errors". Re-measured through `pnpm --filter`, the true counts were 0/59/21. A measurement that
+  reports zero is worth one look at whether the thing ran.
+- **`pnpm -r exec tsc` short-circuits on workspace dependency order.** `shared` runs first, and if it fails,
+  `server` and `client` are never invoked at all — so a `just check` failure showing only `shared` errors
+  means the other two are *unknown*, not clean. `server` and `client` do not depend on each other, so both
+  report in the same run once `shared` passes. Do not read the error count as a size estimate.
+- Still outside `tsc`'s reach: the root `vitest.config.ts` and `test/vitestConfig.test.ts`, because
+  `pnpm-workspace.yaml` lists only `packages/*`. Also `packages/server` resolves `node:*` types only
+  transitively through `@types/ws`; drop or bump that and server test files silently lose Node types.
 - CI is roughly 2.7× slower than a local run. Determinism tests that pass locally can time out there.
   Timeouts are set per test at 3× or more of the measured local duration; there is deliberately no
   global `testTimeout` in `vitest.config.ts`, so a slow test states its own budget where a reader sees it.
