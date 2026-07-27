@@ -188,10 +188,58 @@ So: the reliable signal that a task is owned is the worker's status or a reply, 
 and never a line in this file. Any queue entry naming an owner must name a *live* one — if the agent is gone,
 the entry says **unowned**, which is the state that gets it re-dispatched.
 
+## The blank page, and the coverage hole underneath it
+
+The owner opened the browser and saw nothing. Two independent defects, both real, both fixed in `25750e5`.
+
+Vite's default `host` is the string `"localhost"`, which Node resolves to a **single** address — on macOS
+`::1` — so the dev server listened on IPv6 loopback only and `http://127.0.0.1:5173/` was refused outright
+while `[::1]:5173` served fine. Now binds `::`, which takes both stacks because Node does not set
+`ipv6Only`. The cost, stated in the commit: the dev server is reachable from the local network.
+
+The second is the one worth remembering. **Every HUD panel was empty until a `welcome` arrived**, so three
+unrelated failures — the script never running, the socket never opening, the server being down — all
+rendered as the same unbroken dark rectangle. A page that shows nothing also says nothing about why.
+`index.html` now ships one unconditional line that `main.ts` clears on the first `welcome` and restores on a
+disconnect, and `wsClient` gained an optional `onDisconnected` so a dropped socket stops reading as a paused
+clock. It is markup rather than script deliberately: it survives the case where no script runs at all.
+
+Why this shipped with 980 tests green: **there was no DOM environment in the client package.** Every client
+test was a view-model test, and view models are pure, so the last step — view model to document — was
+covered by nothing at all. `createNationHud` and the four panel renderers could have been broken in any way
+and the suite would have stayed green. `happy-dom` and `test/nationHudDom.test.ts` close that: it mounts the
+HUD against `index.html`'s real markup, looked up by the same ids `main.ts` uses. The render path turned out
+to be sound, which is how the fault was localised to everything *before* the first payload.
+
+The general lesson is the one C1-3's worker reached independently: a view model tested only against fixtures
+is tested against its author's assumptions about the wire. The fixtures were green all the way to a blank
+page.
+
+## The whole-codebase deslop sweep
+
+The owner asked for `polishment` and `ai-slop-cleaner` across all of it, not just the recent diff, since
+neither had ever been run. Split by package because the file sets are disjoint, which is what keeps four
+concurrent Codex worktrees from colliding:
+
+| pass | scope | exclusions and why |
+|---|---|---|
+| `chore-deslop` | the 13 commits of `085fe35..25750e5` — 56 files, ~4,200 lines | none; this is the newest code and the likeliest to hold slop |
+| `chore-deslop-server` | the 63 `packages/server` files *outside* that range | `sim/nation/{prosperity,season,engine,directives}.ts` — `n1-08-balance-horizon` is live in them |
+| `chore-deslop-shared` | `packages/shared`, 18 files | `constants.ts`, contended by two other passes; `protocol.ts` shapes are frozen — comments and internals only |
+| client remainder | the 47 `packages/client` files outside the range | **queued, not dispatched.** `chore-deslop` is editing `worldChronicle.ts` and `worldMapView.ts` to collapse the `hexColor`/`element` duplication, so a second client pass would collide. It goes out once that one lands |
+
+Two standing instructions in every brief, because they are the failure modes that cost the most here: a
+genuine defect is a report to me and never a cleanup commit, and a duplication that appears twice does not
+justify an abstraction. The `just test` baseline of **75 files / 989 tests** must not go down in any pass.
+
+`polishment`'s independent-review half runs *after* the cleanup lands, not alongside it — the point of that
+step is that the author cannot be the only reviewer, so reviewing the cleanup diff is the useful ordering.
+The PR step is deliberately not run: publishing is the owner's call.
+
 ## Queued cleanups
 
 Small, independent, and none of them blocking. Each is here because it was found while verifying something
-else, and would otherwise be lost.
+else, and would otherwise be lost. Several are now inside a deslop pass's scope and will land there instead.
 
 | what | where | why it is not done yet |
 |---|---|---|
