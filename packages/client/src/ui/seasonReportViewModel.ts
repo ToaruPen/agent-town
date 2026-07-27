@@ -175,26 +175,50 @@ function largestBySign(
   return [...filtered].sort(compareByMagnitude)[0] ?? null;
 }
 
-function headlineClause(entry: SeasonLedgerEntry): string {
+/**
+ * `terminal` picks the verb form: continuative (削り/増やし) for a clause followed by another, conclusive
+ * (削った/増やした) for the one that ends the sentence — hud.md §4.5's own example joins them this way
+ * ("…食料を24削り、成長が人口を18増やした。"), not with a "一方" conjunction.
+ */
+function headlineClause(entry: SeasonLedgerEntry, terminal: boolean): string {
   const magnitude = groupThousands(Math.abs(Math.round(entry.delta)));
-  const verb = entry.delta >= 0 ? "増やした" : "削った";
+  const positive = entry.delta >= 0;
+  const verb = positive ? (terminal ? "増やした" : "増やし") : terminal ? "削った" : "削り";
   return `${ledgerReasonLabel(entry.reason)}が${metricLabel(entry.metric)}を${magnitude}${verb}`;
 }
 
-/** Templated, not generated — hud.md §4.5: at most two reasons, the largest gain and the largest loss. */
+/**
+ * Templated, not generated — hud.md §4.5: at most two reasons, the largest loss and the largest gain.
+ * Nested rather than a compound `positive === null && negative === null` guard so each branch narrows its
+ * own variable directly; a compound guard leaves TypeScript unable to infer that a lone `null` check further
+ * down means the other variable is not null.
+ */
 function ordinaryHeadline(entries: readonly SeasonLedgerEntry[]): string {
   const positive = largestBySign(entries, "positive");
   const negative = largestBySign(entries, "negative");
-  if (positive === null && negative === null) return "この季は目立った変化がありませんでした。";
-  if (negative === null) return `${headlineClause(positive as SeasonLedgerEntry)}季でした。`;
-  if (positive === null) return `${headlineClause(negative)}季でした。`;
-  return `${headlineClause(negative)}一方、${headlineClause(positive)}季でした。`;
+  if (negative === null) {
+    if (positive === null) return "この季は目立った変化がありませんでした。";
+    return `${headlineClause(positive, true)}。`;
+  }
+  if (positive === null) return `${headlineClause(negative, true)}。`;
+  return `${headlineClause(negative, false)}、${headlineClause(positive, true)}。`;
 }
 
 function headlineFor(report: SeasonReport | null, isFamine: boolean): string {
   if (report === null) return "最初の決算を待っています。";
   if (isFamine) return famineHeadline(report.entries);
   return ordinaryHeadline(report.entries);
+}
+
+/**
+ * hud.md §3.1a: the report header and a completed directive's issue date show the calendar year alone —
+ * `history.currentYear + elapsedYear - 1`, the same arithmetic `nationClockViewModel`'s headline uses.
+ * `currentYear` is null only before the first `welcome`, which cannot coincide with a real `elapsedYear`
+ * here (`NationState`, and so `lastReport`, does not exist before `welcome` either) — the elapsed-year
+ * fallback is defensive typing, not a path any real session takes.
+ */
+function calendarYearLabel(elapsedYear: number, currentYear: number | null): string {
+  return currentYear === null ? `第${elapsedYear}年` : `紀元${currentYear + elapsedYear - 1}年`;
 }
 
 const ATTRIBUTION_LABELS: Readonly<Record<CompletedDirectiveAttribution, string>> = {
@@ -222,6 +246,7 @@ function completedDirectiveRow(
   id: DirectiveId,
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
   ownIds: ReadonlySet<DirectiveId>,
+  currentYear: number | null,
 ): SeasonReportCompletedDirectiveRow {
   const record = log.get(id);
   const attribution = attributionFor(id, log, ownIds);
@@ -233,7 +258,7 @@ function completedDirectiveRow(
     issuedLabel:
       record === undefined
         ? null
-        : `第${nationYearOfTick(record.issuedAtTick)}年 ${nationSeasonLabel(nationSeasonOfTick(record.issuedAtTick))} 発令`,
+        : `${calendarYearLabel(nationYearOfTick(record.issuedAtTick), currentYear)} ${nationSeasonLabel(nationSeasonOfTick(record.issuedAtTick))} 発令`,
   };
 }
 
@@ -254,31 +279,36 @@ function heldOrderNote(orders: NationOrders | null): string | null {
 /**
  * The season report: a diff with reasons, not a table of numbers (hud.md §4.5).
  *
- * Deviates from hud.md §4.3's original sketch of `(report, polity, ownDirectiveIds)` in two ways: `polity`
- * is dropped (nothing here needs the nation's name or colour), and `directiveLog`/`orders` are added —
- * `directiveLog` because attributing and dating a completed directive needs more than an id set, and
- * `orders` because the held-order note (above) cannot be built from the report alone. Reported to the
- * supervisor as a deliberate, justified departure rather than chosen silently.
+ * Deviates from hud.md §4.3's original sketch of `(report, polity, ownDirectiveIds)`: `polity` is dropped
+ * (nothing here needs the nation's name or colour), and `directiveLog`/`orders`/`currentYear` are added —
+ * `directiveLog` because attributing and dating a completed directive needs more than an id set, `orders`
+ * because the held-order note (above) cannot be built from the report alone, and `currentYear` because
+ * §3.1a puts the calendar year (not the elapsed year the report/directive-log carry) on this surface.
+ * Reported to the supervisor as a deliberate, justified departure rather than chosen silently.
  */
 export function buildSeasonReportViewModel(
   report: SeasonReport | null,
   directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
   ownDirectiveIds: ReadonlySet<DirectiveId>,
   orders: NationOrders | null,
+  currentYear: number | null,
 ): SeasonReportViewModel {
   const isFamine = report !== null && report.entries.some((entry) => entry.reason === "famine");
   return {
     waitingForFirstReport: report === null,
     isEmpty: report !== null && report.entries.length === 0,
     isFamine,
-    headerLabel: report === null ? null : `第${report.year}年 ${nationSeasonLabel(report.season)}`,
+    headerLabel:
+      report === null
+        ? null
+        : `${calendarYearLabel(report.year, currentYear)} ${nationSeasonLabel(report.season)} の決算`,
     headline: headlineFor(report, isFamine),
     metrics: report === null ? [] : METRIC_ORDER.map((metric) => metricRow(report.entries, metric)),
     completedDirectives:
       report === null
         ? []
         : report.completedDirectiveIds.map((id) =>
-            completedDirectiveRow(id, directiveLog, ownDirectiveIds),
+            completedDirectiveRow(id, directiveLog, ownDirectiveIds, currentYear),
           ),
     heldOrderNote: heldOrderNote(orders),
   };

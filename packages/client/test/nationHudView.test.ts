@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { directiveView } from "../src/ui/nationHud.js";
-import { applyOrders, applyWelcome, initialNationHudState } from "../src/ui/nationHudState.js";
-import { ordersFixture, worldFixture } from "./nationFixture.js";
+import { directiveView, seasonReportView } from "../src/ui/nationHud.js";
+import {
+  applyOrders,
+  applyUpdate,
+  applyWelcome,
+  initialNationHudState,
+} from "../src/ui/nationHudState.js";
+import {
+  ledgerEntry,
+  nationFixture,
+  ordersFixture,
+  reportFixture,
+  worldFixture,
+} from "./nationFixture.js";
 
 const welcomed = () => applyWelcome(initialNationHudState(), worldFixture());
 const desked = () => applyOrders(welcomed(), ordersFixture({ autoPilot: false }));
@@ -44,5 +55,68 @@ describe("directiveView", () => {
     );
 
     expect(directiveView(spectating)).toBeNull();
+  });
+});
+
+/**
+ * The same state-to-panel mapping as `directiveView`, but gated on holding a nation alone — the report
+ * has something honest to say (`waitingForFirstReport`) even before the first `orders` message, so gating
+ * on `state.options` the way the candidate list does would blank a panel that should read as waiting.
+ */
+describe("seasonReportView", () => {
+  it("reads as waiting for the first report as soon as a nation is held, even before any orders arrive", () => {
+    expect(seasonReportView(welcomed())?.waitingForFirstReport).toBe(true);
+  });
+
+  it("shows nothing at all while the player holds no nation", () => {
+    const spectating = applyWelcome(
+      initialNationHudState(),
+      worldFixture({ playerNationId: null }),
+    );
+
+    expect(seasonReportView(spectating)).toBeNull();
+  });
+
+  it("reads the player's own last report once one has resolved", () => {
+    const report = reportFixture({ entries: [ledgerEntry({ metric: "food", delta: 12 })] });
+    const state = applyUpdate(
+      welcomed(),
+      worldFixture({ nations: [nationFixture({ lastReport: report })] }),
+      2_000,
+    );
+
+    const view = seasonReportView(state);
+
+    expect(view?.waitingForFirstReport).toBe(false);
+    expect(view?.metrics.find((metric) => metric.metric === "food")?.delta).toBe(12);
+  });
+
+  /**
+   * hud.md §3.6's stated consequence of dropping `ownDirectiveIds` on reconnect, exercised end to end:
+   * a directive queued before the drop still reads with its real kind (from `directiveLog`, which
+   * survives), but attributed to 宰相 rather than to the player who is no longer on record as having
+   * queued it.
+   */
+  it("attributes a directive queued before a reconnect to the chancellor once it completes", () => {
+    const queued = applyOrders(
+      welcomed(),
+      ordersFixture({ queued: { id: "directive-1", kind: "clearFarmland", targetCityId: null } }),
+    );
+    const reconnected = applyWelcome(queued, worldFixture());
+    const report = reportFixture({ completedDirectiveIds: ["directive-1"] });
+    const state = applyUpdate(
+      reconnected,
+      worldFixture({ nations: [nationFixture({ lastReport: report })] }),
+      2_000,
+    );
+
+    const view = seasonReportView(state);
+
+    expect(view?.completedDirectives[0]).toMatchObject({
+      directiveId: "directive-1",
+      kindLabel: "開墾",
+      attribution: "chancellor",
+      attributionLabel: "宰相の決定",
+    });
   });
 });

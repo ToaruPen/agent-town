@@ -6,6 +6,8 @@ import { ledgerEntry, ordersFixture, reportFixture } from "./nationFixture.js";
 
 const emptyLog = new Map<string, DirectiveLogEntry>();
 const emptyOwn = new Set<string>();
+/** `history.currentYear`, arbitrary but fixed, so calendar-year arithmetic in the tests below is checkable. */
+const CURRENT_YEAR = 1_040;
 
 describe("buildSeasonReportViewModel", () => {
   /**
@@ -15,7 +17,7 @@ describe("buildSeasonReportViewModel", () => {
    */
   describe("waiting for the first report", () => {
     it("reads as waiting rather than as an empty diff, with no rows at all", () => {
-      const view = buildSeasonReportViewModel(null, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(null, emptyLog, emptyOwn, null, CURRENT_YEAR);
 
       expect(view.waitingForFirstReport).toBe(true);
       expect(view.isEmpty).toBe(false);
@@ -32,6 +34,7 @@ describe("buildSeasonReportViewModel", () => {
         emptyLog,
         emptyOwn,
         null,
+        CURRENT_YEAR,
       );
 
       expect(view.waitingForFirstReport).toBe(false);
@@ -49,6 +52,7 @@ describe("buildSeasonReportViewModel", () => {
         emptyLog,
         emptyOwn,
         null,
+        CURRENT_YEAR,
       );
 
       expect(view.metrics.map((m) => m.metric)).toEqual([
@@ -73,7 +77,7 @@ describe("buildSeasonReportViewModel", () => {
           ledgerEntry({ metric: "materials", reason: "baseProduction", delta: 10 }),
         ],
       });
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
       const food = view.metrics.find((m) => m.metric === "food");
 
       expect(food?.delta).toBe(12);
@@ -88,7 +92,7 @@ describe("buildSeasonReportViewModel", () => {
           ledgerEntry({ metric: "food", reason: "directiveUpkeep", delta: -4 }),
         ],
       });
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
       const food = view.metrics.find((m) => m.metric === "food");
 
       expect(food?.reasons.map((line) => line.reason)).toEqual([
@@ -115,7 +119,7 @@ describe("buildSeasonReportViewModel", () => {
           }),
         ],
       });
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
       const stability = view.metrics.find((m) => m.metric === "stability");
 
       expect(stability?.reasons).toHaveLength(1);
@@ -133,7 +137,7 @@ describe("buildSeasonReportViewModel", () => {
           ledgerEntry({ metric: "stability", reason: "famine", delta: -12 }),
         ],
       });
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
 
       expect(view.isFamine).toBe(true);
       expect(view.headline).toContain("飢饉");
@@ -151,7 +155,7 @@ describe("buildSeasonReportViewModel", () => {
           ledgerEntry({ metric: "stability", reason: "stabilityDrift", delta: -3 }),
         ],
       });
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
 
       expect(view.headline).toContain("基礎生産");
       expect(view.headline).toContain("安定の自然変動");
@@ -164,6 +168,7 @@ describe("buildSeasonReportViewModel", () => {
         emptyLog,
         emptyOwn,
         null,
+        CURRENT_YEAR,
       );
 
       expect(view.headline).not.toBe("");
@@ -179,7 +184,7 @@ describe("buildSeasonReportViewModel", () => {
       const own = new Set(["directive-1"]);
       const report = reportFixture({ completedDirectiveIds: ["directive-1"] });
 
-      const view = buildSeasonReportViewModel(report, log, own, null);
+      const view = buildSeasonReportViewModel(report, log, own, null, CURRENT_YEAR);
 
       expect(view.completedDirectives[0]).toMatchObject({
         directiveId: "directive-1",
@@ -196,7 +201,7 @@ describe("buildSeasonReportViewModel", () => {
       ]);
       const report = reportFixture({ completedDirectiveIds: ["chancellor-polity-1-500"] });
 
-      const view = buildSeasonReportViewModel(report, log, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, log, emptyOwn, null, CURRENT_YEAR);
 
       expect(view.completedDirectives[0]).toMatchObject({
         attribution: "chancellor",
@@ -215,7 +220,7 @@ describe("buildSeasonReportViewModel", () => {
     it("still renders a completed directive whose kind was never observed, rather than throwing", () => {
       const report = reportFixture({ completedDirectiveIds: ["chancellor-polity-1-777"] });
 
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
 
       expect(view.completedDirectives[0]).toMatchObject({
         directiveId: "chancellor-polity-1-777",
@@ -242,7 +247,7 @@ describe("buildSeasonReportViewModel", () => {
         queued: { id: "directive-9", kind: "holdFestival", targetCityId: null },
       });
 
-      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, orders);
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, orders, CURRENT_YEAR);
 
       expect(view.heldOrderNote).not.toBeNull();
       expect(view.heldOrderNote).toContain("祭礼");
@@ -254,7 +259,13 @@ describe("buildSeasonReportViewModel", () => {
         queued: { id: "directive-9", kind: "holdFestival", targetCityId: null },
       });
 
-      const view = buildSeasonReportViewModel(reportFixture(), emptyLog, emptyOwn, orders);
+      const view = buildSeasonReportViewModel(
+        reportFixture(),
+        emptyLog,
+        emptyOwn,
+        orders,
+        CURRENT_YEAR,
+      );
 
       expect(view.heldOrderNote).toBeNull();
     });
@@ -262,15 +273,68 @@ describe("buildSeasonReportViewModel", () => {
     it("has no held-order note when nothing is queued", () => {
       const orders = ordersFixture({ autoPilot: true, queued: null });
 
-      const view = buildSeasonReportViewModel(reportFixture(), emptyLog, emptyOwn, orders);
+      const view = buildSeasonReportViewModel(
+        reportFixture(),
+        emptyLog,
+        emptyOwn,
+        orders,
+        CURRENT_YEAR,
+      );
 
       expect(view.heldOrderNote).toBeNull();
     });
 
     it("has no held-order note before the first orders message", () => {
-      const view = buildSeasonReportViewModel(reportFixture(), emptyLog, emptyOwn, null);
+      const view = buildSeasonReportViewModel(
+        reportFixture(),
+        emptyLog,
+        emptyOwn,
+        null,
+        CURRENT_YEAR,
+      );
 
       expect(view.heldOrderNote).toBeNull();
+    });
+  });
+
+  /**
+   * hud.md §3.1a: "Every other surface (report header, directive panel header, directive issue dates)
+   * shows the calendar year only" — the same `currentYear + elapsedYear - 1` arithmetic the clock bar's
+   * headline uses (`nationClockViewModel.ts`), not the elapsed year `SeasonReport.year` and
+   * `ActiveDirective.issuedAtTick` themselves carry.
+   */
+  describe("years shown to the player are calendar years, not the elapsed years the wire carries", () => {
+    it("shows the header's year as the calendar year", () => {
+      const report = reportFixture({ year: 3, season: "summer" });
+
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
+
+      expect(view.headerLabel).toBe("紀元1042年 夏 の決算");
+    });
+
+    it("dates a completed directive by the calendar year its issue tick falls in", () => {
+      const log = new Map<string, DirectiveLogEntry>([
+        ["directive-1", { kind: "clearFarmland", issuedAtTick: 0 }],
+      ]);
+      const own = new Set(["directive-1"]);
+      const report = reportFixture({ completedDirectiveIds: ["directive-1"] });
+
+      const view = buildSeasonReportViewModel(report, log, own, null, CURRENT_YEAR);
+
+      expect(view.completedDirectives[0]?.issuedLabel).toBe("紀元1040年 春 発令");
+    });
+
+    /**
+     * `currentYear` is null only before the first `welcome`, which cannot coincide with a real report —
+     * this exercises the defensive fallback rather than a reachable state, so it must degrade to the
+     * elapsed year instead of rendering `紀元NaN年`.
+     */
+    it("falls back to the elapsed year rather than a broken calendar year when currentYear is unknown", () => {
+      const report = reportFixture({ year: 3, season: "summer" });
+
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, null);
+
+      expect(view.headerLabel).toBe("第3年 夏 の決算");
     });
   });
 });

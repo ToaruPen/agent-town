@@ -27,6 +27,7 @@ import {
 import { createNationSelect, type NationSelectController } from "./nationSelect.js";
 import { createProsperityRanking, type ProsperityRankingController } from "./prosperityRanking.js";
 import { buildProsperityRankingViewModel } from "./prosperityViewModel.js";
+import { buildSeasonReportViewModel, type SeasonReportViewModel } from "./seasonReportViewModel.js";
 
 const SEND_REFUSED_ANNOUNCEMENT = "接続が切れています。送信できませんでした。";
 
@@ -112,6 +113,24 @@ export function directiveView(state: NationHudState): DirectiveListViewModel | n
     cityNames(state),
     state.speed,
     state.connected,
+  );
+}
+
+/**
+ * Null only while there is no nation to report on. Unlike `directiveView`, not gated on `state.options`:
+ * the report has something honest to say (`waitingForFirstReport`) even before the first `orders`
+ * message, so gating it the same way the candidate list is gated would blank a panel that should read as
+ * waiting rather than as absent.
+ */
+export function seasonReportView(state: NationHudState): SeasonReportViewModel | null {
+  const own = ownPair(state);
+  if (own === null) return null;
+  return buildSeasonReportViewModel(
+    own.nation.lastReport,
+    state.directiveLog,
+    state.ownDirectiveIds,
+    state.orders,
+    state.currentYear,
   );
 }
 

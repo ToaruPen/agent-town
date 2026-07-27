@@ -111,6 +111,31 @@ describe("nation HUD state", () => {
   });
 
   /**
+   * hud.md §3.6: "Queued-order bookkeeping (the set of ids the player ordered) is dropped, not replayed."
+   * `directiveLog` is a different kind of record — what the directive *is*, not who queued it — and
+   * §3.6 does not ask for that to be dropped; only `ownDirectiveIds` names "the set of ids the player
+   * ordered". Losing both would turn a directive queued right before the drop into 発令者不明 after
+   * reconnect, which is not what the spec's stated consequence (attributed to 宰相) describes.
+   */
+  it("drops who queued a directive on reconnect but keeps what was observed about the directive itself", () => {
+    const queued = applyOrders(
+      welcomed(),
+      ordersFixture({ queued: { id: "directive-1", kind: "clearFarmland", targetCityId: null } }),
+    );
+
+    expect(queued.ownDirectiveIds.has("directive-1")).toBe(true);
+    expect(queued.directiveLog.has("directive-1")).toBe(true);
+
+    const reconnected = applyWelcome(queued, worldFixture());
+
+    expect(reconnected.ownDirectiveIds.size).toBe(0);
+    expect(reconnected.directiveLog.get("directive-1")).toEqual({
+      kind: "clearFarmland",
+      issuedAtTick: 254_927,
+    });
+  });
+
+  /**
    * The dedupe idiom skips a re-render when the rendered key is unchanged, so a welcome whose payload
    * happens to match what is already on screen would be skipped — and any panel the welcome should
    * have cleared would stay. The generation counter makes the invalidation explicit rather than

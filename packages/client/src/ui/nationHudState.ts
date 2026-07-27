@@ -146,10 +146,13 @@ function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier):
  * the shared runtime, not the session — and the chancellor's pick was for a season that may be over. The
  * slot reads 同期中 until the next `orders`, which is the one thing here that is true.
  *
- * `directiveLog` and `ownDirectiveIds` are the one exception to "welcome re-establishes everything": both
- * are records of what was observed, not claims about what comes next, so a gap does not make them stale —
- * only wrong to discard. Resetting `ownDirectiveIds` in particular would turn "the client does not know
- * who issued this" into a confident, incorrect 宰相の決定 for the player's own order.
+ * `directiveLog` survives for the same reason `options` does: it is a record of what was observed, not a
+ * claim about what comes next, so a gap does not make it stale. `ownDirectiveIds` does not survive —
+ * hud.md §3.6 states the rule directly: "Queued-order bookkeeping (the set of ids the player ordered) is
+ * dropped, not replayed," with the consequence spelled out — "directives issued before the reconnect are
+ * attributed to 宰相 in later reports." That consequence is only reachable if `directiveLog` keeps the
+ * directive's kind while `ownDirectiveIds` forgets who queued it, which is why the two fields, both
+ * populated from the same `orders.queued`, part company here.
  */
 export function applyWelcome(state: NationHudState, world: NationWorldState): NationHudState {
   return {
@@ -165,7 +168,7 @@ export function applyWelcome(state: NationHudState, world: NationWorldState): Na
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
     generation: state.generation + 1,
     directiveLog: mergedDirectiveLog(state.directiveLog, world.nations),
-    ownDirectiveIds: state.ownDirectiveIds,
+    ownDirectiveIds: new Set(),
   };
 }
 
