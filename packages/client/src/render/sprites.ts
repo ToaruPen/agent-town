@@ -334,7 +334,7 @@ export function cropSpritePath(stage: CropStage): string | null {
   return CROP_SPRITE_PATHS[stage];
 }
 
-export function treeSpritePath(season: Season, tileIndex: number): string {
+export function treeSpritePath(season: Season, tileIndex: number): (typeof SPRITE_PATHS)[number] {
   const palette =
     season === "spring" || season === "summer"
       ? SPRITE_ASSETS.resource.tree.green

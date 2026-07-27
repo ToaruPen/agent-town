@@ -229,17 +229,14 @@ describe("seasonal map sprites", () => {
   });
 
   it("preloads all three green and autumn tree families", () => {
-    const seasonalTrees = new Set(
+    const seasonalTrees = new Set<(typeof SPRITE_PATHS)[number]>(
       (["spring", "autumn"] as const).flatMap((season) =>
         [0, 1, 2].map((index) => treeSpritePath(season, index)),
       ),
     );
 
     expect(seasonalTrees).toHaveLength(6);
-    // treeSpritePath returns a plain string; widen SPRITE_PATHS for this
-    // membership check rather than narrowing the test's inputs to it.
-    const spritePaths: readonly string[] = SPRITE_PATHS;
-    expect([...seasonalTrees].every((path) => spritePaths.includes(path))).toBe(true);
+    expect([...seasonalTrees].every((path) => SPRITE_PATHS.includes(path))).toBe(true);
   });
 
   it("gives every season a distinct tint and makes winter palest and least saturated", () => {
