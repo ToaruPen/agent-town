@@ -21,6 +21,25 @@ function findNationHudRoots(): NationHudRoots | null {
   return { clock, dashboard, ranking, select, status };
 }
 
+/**
+ * Shows and hides the one piece of markup that is not driven by a server payload. `index.html` ships
+ * it visible, so the page explains itself in the three cases where nothing else can: the script never
+ * ran, the socket never opened, or the server is not up.
+ */
+function createBootNotice(): { clear(): void; show(message: string): void } {
+  const notice = document.getElementById("nation-boot");
+  return {
+    clear(): void {
+      notice?.remove();
+    },
+    show(message: string): void {
+      if (notice === null) return;
+      notice.textContent = message;
+      if (!notice.isConnected) document.body.append(notice);
+    },
+  };
+}
+
 function mountNationHud(roots: NationHudRoots): void {
   // The HUD needs a send and `connect` needs the HUD's handlers, so the channel is resolved lazily.
   // It is non-null well before the player can click anything, and dropping a send that somehow beats
@@ -29,8 +48,10 @@ function mountNationHud(roots: NationHudRoots): void {
   const post: SendClientMessage = (message) => send?.(message);
 
   const hud = createNationHud(roots, post);
+  const boot = createBootNotice();
   send = connect(getWebSocketUrl(window.location), {
     onWelcome: (state) => {
+      boot.clear();
       hud.applyWelcome(state, Date.now());
     },
     onUpdate: (state) => {
@@ -40,6 +61,11 @@ function mountNationHud(roots: NationHudRoots): void {
       // The order desk is C1-4. Only the nation id is read here, because it is the sole place the
       // server confirms a `selectNation`; the candidate list and the queued order are that slice's.
       hud.applyOrdersNation(message.nationId);
+    },
+    onDisconnected: () => {
+      // Deliberately not "paused": a HUD keeps its last payload on screen, so a dropped socket looks
+      // exactly like a stopped clock until something says which one it is.
+      boot.show("接続が切れました。再接続しています…");
     },
   });
   bindNationSpeedKeys(post, () => hud.state());

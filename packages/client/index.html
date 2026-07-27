@@ -112,6 +112,23 @@
         outline-offset: 2px;
       }
 
+      /* Above every panel: while it is showing there is nothing underneath it worth seeing. */
+      .nation-boot {
+        position: fixed;
+        z-index: 20;
+        top: 50%;
+        left: 50%;
+        margin: 0;
+        padding: 0.75rem 1.25rem;
+        color: var(--world-parchment);
+        font-family: system-ui, sans-serif;
+        font-size: 0.9rem;
+        background: rgb(29 36 40 / 92%);
+        border: 1px solid var(--world-iron);
+        border-radius: 0.25rem;
+        transform: translate(-50%, -50%);
+      }
+
       .nation-hud {
         position: fixed;
         z-index: 7;
@@ -1105,6 +1122,12 @@
       aria-labelledby="inspect-panel-name"
       hidden
     ></aside>
+    <!-- The page's only unconditional content. Every panel below is empty until a `welcome` arrives,
+         so without this a page whose script never ran, or whose socket never opened, is an unbroken
+         dark rectangle that says nothing about which of the two went wrong. `main.ts` clears it on the
+         first `welcome` and restores it on a disconnect. Being markup rather than script is the point:
+         it survives the failure where no script runs at all. -->
+    <p id="nation-boot" class="nation-boot" role="status">世界に接続しています…</p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

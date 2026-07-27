@@ -171,6 +171,41 @@ describe("connect", () => {
     expect(onOrders).toHaveBeenCalledWith(orders);
     expect(onUpdate).not.toHaveBeenCalled();
   });
+
+  /**
+   * The HUD holds its last payload, so a dropped socket renders identically to a stopped clock. The
+   * close has to be announced or the page silently lies about being live.
+   */
+  it("announces a close before scheduling the reconnect", () => {
+    vi.useFakeTimers();
+    const socket = new MockWebSocket();
+    const onDisconnected = vi.fn();
+
+    connect(
+      "ws://example.test",
+      { onWelcome: vi.fn(), onUpdate: vi.fn(), onOrders: vi.fn(), onDisconnected },
+      () => socket,
+    );
+    socket.onclose?.();
+
+    expect(onDisconnected).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  /** The dev pages mount without a socket, so the handler stays optional and its absence is not a crash. */
+  it("tolerates a close with no disconnect handler", () => {
+    vi.useFakeTimers();
+    const socket = new MockWebSocket();
+
+    connect(
+      "ws://example.test",
+      { onWelcome: vi.fn(), onUpdate: vi.fn(), onOrders: vi.fn() },
+      () => socket,
+    );
+
+    expect(() => socket.onclose?.()).not.toThrow();
+    vi.useRealTimers();
+  });
 });
 
 describe("connect's outbound channel", () => {

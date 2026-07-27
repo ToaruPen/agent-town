@@ -24,6 +24,12 @@ interface ConnectionHandlers {
   onWelcome(state: NationWorldState): void;
   onUpdate(state: NationWorldState): void;
   onOrders(message: OrdersMessage): void;
+  /**
+   * The socket closed and a reconnect is pending. Optional because the dev pages mount without a
+   * socket at all, but the nation page must implement it: a HUD holds its last payload forever, so a
+   * dropped connection is indistinguishable from a paused world unless someone says otherwise.
+   */
+  onDisconnected?(): void;
 }
 
 interface WebSocketLocation {
@@ -115,6 +121,7 @@ export function connect(
       handlers.onUpdate(state);
     };
     socket.onclose = () => {
+      handlers.onDisconnected?.();
       setTimeout(open, RECONNECT_DELAY_MS);
     };
   };
