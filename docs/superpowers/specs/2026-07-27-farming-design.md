@@ -52,7 +52,9 @@ export function isFacility(building: Building): building is Facility {
 
 家でなければ施設、という消去法である。`Building` が `House | Facility` の2種しかない今は正しいが、`Field` を足した瞬間に**畑が施設として扱われる**。しかも型述語が `building is Facility` と嘘をつくので、TypeScript は何も言わない。呼び出しはソースだけで26箇所あり、`facilityOperation.ts` の運営対象の抽出、`construction.ts` の用地選定、クライアントの描画と情報パネルが含まれる。畑が施設として運営され、維持費を取られ、施設一覧に並ぶ。
 
-したがって `Field` を足す前に、`isFacility` を施設の種を明示的に列挙する形に書き換える。`InstitutionKind`（`communalGranaryStore` / `grainMarket` / `rationControl`）から導くのが素直である。消去法をやめれば、次に第四の建物を足す人が同じ罠を踏まない。
+したがって `Field` を足す前に、`isFacility` を施設の種を明示的に列挙する形に書き換える。列挙すべきは `FacilityKind`（`communalGranary` / `grainMarket` / `rationDepot`、`spatial.ts`）である。名前の似た `InstitutionKind`（`communalGranaryStore` / `grainMarket` / `rationControl`、`society.ts`）は**別の型**で、共通する要素は `grainMarket` ひとつしかない。取り違えると `isFacility` がすべての実施設に対して `false` を返し、26箇所が黙って施設を見失う。しかも施設を文字列リテラルから組み立てるテストは少ないので、テストは通ってしまう。
+
+列挙は網羅的にする。`Record<FacilityKind, true>` の形にしておけば、第四の施設を足したときに列挙漏れがコンパイルエラーになる。消去法をやめ、かつ網羅を型で守れば、次に建物を足す人が同じ罠を踏まない。
 
 これは畑の実装とは独立した変更なので、**先行する別のコミット**として、既存の振る舞いを変えないことをテストで固定してから行う。
 
