@@ -200,9 +200,17 @@ So: to verify a branch while its author is still working, check the tip out into
 for the author's report, or ask for the numbers. Do not run the gate in place, and do not rebase someone
 else's branch out from under them — if a rebase is needed, ask the author to do it.
 
+**The ten-second check, from the worker's side.** A failure report is evidence about a *tree*, not about a
+commit, so reproduce it against a committed state before touching code. The cheap tell is comparing the line
+numbers in the report against the committed file: the error above cited `nationHud.ts(128,55)` where the
+committed call site is at 148 with the required field supplied at 153, and that gap is the whole answer. It
+is what stopped the worker inventing a fix for a bug no commit contained.
+
 One related correction, since it was published to the worker as evidence: the mismatched `77 / 1055` count
 that looked like proof of the mid-edit compile came from the worker's own first report, not from any
-supervisor measurement. The line-number argument establishes the mid-edit compile on its own.
+supervisor measurement. The line-number argument establishes the mid-edit compile on its own — and the
+worker, having built an inference on a number it had reported itself, went back and withdrew it rather than
+letting it stand.
 
 ## Assignments outlive agents
 
