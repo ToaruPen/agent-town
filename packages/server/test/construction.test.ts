@@ -19,6 +19,7 @@ import {
   withdrawFacilityTransfer,
 } from "../src/sim/construction.js";
 import { createTrailCells } from "../src/sim/traffic.js";
+import { makeAgentFixture } from "./agentFixture.js";
 import { makeDemandFixture, makeFacilityFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
@@ -61,25 +62,7 @@ function createSite(options: SiteOptions = {}): { world: WorldState; facility: F
 }
 
 function createAgent(): AgentState {
-  return {
-    id: "agent-1",
-    name: "トネリコ",
-    pos: { x: 1, y: 0 },
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-  };
+  return makeAgentFixture({ pos: { x: 1, y: 0 } });
 }
 
 /** Every plank in the system, so a transfer can be proven to neither lose nor mint wood. */

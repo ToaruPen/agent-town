@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { selectFacilitySite } from "../src/sim/siteSelection.js";
+import { makeAgentFixture } from "./agentFixture.js";
 import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
@@ -52,25 +53,11 @@ function makeWornTrailCells(options: WorldOptions): TrailCell[] {
 }
 
 function makeResident(pos: Position, index: number): AgentState {
-  return {
+  return makeAgentFixture({
     id: `agent-${index + 1}`,
     name: `住民${index + 1}`,
     pos,
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    rationStrain: 0,
-    lastRationTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-  };
+  });
 }
 
 function createWorld(options: WorldOptions): WorldState {

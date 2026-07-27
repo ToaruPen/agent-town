@@ -11,30 +11,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmPlanner } from "../src/llm/llmPlanner.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
+import { makeAgentFixture as createAgent } from "./agentFixture.js";
 import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
-
-function createAgent(): AgentState {
-  return {
-    id: "agent-1",
-    name: "トネリコ",
-    pos: { x: 0, y: 0 },
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-  };
-}
 
 function createWorld(agent: AgentState): WorldState {
   const tiles: Tile[] = [

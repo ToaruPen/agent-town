@@ -15,30 +15,12 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { buildPlanPrompt } from "../src/llm/planPrompt.js";
+import { makeAgentFixture } from "./agentFixture.js";
 import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
-  return {
-    id: "agent-1",
-    name: "トネリコ",
-    pos: { x: 3, y: 1 },
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-    ...overrides,
-  };
+  return makeAgentFixture({ pos: { x: 3, y: 1 }, ...overrides });
 }
 
 function createWorld(agent: AgentState): WorldState {

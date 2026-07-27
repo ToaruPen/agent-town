@@ -16,29 +16,12 @@ import {
   validateNormalizedPlanExecutability,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
+import { makeAgentFixture } from "./agentFixture.js";
 import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
-  return {
-    id: "agent-1",
-    name: "トネリコ",
-    pos,
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-  };
+  return makeAgentFixture({ pos });
 }
 
 function createWorld(agent: AgentState): WorldState {

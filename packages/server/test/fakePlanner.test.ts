@@ -27,31 +27,9 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { FakePlanner, woodTarget } from "../src/sim/fakePlanner.js";
+import { makeAgentFixture as createAgent } from "./agentFixture.js";
 import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
-
-function createAgent(overrides: Partial<AgentState> = {}): AgentState {
-  return {
-    id: "agent-1",
-    name: "トネリコ",
-    pos: { x: 0, y: 0 },
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-    ...overrides,
-  };
-}
 
 function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
   return {

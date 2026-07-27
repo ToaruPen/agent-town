@@ -2,27 +2,10 @@ import type { AgentState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { llmProviderForAgent, parseLlmProviderRoutes } from "../src/llm/llmProviderRouting.js";
+import { makeAgentFixture } from "./agentFixture.js";
 
 function agent(id: string, name: string): AgentState {
-  return {
-    id,
-    name,
-    pos: { x: 0, y: 0 },
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    hunger: 100,
-    fatigue: 100,
-    health: 100,
-    rationStrain: 0,
-    lastRationTick: null,
-  };
+  return makeAgentFixture({ id, name });
 }
 
 const agents: [AgentState, AgentState, AgentState] = [

@@ -35,6 +35,7 @@ import {
   runFacilityInterval,
 } from "../src/sim/facilityOperation.js";
 import { createTrailCells } from "../src/sim/traffic.js";
+import { makeAgentFixture } from "./agentFixture.js";
 import { makeFacilityFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
@@ -42,25 +43,12 @@ const WIDTH = 8;
 const HEIGHT = 3;
 
 function makeResident(id: string, pos: Position, hunger: number): AgentState {
-  return {
+  return makeAgentFixture({
     id,
     name: id,
     pos,
-    carrying: null,
-    activity: { kind: "idle" },
-    tasks: [],
-    planSource: "fake",
-    llmProvider: null,
-    thinking: false,
-    lastThought: null,
-    desires: { foodSecurity: 0 },
-    lastHungerInterruptTick: null,
-    rationStrain: 0,
-    lastRationTick: null,
     hunger,
-    fatigue: 100,
-    health: 100,
-  };
+  });
 }
 
 interface WorldOptions {
