@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>都市景観の確認（開発用）</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        color: #ded3b3;
+        background: #1d2428;
+        font-family: system-ui, sans-serif;
+      }
+
+      .dev-page {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1rem;
+      }
+
+      .dev-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .dev-note {
+        margin: 0;
+        max-width: 68ch;
+        color: #9fb0ad;
+        font-size: 0.78rem;
+        line-height: 1.5;
+      }
+
+      .dev-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+        align-items: end;
+        padding: 0.75rem;
+        background: rgb(255 255 255 / 3%);
+        border: 1px solid #54646b;
+      }
+
+      .dev-control {
+        display: grid;
+        gap: 0.2rem;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+      }
+
+      .dev-control select,
+      .dev-control input {
+        color: #ded3b3;
+        background: #11171a;
+        border: 1px solid #54646b;
+        font: inherit;
+        font-size: 0.82rem;
+      }
+
+      .dev-control input[type="range"] {
+        width: 11rem;
+      }
+
+      .dev-status {
+        margin: 0;
+        color: #c5d5d0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.75rem;
+      }
+
+      .dev-stage {
+        width: fit-content;
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid #54646b;
+      }
+
+      .dev-stage canvas {
+        display: block;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="dev-page">
+      <h1 class="dev-title">都市景観の確認（開発用）</h1>
+      <p class="dev-note">
+        国家の状態から合成した一都市の街区を、住民スケールの描画層そのままに表示します。開発用ページなので本番のビルドには含まれません。
+      </p>
+      <div class="dev-controls">
+        <label class="dev-control">
+          周囲の地形
+          <select id="dev-neighbourhood"></select>
+        </label>
+        <label class="dev-control">
+          季節
+          <select id="dev-season"></select>
+        </label>
+        <label class="dev-control">
+          都市
+          <select id="dev-city"></select>
+        </label>
+        <label class="dev-control">
+          開発度
+          <input id="dev-development" type="range" min="1" max="10" step="1" value="4" />
+        </label>
+        <label class="dev-control">
+          人口
+          <input id="dev-population" type="range" min="100" max="6000" step="100" value="3000" />
+        </label>
+      </div>
+      <p id="dev-status" class="dev-status"></p>
+      <div id="dev-stage" class="dev-stage"></div>
+    </main>
+    <script type="module" src="/src/devCityScene.ts"></script>
+  </body>
+</html>
