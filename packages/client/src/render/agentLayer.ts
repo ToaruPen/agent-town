@@ -39,6 +39,12 @@ interface AgentRenderState {
   targetY: number;
 }
 
+export interface AgentPresentationBounds {
+  x: number;
+  top: number;
+  bottom: number;
+}
+
 export interface AgentLayerInteractions {
   selectedAgentId: string | null;
   hoveredAgentId: string | null;
@@ -248,4 +254,17 @@ export function interpolateAgentLayer(layer: Container, deltaMs: number): void {
       container.position.y + (targetY - container.position.y) * factor,
     );
   }
+}
+
+export function agentPresentationBounds(
+  layer: Container,
+  agentId: string,
+): AgentPresentationBounds | null {
+  const container = agentRendersByLayer.get(layer)?.get(agentId)?.container;
+  if (container === undefined) return null;
+  return {
+    x: container.position.x,
+    top: container.position.y - AGENT_HALF_SIZE,
+    bottom: container.position.y + AGENT_HALF_SIZE,
+  };
 }

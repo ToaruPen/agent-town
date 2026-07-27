@@ -1,6 +1,6 @@
 import { seasonOfTick, type Tile, type WorldState } from "@agent-town/shared";
 import { type Container, Graphics, Sprite } from "pixi.js";
-import { shadowGraphic } from "./shadow.js";
+import { BUILDING_SHADOW_WIDTH_RATIO, shadowGraphic } from "./shadow.js";
 import {
   objectDepth,
   resourceSpritePath,
@@ -21,7 +21,7 @@ const MAP_OBJECT_LABEL = "map-object";
 // Multiply tint cannot add gray, so winter pulls down autumn reds to mute the foliage.
 const WINTER_TREE_TINT = 0x88c4e8;
 const TREE_SHADOW_WIDTH_RATIO = 0.8;
-const TREE_SHADOW_DEPTH_OFFSET = 0.1;
+const MAP_SHADOW_DEPTH_OFFSET = 0.1;
 
 function createTileSprite(path: string, x: number, y: number): Sprite {
   const sprite = Sprite.from(path);
@@ -50,11 +50,17 @@ function clearMapObjects(layer: Container): void {
   }
 }
 
-function addTreeShadow(layer: Container, x: number, y: number, tileY: number): void {
-  const shadow = shadowGraphic(TREE_SHADOW_WIDTH_RATIO);
+function addMapShadow(
+  layer: Container,
+  shadow: Graphics,
+  x: number,
+  y: number,
+  tileY: number,
+  kind: WorldObjectKind,
+): void {
   shadow.position.set(x + TILE_SIZE / 2, y + TILE_SIZE - 2);
   shadow.label = MAP_OBJECT_LABEL;
-  shadow.zIndex = objectDepth(tileY, "resource") - TREE_SHADOW_DEPTH_OFFSET;
+  shadow.zIndex = objectDepth(tileY, kind) - MAP_SHADOW_DEPTH_OFFSET;
   layer.addChild(shadow);
 }
 
@@ -101,7 +107,7 @@ function renderTile(
       resourceSprite.tint = WINTER_TREE_TINT;
     }
     if (tile.resource?.kind === "wood") {
-      addTreeShadow(objectLayer, x, y, tileY);
+      addMapShadow(objectLayer, shadowGraphic(TREE_SHADOW_WIDTH_RATIO), x, y, tileY, "resource");
     }
     addMapObject(objectLayer, resourceSprite, tileY, "resource");
   }
@@ -138,6 +144,14 @@ export function renderMapLayer(
 
   const stockpileX = state.stockpile.pos.x * TILE_SIZE;
   const stockpileY = state.stockpile.pos.y * TILE_SIZE;
+  addMapShadow(
+    objectLayer,
+    shadowGraphic(BUILDING_SHADOW_WIDTH_RATIO),
+    stockpileX,
+    stockpileY,
+    state.stockpile.pos.y,
+    "stockpile",
+  );
   addMapObject(
     objectLayer,
     createTileSprite(SPRITE_ASSETS.stockpile.basket, stockpileX - TILE_SIZE / 4, stockpileY),

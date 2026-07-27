@@ -3,7 +3,7 @@ import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import { renderAgentLayer } from "../src/render/agentLayer.js";
-import { renderMapLayer } from "../src/render/mapLayer.js";
+import { renderMapLayer, TILE_SIZE } from "../src/render/mapLayer.js";
 import { shadowGraphic } from "../src/render/shadow.js";
 import { objectDepth } from "../src/render/sprites.js";
 import { renderStructureLayer } from "../src/render/structureLayer.js";
@@ -132,6 +132,42 @@ describe("shadowGraphic", () => {
       ...world,
       tiles: [{ terrain: "forest", resource: null }],
     });
+    expect(shadow?.destroyed).toBe(true);
+  });
+
+  it("grounds the stockpile pair with one building-class shadow", () => {
+    const groundLayer = new Container();
+    const objectLayer = new Container();
+    const buildingLayer = new Container();
+    const world = {
+      ...makeTreeWorld(),
+      tiles: [{ terrain: "plains" as const, resource: null }],
+    };
+    const house: Building = {
+      kind: "house",
+      pos: { x: 0, y: 0 },
+      progress: 400,
+      complete: true,
+    };
+
+    renderMapLayer(groundLayer, objectLayer, world);
+    renderStructureLayer(buildingLayer, [house]);
+
+    const shadows = objectLayer.children.filter((child) => child instanceof Graphics);
+    const supplies = objectLayer.children.filter(
+      (child) => child instanceof Sprite && child.zIndex === objectDepth(0, "stockpile"),
+    );
+    const shadow = shadows[0];
+    const buildingShadow = buildingLayer.children[0]?.children[0];
+    expect(shadows).toHaveLength(1);
+    expect(supplies).toHaveLength(2);
+    expect(shadow?.position).toMatchObject({ x: TILE_SIZE / 2, y: TILE_SIZE - 2 });
+    expect(shadow?.width).toBe(buildingShadow?.width);
+    expect(shadow?.eventMode).toBe("none");
+    expect(shadow?.zIndex).toBeLessThan(objectDepth(0, "stockpile"));
+    expect(objectDepth(0, "stockpile") - (shadow?.zIndex ?? 0)).toBeLessThan(1);
+
+    renderMapLayer(groundLayer, objectLayer, world);
     expect(shadow?.destroyed).toBe(true);
   });
 });

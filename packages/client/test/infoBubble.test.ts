@@ -94,6 +94,16 @@ describe("info bubble text builders", () => {
     });
   });
 
+  it("identifies the resident anchor without choosing a renderer position", () => {
+    const viewModel = buildInfoBubbleViewModel({ kind: "agent", agentId: "ash" }, makeWorld(), []);
+
+    expect(viewModel).toMatchObject({
+      inspectTarget: { kind: "agent", agentId: "ash" },
+      anchor: { kind: "agent", agentId: "ash" },
+    });
+    expect(viewModel).not.toHaveProperty("placement");
+  });
+
   it("labels provider fallback and unmanaged fake plans", () => {
     expect(
       buildAgentBubbleText(makeAgent({ planSource: "fake", llmProvider: "claude" })).badge,
@@ -334,7 +344,7 @@ describe("resolveInfoBubbleTarget", () => {
       badge: "",
       lines: ["稼働中 · 食料34 / 120"],
       inspectTarget: { kind: "facility", facilityId: granary.id },
-      placement: { x: 8, top: 0, bottom: 16 },
+      anchor: { kind: "world", placement: { x: 8, top: 0, bottom: 16 } },
     });
   });
 
@@ -359,7 +369,7 @@ describe("resolveInfoBubbleTarget", () => {
       badge: "",
       lines: ["本日の通行4回"],
       inspectTarget: { kind: "trail", tileIndex: 0 },
-      placement: { x: 8, top: 0, bottom: 16 },
+      anchor: { kind: "world", placement: { x: 8, top: 0, bottom: 16 } },
     });
 
     trailWorld.trailCells[0] = {

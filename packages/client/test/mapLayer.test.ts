@@ -92,20 +92,16 @@ describe("renderMapLayer", () => {
 
     renderMapLayer(groundLayer, objectLayer, makeWorld());
 
-    expect(objectLayer.children).toHaveLength(2);
-    expect(objectLayer.children.every((child) => child instanceof Sprite)).toBe(true);
-    expect(objectLayer.children.map(({ position }) => position.x)).toEqual([
+    const supplies = objectLayer.children.filter((child) => child instanceof Sprite);
+    expect(supplies).toHaveLength(2);
+    expect(supplies.map(({ position }) => position.x)).toEqual([
       TILE_SIZE - TILE_SIZE / 4,
       TILE_SIZE + TILE_SIZE / 4,
     ]);
-    expect(
-      objectLayer.children.every(
-        ({ width, height }) => width === TILE_SIZE && height === TILE_SIZE,
-      ),
-    ).toBe(true);
-    expect(objectLayer.children.every(({ zIndex }) => zIndex === objectDepth(0, "stockpile"))).toBe(
+    expect(supplies.every(({ width, height }) => width === TILE_SIZE && height === TILE_SIZE)).toBe(
       true,
     );
+    expect(supplies.every(({ zIndex }) => zIndex === objectDepth(0, "stockpile"))).toBe(true);
   });
 
   it("preloads a basket and log instead of the beehive", () => {

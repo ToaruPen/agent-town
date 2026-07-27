@@ -9,14 +9,13 @@ import {
 import { Container, Graphics, Sprite } from "pixi.js";
 
 import { TILE_SIZE } from "./mapLayer.js";
-import { shadowGraphic } from "./shadow.js";
+import { BUILDING_SHADOW_WIDTH_RATIO, shadowGraphic } from "./shadow.js";
 import { buildingSprites, objectDepth, type WorldObjectKind } from "./sprites.js";
 
 export const CONSTRUCTION_ALPHA = 0.45;
 export const HOUSE_OBJECT_LABEL = "house-object";
 export const FACILITY_OBJECT_LABEL = "facility-object";
 export const FACILITY_PROGRESS_LABEL = "facility-progress";
-const BUILDING_SHADOW_WIDTH_RATIO = 0.95;
 
 export function facilityProgressRatio(kind: FacilityKind, progress: number): number {
   return Math.min(1, Math.max(0, progress / FACILITY_BUILD_TICKS[kind]));

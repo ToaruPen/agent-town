@@ -293,7 +293,8 @@ export function seasonGroundTint(season: Season): number;
 export function shadowGraphic(widthRatio: number): Graphics;
 ```
 
-- One shared helper, three widths: resident, tree, building.
+- One shared helper, three widths: resident, tree, building. There are four call sites:
+  resident, tree, building, and stockpile; the stockpile reuses the building-class width.
 - The shadow is a child of the object's own container where one exists, so it inherits the
   object's depth and is destroyed with it. Where no container exists, it takes the object's
   depth minus a fraction smaller than one depth step.
@@ -301,9 +302,9 @@ export function shadowGraphic(widthRatio: number): Graphics;
 
 **Steps:**
 
-1. Write `shadow.test.ts`: the graphic has one fill instruction, its alpha is below 0.3, and
-   its `eventMode` is `"none"`.
-2. Implement and attach at the three call sites.
+1. Write `shadow.test.ts`: the graphic has one fill instruction, its alpha is below 0.3, its
+   `eventMode` is `"none"`, and one building-class shadow grounds the stockpile pair.
+2. Implement and attach at the four call sites.
 
 **Verify:** `pnpm vitest run packages/client/test/shadow.test.ts`, then `just check`.
 

@@ -1,8 +1,12 @@
 import type { AgentState } from "@agent-town/shared";
-import { Container } from "pixi.js";
+import { Container, Rectangle } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
-import { interpolateAgentLayer, renderAgentLayer } from "../src/render/agentLayer.js";
+import {
+  agentPresentationBounds,
+  interpolateAgentLayer,
+  renderAgentLayer,
+} from "../src/render/agentLayer.js";
 import { TILE_SIZE } from "../src/render/mapLayer.js";
 import {
   easeFactor,
@@ -10,6 +14,7 @@ import {
   SNAP_DISTANCE_TILES,
 } from "../src/render/motion.js";
 import { agentDepth } from "../src/render/sprites.js";
+import { INFO_BUBBLE_LABEL, positionInfoBubble } from "../src/ui/infoBubble.js";
 
 const NO_INTERACTIONS = {
   selectedAgentId: null,
@@ -86,6 +91,34 @@ describe("resident interpolation", () => {
     expect(resident?.position.y).toBeGreaterThan(1 * TILE_SIZE + TILE_SIZE / 2);
     expect(resident?.position.y).toBeLessThan(2 * TILE_SIZE + TILE_SIZE / 2);
     expect(resident?.zIndex).toBe(agentDepth(2, 0));
+  });
+
+  it("pins an open info bubble to the eased resident container", () => {
+    const agentLayer = new Container();
+    const bubbleLayer = new Container();
+    const viewport = { width: 320, height: 240 };
+    render(agentLayer, [makeAgent("resident-1", 6, 4)]);
+    const resident = agentLayer.children[0];
+    if (resident === undefined) throw new Error("missing resident container");
+    const bubble = new Container();
+    bubble.label = INFO_BUBBLE_LABEL;
+    bubble.hitArea = new Rectangle(-40, -32, 80, 28);
+    bubble.position.set(resident.position.x, resident.position.y - TILE_SIZE / 2);
+    bubbleLayer.addChild(bubble);
+
+    render(agentLayer, [makeAgent("resident-1", 7, 5)]);
+    interpolateAgentLayer(agentLayer, 16);
+    const anchor = agentPresentationBounds(agentLayer, "resident-1");
+    if (anchor === null) throw new Error("missing resident presentation bounds");
+    positionInfoBubble(bubbleLayer, anchor, viewport);
+
+    expect(resident.position.x).toBeGreaterThan(6 * TILE_SIZE + TILE_SIZE / 2);
+    expect(resident.position.x).toBeLessThan(7 * TILE_SIZE + TILE_SIZE / 2);
+    expect(resident.position.y).toBeGreaterThan(4 * TILE_SIZE + TILE_SIZE / 2);
+    expect(resident.position.y).toBeLessThan(5 * TILE_SIZE + TILE_SIZE / 2);
+    expect(bubbleLayer.children[0]).toBe(bubble);
+    expect(bubble?.position.x).toBe(resident.position.x);
+    expect(bubble?.position.y).toBe(resident.position.y - TILE_SIZE / 2);
   });
 
   it("snaps a move beyond the walking threshold", () => {
