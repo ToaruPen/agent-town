@@ -1,5 +1,5 @@
 import { DAYS_PER_SEASON, TICKS_PER_DAY, type WorldState } from "@agent-town/shared";
-import { Container, Sprite } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import { renderMapLayer, TILE_SIZE } from "../src/render/mapLayer.js";
@@ -63,6 +63,28 @@ function multiplyTint(left: number, right: number): number {
   return (red << 16) | (green << 8) | blue;
 }
 
+interface FilledRectangle {
+  rectangle: number[];
+  color: number;
+  alpha: number;
+}
+
+function filledRectangles(graphics: Graphics): FilledRectangle[] {
+  return graphics.context.instructions.flatMap((instruction) => {
+    if (instruction.action !== "fill") return [];
+    return instruction.data.path.instructions.flatMap((pathInstruction) => {
+      if (pathInstruction.action !== "rect") return [];
+      return [
+        {
+          rectangle: pathInstruction.data.slice(0, 4),
+          color: instruction.data.style.color,
+          alpha: instruction.data.style.alpha,
+        },
+      ];
+    });
+  });
+}
+
 describe("renderMapLayer", () => {
   it("shows the stockpile as two native-size supplies side by side", () => {
     const groundLayer = new Container();
@@ -106,6 +128,69 @@ describe("renderMapLayer", () => {
     expect(terrainSprites[0]?.tint).toBe(
       multiplyTint(terrainTint("forest"), seasonGroundTint("winter")),
     );
+  });
+
+  it("lays a pale sheet over the whole ground in winter only", () => {
+    const winterGround = new Container();
+    const winterObjects = new Container();
+    renderMapLayer(winterGround, winterObjects, seasonalWorld(3));
+
+    const snow = winterGround.children.at(-1);
+    expect(snow).toBeInstanceOf(Graphics);
+    if (!(snow instanceof Graphics)) throw new Error("missing winter snow sheet");
+    expect(filledRectangles(snow)).toContainEqual({
+      rectangle: [0, 0, 3 * TILE_SIZE, TILE_SIZE],
+      color: 0xe8f0f8,
+      alpha: 0.35,
+    });
+
+    const springGround = new Container();
+    renderMapLayer(springGround, new Container(), seasonalWorld(0));
+    expect(
+      springGround.children.filter((child) => child instanceof Graphics).flatMap(filledRectangles),
+    ).not.toContainEqual({
+      rectangle: [0, 0, 3 * TILE_SIZE, TILE_SIZE],
+      color: 0xe8f0f8,
+      alpha: 0.35,
+    });
+  });
+
+  it("scatters two stable snow grain sizes across every winter tile", () => {
+    const firstGround = new Container();
+    const secondGround = new Container();
+    renderMapLayer(firstGround, new Container(), seasonalWorld(3));
+    renderMapLayer(secondGround, new Container(), seasonalWorld(3));
+
+    const firstSnow = firstGround.children.at(-1);
+    const secondSnow = secondGround.children.at(-1);
+    if (!(firstSnow instanceof Graphics) || !(secondSnow instanceof Graphics)) {
+      throw new Error("missing winter snow sheet");
+    }
+    const isSnowSpeck = ({ rectangle }: FilledRectangle): boolean => {
+      const [, , width, height] = rectangle;
+      return width === height && (width === 1 || width === 2);
+    };
+    const firstSpecks = filledRectangles(firstSnow).filter(isSnowSpeck);
+    const secondSpecks = filledRectangles(secondSnow).filter(isSnowSpeck);
+
+    expect(firstSpecks).toEqual(secondSpecks);
+    expect(firstSpecks).toHaveLength(6);
+    for (let tileIndex = 0; tileIndex < 3; tileIndex += 1) {
+      const tileStart = tileIndex * TILE_SIZE;
+      const tileSpecks = firstSpecks.filter(({ rectangle }) => {
+        const [x = 0, , size = 0] = rectangle;
+        return x >= tileStart && x + size <= tileStart + TILE_SIZE;
+      });
+      expect(new Set(tileSpecks.map(({ rectangle }) => rectangle[2]))).toEqual(new Set([1, 2]));
+    }
+    expect(
+      new Set(
+        firstSpecks.map(({ rectangle }) => {
+          const [x = 0, y = 0] = rectangle;
+          return `${x % TILE_SIZE},${y}`;
+        }),
+      ).size,
+    ).toBeGreaterThan(2);
   });
 
   it("drains winter foliage while resource markers keep their saturation in every season", () => {

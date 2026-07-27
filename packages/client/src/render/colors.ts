@@ -9,6 +9,8 @@ export const WATER_SHALLOW_COLOR = 0x5f9eb0;
 export const WATER_FOAM_COLOR = 0xb8d8d5;
 export const ROCK_BOULDER_COLOR = 0x596a78;
 export const ROCK_BOULDER_HIGHLIGHT = 0x83919a;
+export const SNOW_SHEET_COLOR = 0xe8f0f8;
+export const SNOW_SPECK_COLOR = 0xf8fcff;
 export const TRAIL_COLORS = {
   trace: 0x9a835f,
   trail: 0x876a43,

@@ -13,7 +13,7 @@ import {
   undergrowthSpritePath,
   type WorldObjectKind,
 } from "./sprites.js";
-import { drawRockCluster, drawWater } from "./terrainDecor.js";
+import { drawRockCluster, drawSnowSheet, drawWater } from "./terrainDecor.js";
 
 export { TILE_SIZE } from "./sprites.js";
 
@@ -130,6 +130,11 @@ export function renderMapLayer(
   const rocks = new Graphics();
   drawRockCluster(rocks, state);
   groundLayer.addChild(rocks);
+  if (season === "winter") {
+    const snow = new Graphics();
+    drawSnowSheet(snow, state);
+    groundLayer.addChild(snow);
+  }
 
   const stockpileX = state.stockpile.pos.x * TILE_SIZE;
   const stockpileY = state.stockpile.pos.y * TILE_SIZE;
