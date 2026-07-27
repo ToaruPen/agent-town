@@ -243,6 +243,67 @@ justify an abstraction. The `just test` baseline of **75 files / 989 tests** mus
 step is that the author cannot be the only reviewer, so reviewing the cleanup diff is the useful ordering.
 The PR step is deliberately not run: publishing is the owner's call.
 
+## What the deslop sweep found
+
+Three passes merged: `chore-deslop`, `chore-deslop-shared`, `chore-deslop-server`. Net **44 files,
++215/−627** — 412 lines removed — with the suite unchanged at 75 files / 989 tests and every touched test
+file holding its exact count. The largest single win was 219 lines of an identical Agent fixture duplicated
+across eleven server test files, replaced by a 24-line shared one.
+
+The rule that earned itself: **a genuine defect is a report, never a cleanup commit.** Three came back.
+
+- **`sim/engine.ts` wrote to the console**, which violates the no-I/O rule for the deterministic core. Fixed
+  with a test, as its own commit: `applyPlan` for an unknown agent now throws instead of warning and
+  returning. Worth knowing what that does downstream — the throw lands in `thoughtBroker`'s existing
+  `.catch(() => this.failRequest(...))`, so there is no deadlock and no unhandled rejection, but a benign
+  race (an agent dying between an LLM request and its response — `engine.ts:141` splices the dead out of
+  `world.agents`) is now recorded as a **provider** planning failure. The I/O moved out of `sim/` and into
+  `llm/`, where it is allowed, which is the right architecture; conflating "the agent is gone" with "the
+  provider failed" is the part left to improve.
+- **`protocol.ts`'s runtime validation is far shallower than the contract it advertises.** Measured:
+  `decodeServerMessage` returns accepted for `nations: [null]`, for a world map whose every field is `null`,
+  and for a history missing required fields. The client trusts `decode`, so this is the boundary between
+  the two teams admitting values that are type-invalid on the other side.
+- **Nothing in `sim/` performs I/O today, and no test enforces that.** The pass confirmed zero console,
+  stream, `Date` or I/O imports across `sim/` — and confirmed there is no guard that would fail if one
+  reappeared. The absence is the finding.
+
+One cleanup I reverted. The shared pass removed the `biome-ignore` holding `Position` on one line as a
+meaningless suppression; its comment stated a reason, and the reason checks out — the one-line form is
+verbatim what the frozen contract block carries at `plans/2026-07-22-m1-living-aquarium.md:181`. Restored in
+`7eb4996` with the file and line named, so the next reader can check the claim rather than trust it. **A
+suppression that documents why it exists, whose why is verifiable, is not slop.**
+
+Two "leave it alone" calls were right for the same reason, and both are worth imitating. `worldMapFixture.ts`
+is genuinely identical in three packages and stayed — two of the three were out of scope and being edited
+live. `spatialFixture.ts` looked like the same duplication and was not: only the trail fixture is shared,
+while the facility and demand fixtures have diverged in purpose, so only the trail one moved. Not unifying a
+duplicate that has diverged is as much a result as removing one that has not.
+
+## Autopilot does not fill the gap — it always decides
+
+C1-4's worker falsified the assumption `hud.md` §3.2 flagged for the owner, with a pre-registered falsifier
+that never fired. Measured:
+
+| `autoPilot` | `queued` | what commits |
+|---|---|---|
+| true | anything | `chancellorChoice`. The queued order **waits** — neither obeyed nor discarded |
+| false | non-null | the queued order |
+| false | null | nothing |
+
+`sim/nation/engine.ts`'s `selectDirective` tests `autoPilot` before it ever reads the queued list, and the
+chancellor branch returns `consumedQueuedDirectiveId: null`. Live at x8, a queued order sat through three
+boundaries with autopilot on and committed at the first boundary after it went off.
+
+So there are **four** slot states, and the fourth is the one a new player meets first: `bootstrap.ts:134`
+starts nations with `autoPilot: true` and `wsServer.selectNation` does not touch it, so **a brand-new
+player's first order is silently held** until they find a toggle they have no reason to look for.
+
+This is a spec/implementation divergence, not a client question. Spec line 184 —
+`プレイヤーの国も、指示がない季は宰相が決める` — reads as fill-the-gap; `engine.ts` implements
+always-chancellor. **One of the two is wrong and it is the owner's call which.** If the engine changes, one
+test in `nationDashboardViewModel.test.ts` is what flips.
+
 ## Queued cleanups
 
 Small, independent, and none of them blocking. Each is here because it was found while verifying something
@@ -253,6 +314,9 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Delete `WORLD_MAP_CITY_RADIUS_PX` and `WORLD_MAP_CAPITAL_RADIUS_PX` | `shared/src/constants.ts` | Was blocked by doc references claiming they were current; those are corrected, so it is unblocked now |
 | Derive the prosperity expectation instead of pasting it | `server/test/nationProsperity.test.ts` | `toBeCloseTo(0.321_428_571_428_571_45)` is `225 / NATION_PROSPERITY_PRODUCTION_REFERENCE`; correct today, but needs re-pasting on every retune, and the derivation is invisible |
 | Guard Node *globals* in client `src/` | `client/test/assetConformance.test.ts` | C1-10 already blocks `from "node:"` imports; `types: ["node"]` also admits bare `process`/`Buffer`/`__dirname`, which no rule catches. **Unowned.** It was asked of the C1-10 worker, which then died on a 529 before replying, so the request may never have been read — see "Assignments outlive agents" below |
+| Guard `sim/` against I/O mechanically | `server/test/` | Nothing in `sim/` performs I/O today and no test would fail if one reappeared. The deslop pass confirmed both. **Unowned** |
+| Distinguish a vanished agent from a failed provider | `server/src/llm/thoughtBroker.ts:122` | `applyPlan` now throws for an unknown agent, and the existing catch books it as a provider planning failure. Nothing failed — the agent died mid-request. **Unowned** |
+| Deepen `decodeServerMessage`'s validation to match its contract | `shared/src/protocol.ts` | It accepts `nations: [null]`, an all-`null` world map, and a history missing required fields. Needs shape-level work and a decision about how strict the boundary should be, so it is a task rather than a chore |
 | Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
 | Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
 | Import the shared city tier constant | `client/src/ui/worldCityViewModel.ts` | Replaces the local `as const` copy; values identical, type widens harmlessly (checked) |
