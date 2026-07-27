@@ -76,9 +76,31 @@ nothing made optional.
   global `testTimeout` in `vitest.config.ts`, so a slow test states its own budget where a reader sees it.
 - The farming plan's Task 10 is closed except for two items that need the owner: a browser judgement
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
-- Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation, Tasks 1–5 merged,
-  Task 7 balance in flight) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client, C1-1,
-  C1-2 and C1-6a merged).
+- Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
+  Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
+  C1-1, C1-2, C1-6a and C1-10 merged).
+- **The simulation is complete; the N1 slice is not.** The plan's own completion criteria include "opening
+  the browser shows live nations, a moving ranking, a working directive panel and a working speed control",
+  and `main.ts` is still 14 lines. C1-3 then C1-6b is what closes the slice. Of the other criteria,
+  same-seed reproducibility and seed *divergence* are both genuinely tested —
+  `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158` — so only the browser one is outstanding.
+- **The balance is tuned to a window the game leaves in about six minutes, and this is the next balance
+  task.** Task 7's criteria sample year 20 only and impose a floor, so a spread that decays passes them.
+  Measured at seed 42: the top-to-bottom prosperity spread runs 149.9 % at year 5, 103.3 % at year 10,
+  59.0 % at year 15, 35.0 % at year 20 — roughly halving every five years. Extending the smoke run to 60
+  years takes it to **9.60 %, below the plan's own 15 % floor, and the script's own assertion throws.**
+  Leadership still changes exactly once, and peak food stock grows from 29 632 to 251 769, which suggests
+  food accumulates with no sink rather than reaching a steady state. For scale: the live x8 run measured
+  ≈70 ticks/second against 1200 ticks/year, so a year is ≈17 s and year 20 arrives in under six minutes.
+  None of this is a defect in `d4c87b2`, which met every criterion it was given — it is the criteria being
+  too short-horizoned. A follow-up should assert a spread floor at several horizons, not one.
+- **Tier 1 empties from year 15 onward**, so the smallest city glyph never appears in a mature game.
+  Per-tier city counts at seed 42 are `[4,4,0,0]` at bootstrap, `[2,5,1,0]` at year 5, `[0,5,2,1]` at
+  year 15 and `[0,4,2,2]` at year 20, with populations spanning 3 408–10 024 by then. Three of the four
+  tiers stay occupied throughout, so the thresholds are not collapsing — but C1-6b should know the bottom
+  glyph is an early-game-only sight.
+- `packages/server/scripts/` is in neither tsconfig `include`, so the balance smoke script is not
+  type-checked by `just check` and vitest does not collect it either.
 - A shared-chores commit (`c8a7c47`) sits between them. It landed `NATION_CITY_TIER_MIN_POPULATIONS`, so
   the client's provisional copy in `worldCityViewModel.ts` can now be replaced by an import. The values match
   exactly. The types do not: the client's copy is `as const`, the shared one is a mutable `number[]`, so the
@@ -111,6 +133,21 @@ nothing made optional.
   dots and borders use holds a 40.86 floor. The largest coloured region therefore has the least separation,
   inverting the point of the banner system. Folded into C1-6b, which already owns the fill alpha.
 - No LLM work in N1. Ruler LLMs arrive in N4.
+
+## Queued cleanups
+
+Small, independent, and none of them blocking. Each is here because it was found while verifying something
+else, and would otherwise be lost.
+
+| what | where | why it is not done yet |
+|---|---|---|
+| Delete `WORLD_MAP_CITY_RADIUS_PX` and `WORLD_MAP_CAPITAL_RADIUS_PX` | `shared/src/constants.ts` | Was blocked by doc references claiming they were current; those are corrected, so it is unblocked now |
+| Derive the prosperity expectation instead of pasting it | `server/test/nationProsperity.test.ts` | `toBeCloseTo(0.321_428_571_428_571_45)` is `225 / NATION_PROSPERITY_PRODUCTION_REFERENCE`; correct today, but needs re-pasting on every retune, and the derivation is invisible |
+| Guard Node *globals* in client `src/` | `client/test/assetConformance.test.ts` | C1-10 already blocks `from "node:"` imports; `types: ["node"]` also admits bare `process`/`Buffer`/`__dirname`, which no rule catches. Asked of the C1-10 worker |
+| Import the shared city tier constant | `client/src/ui/worldCityViewModel.ts` | Replaces the local `as const` copy; values identical, type widens harmlessly (checked) |
+| Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
+| Bring the repo root under `tsc` | root `vitest.config.ts`, `test/` | `pnpm-workspace.yaml` lists only `packages/*`, so `pnpm -r exec tsc` never reaches the root |
+| Make server's Node types a direct dependency | `server/package.json` | Resolves `node:*` only transitively via `@types/ws`; drop or bump that and server tests silently lose Node types |
 
 ## Per-task loop
 
