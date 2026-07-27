@@ -4,7 +4,7 @@ import type { WorldHistory } from "./history.js";
 export type NationId = string; // equals Polity.id
 export type DirectiveId = string;
 export type Season = (typeof SEASONS)[number];
-export type NationController = "player" | "agent";
+type NationController = "player" | "agent";
 export type SpeedMultiplier = 0 | 1 | 2 | 4 | 8; // 0 = paused
 
 export interface NationStocks {

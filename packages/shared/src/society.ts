@@ -1,5 +1,5 @@
 export type AgentId = string;
-export type EventId = string;
+type EventId = string;
 
 export interface AgentDesires extends Record<string, number> {
   foodSecurity: number;

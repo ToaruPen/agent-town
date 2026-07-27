@@ -3,14 +3,14 @@ import type { Position } from "./world.js";
 
 export type FacilityKind = "communalGranary" | "grainMarket" | "rationDepot";
 
-export type SpatialDemandSource =
+type SpatialDemandSource =
   | { kind: "household"; id: string }
   | { kind: "livelihood"; id: string }
   | { kind: "institution"; id: string }
   | { kind: "faith"; id: string }
   | { kind: "externalPressure"; id: string };
 
-export type SpatialDemandStatus =
+type SpatialDemandStatus =
   | "seekingSite"
   | "awaitingMaterials"
   | "building"
@@ -26,7 +26,7 @@ export type SiteFactor =
   | "openSpace"
   | "accessEquality";
 
-export interface SiteContribution {
+interface SiteContribution {
   factor: SiteFactor;
   value: number;
   weightedScore: number;
@@ -53,7 +53,7 @@ export interface SpatialDemand {
 
 export type FacilityBlockedReason = "unreachable" | "full" | "noTradeRoute" | "maintenanceOverdue";
 
-export interface FacilityDailyStats {
+interface FacilityDailyStats {
   visits: number;
   foodPreserved: number;
   foodImported: number;

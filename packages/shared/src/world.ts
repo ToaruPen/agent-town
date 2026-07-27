@@ -15,8 +15,10 @@ export interface Tile {
   readonly resourceOrigin?: ResourceKind;
 }
 
-// biome-ignore format: Preserve the contract's verbatim one-line declaration.
-export interface Position { x: number; y: number }
+export interface Position {
+  x: number;
+  y: number;
+}
 
 export type AgentActivity =
   | { kind: "idle" }
