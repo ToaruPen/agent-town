@@ -23,6 +23,7 @@ import { createRng } from "../src/sim/rng.js";
 import { generateWorld } from "../src/sim/worldGen.js";
 
 const SEED = 42;
+/** Measured with housing demand held constant; this is not a settlement cold-start guarantee. */
 const TEN_MINUTE_TICK_BOUND = TICK_RATE * 60 * 10;
 /** Below institution pressure yet far above the four days that would end starvation. */
 const SCARCE_START_FOOD = 40;
@@ -156,7 +157,11 @@ function isLoopClosed(world: WorldState, kind: FacilityKind): boolean {
   return hasRecordedEffectAndCost(world, facility) && hasWornTrail(world);
 }
 
-/** Keeps this social scenario's one-house workload without leaving a second house in demand. */
+/**
+ * Starts with one house already standing to hold housing demand constant. Without it, residents
+ * spend wood on a second house first, so the grain-market and ration-control loops miss
+ * TEN_MINUTE_TICK_BOUND.
+ */
 function addRemoteCompletedHouse(world: WorldState): void {
   for (let index = world.tiles.length - 1; index >= 0; index -= 1) {
     const pos = { x: index % world.width, y: Math.floor(index / world.width) };
