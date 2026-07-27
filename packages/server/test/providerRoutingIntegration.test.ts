@@ -1,15 +1,44 @@
 import type { AgentState, LlmProvider } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
+import { llmAgentIdsForWorld, parseLlmAgentSelection } from "../src/llm/llmAgentSelection.js";
+import { LlmPlanner } from "../src/llm/llmPlanner.js";
+import { llmProviderForAgent, parseLlmProviderRoutes } from "../src/llm/llmProviderRouting.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
-import { createThoughtBroker } from "../src/net/wsServer.js";
-import { createEngine } from "../src/sim/engine.js";
+import { ThoughtBroker } from "../src/llm/thoughtBroker.js";
+import { createEngine, type Engine } from "../src/sim/engine.js";
 import { FakePlanner } from "../src/sim/fakePlanner.js";
 import { createRng } from "../src/sim/rng.js";
 import { generateWorld } from "../src/sim/worldGen.js";
 
 function runner(run: LlmRunner["run"]): LlmRunner {
   return { run };
+}
+
+interface TestBrokerOptions {
+  enabled: boolean;
+  engine: Engine;
+  fallback: FakePlanner;
+  llmAgents?: string;
+  llmRoutes?: string;
+  runners?: Readonly<Record<LlmProvider, LlmRunner>>;
+}
+
+function createThoughtBroker(opts: TestBrokerOptions): ThoughtBroker | undefined {
+  if (!opts.enabled) return undefined;
+  if (opts.runners === undefined) throw new Error("enabled test broker requires runners");
+  const selection = parseLlmAgentSelection(opts.llmAgents, opts.engine.world.agents);
+  const routes = parseLlmProviderRoutes(opts.llmRoutes, opts.engine.world.agents, selection);
+  const planners: Readonly<Record<LlmProvider, LlmPlanner>> = {
+    claude: new LlmPlanner("claude", opts.runners.claude, opts.fallback),
+    codex: new LlmPlanner("codex", opts.runners.codex, opts.fallback),
+  };
+  return new ThoughtBroker({
+    engine: opts.engine,
+    llmAgentIds: () => llmAgentIdsForWorld(selection, opts.engine.world.agents),
+    providerForAgent: (agent) => llmProviderForAgent(routes, agent),
+    planFn: (world, agent, provider) => planners[provider].planAsync(world, agent),
+  });
 }
 
 function setup() {

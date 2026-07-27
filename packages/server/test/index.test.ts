@@ -12,6 +12,7 @@ const CONFIG_ENV_NAMES = [
   "LLM_PLANNER",
   "LLM_ROUTES",
   "PORT",
+  "SEED",
   "STATIC_DIR",
 ] as const;
 
@@ -23,42 +24,45 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 
 describe("server startup configuration", () => {
-  it("passes configured Claude model, cooldown, and hourly call budget to the server", async () => {
-    vi.stubEnv("LLM_PLANNER", "1");
-    vi.stubEnv("LLM_CLAUDE_MODEL", "sonnet");
-    vi.stubEnv("LLM_COOLDOWN_TICKS", "2400");
-    vi.stubEnv("LLM_MAX_CALLS_PER_HOUR", "12");
+  it("passes a configured positive SEED to the nation server", async () => {
+    vi.stubEnv("SEED", "4242");
+    vi.stubEnv("STATIC_DIR", "packages/client/dist");
 
     await import("../src/index.js");
 
     expect(startServer).toHaveBeenCalledOnce();
     expect(startServer).toHaveBeenCalledWith({
       port: 8790,
-      seed: expect.any(Number),
-      llmPlannerEnabled: true,
-      llmClaudeModel: "sonnet",
-      llmCooldownTicks: 2400,
-      llmMaxCallsPerHour: 12,
+      seed: 4242,
+      staticDir: "packages/client/dist",
     });
   });
 
-  it.each([
-    ["LLM_COOLDOWN_TICKS", "0"],
-    ["LLM_COOLDOWN_TICKS", "-1"],
-    ["LLM_COOLDOWN_TICKS", "1.5"],
-    ["LLM_MAX_CALLS_PER_HOUR", "many"],
-    ["LLM_MAX_CALLS_PER_HOUR", ""],
-    ["LLM_MAX_CALLS_PER_HOUR", "9007199254740992"],
-  ] as const)("rejects invalid %s=%j with a clear startup error", async (name, value) => {
-    vi.stubEnv(name, value);
+  it("keeps a time-based seed when SEED is unset", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(2_147_483_649);
 
-    await expect(import("../src/index.js")).rejects.toThrow(
-      `invalid ${name}: ${value}; expected a positive integer`,
-    );
-    expect(startServer).not.toHaveBeenCalled();
+    await import("../src/index.js");
+
+    expect(startServer).toHaveBeenCalledWith({
+      port: 8790,
+      seed: 1,
+    });
   });
+
+  it.each(["0", "-1", "1.5", "many", "", "9007199254740992"])(
+    "rejects invalid SEED=%j with a clear startup error",
+    async (value) => {
+      vi.stubEnv("SEED", value);
+
+      await expect(import("../src/index.js")).rejects.toThrow(
+        `invalid SEED: ${value}; expected a positive integer`,
+      );
+      expect(startServer).not.toHaveBeenCalled();
+    },
+  );
 });

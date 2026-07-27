@@ -1,15 +1,27 @@
-import {
-  type ServerMessage,
-  type SpatialDemand,
-  TRAIL_LEVEL_WEAR,
-  type TrailCell,
-  type WorldState,
-} from "@agent-town/shared";
+import type { NationState, NationWorldState, ServerMessage } from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { connect, getWebSocketUrl, type WebSocketLike } from "../src/net/wsClient.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { SPRITE_PATHS } from "../src/render/sprites.js";
+
+const pixiShell = vi.hoisted(() => {
+  const canvas = {};
+  return {
+    canvas,
+    appendChild: vi.fn(),
+    init: vi.fn(async () => undefined),
+    load: vi.fn(async () => undefined),
+  };
+});
+
+vi.mock("pixi.js", () => ({
+  Application: class {
+    readonly canvas = pixiShell.canvas;
+    readonly init = pixiShell.init;
+  },
+  Assets: { load: pixiShell.load },
+  TextureStyle: { defaultOptions: { scaleMode: "linear" } },
+}));
 
 class MockWebSocket implements WebSocketLike {
   onmessage: ((event: { data: string }) => void) | null = null;
@@ -20,291 +32,139 @@ class MockWebSocket implements WebSocketLike {
   }
 }
 
-function makeWorld(): WorldState {
+function nationFixture(overrides: Partial<NationState> = {}): NationState {
+  return {
+    id: "realm",
+    controller: "player",
+    autoPilot: false,
+    stocks: { food: 100, materials: 80, wealth: 60 },
+    cities: [{ cityId: "capital", population: 1_000, developmentLevel: 0 }],
+    territoryCellCount: 10,
+    population: 1_000,
+    stability: 70,
+    culture: 20,
+    foodProduction: 10,
+    materialProduction: 5,
+    activeDirectives: [],
+    prosperity: {
+      population: 0.2,
+      production: 0.3,
+      wealth: 0.4,
+      stability: 0.7,
+      culture: 0.2,
+      total: 340,
+    },
+    lastReport: null,
+    ...overrides,
+  };
+}
+
+function worldFixture(): NationWorldState {
   return {
     tick: 0,
-    width: 2,
-    height: 1,
-    tiles: [
-      { terrain: "plains", resource: { kind: "food", amount: 3 } },
-      { terrain: "forest", resource: { kind: "wood", amount: 5 } },
-    ],
-    agents: [],
-    stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [
-      {
-        id: "collective-grainMarket-1",
-        purpose: "grainMarket",
-        supporterIds: ["old-agent"],
-        representativeId: "old-agent",
-        cohesion: 0.5,
-        formedAtTick: 1,
-        provenance: {
-          causedByEventIds: [],
-          proposedByAgentIds: ["old-agent"],
-          supportedByAgentIds: ["old-agent"],
-          opposedByAgentIds: [],
-          decidedAtTick: 1,
-        },
-      },
-    ],
-    institutions: [
-      {
-        id: "institution-grainMarket-2",
-        kind: "grainMarket",
-        supporterIds: ["old-agent"],
-        opposedIds: [],
-        establishedAtTick: 2,
-        provenance: {
-          causedByEventIds: [],
-          proposedByAgentIds: ["old-agent"],
-          supportedByAgentIds: ["old-agent"],
-          opposedByAgentIds: [],
-          decidedAtTick: 2,
-        },
-      },
-    ],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(2, 1),
+    year: 1,
+    season: "spring",
+    speed: 1,
     history: {
-      startYear: 0,
+      startYear: -200,
       currentYear: 0,
       polities: [],
       events: [],
       landmarks: [],
       settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
+      worldMap: {
+        width: 1,
+        height: 1,
+        cells: [{ terrain: "plains", polityId: "realm" }],
+        cities: [],
+        tradeRoutes: [],
+        borderChanges: [],
+        settlementFrontierPos: { x: 0, y: 0 },
+      },
     },
-  };
-}
-
-/** The single cell a hauling route wore in, which is all a sparse update carries. */
-function makeWornTrailCellFixture(): TrailCell {
-  return {
-    ...makeTrailCellsFixture(1, 1)[0],
-    wear: TRAIL_LEVEL_WEAR.trail,
-    level: "trail",
-    passagesToday: 8,
-    dominantPurpose: "facilityService",
-    causedByFacilityIds: ["facility-institution-communalGranaryStore-200"],
-    lastUsedAtTick: 200,
-  } as TrailCell;
-}
-
-function makeDemandFixture(): SpatialDemand {
-  return {
-    id: "demand-institution-communalGranaryStore-200",
-    facilityKind: "communalGranary",
-    source: { kind: "institution", id: "institution-communalGranaryStore-200" },
-    supporterIds: ["ash"],
-    requiredWood: 15,
-    requiredLabor: 240,
-    status: "building",
-    blockedReason: null,
-    site: { x: 1, y: 0 },
-    siteRationale: { score: 1, contributions: [] },
-    provenance: {
-      causedByEventIds: [],
-      proposedByAgentIds: ["ash"],
-      supportedByAgentIds: ["ash"],
-      opposedByAgentIds: [],
-      decidedAtTick: 4,
-    },
-  };
-}
-
-function makeUpdate(
-  overrides: Pick<
-    Extract<ServerMessage, { type: "update" }>,
-    "spatialDemands" | "changedTrailCells"
-  >,
-): ServerMessage {
-  return {
-    type: "update",
-    tick: 5,
-    agents: [],
-    stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    changedTiles: [],
-    ...overrides,
+    nations: [nationFixture()],
+    playerNationId: "realm",
   };
 }
 
 describe("connect", () => {
-  it("applies welcome and update messages to its local world state", () => {
+  it("holds the welcome world and replaces nation state at a season boundary", () => {
     const socket = new MockWebSocket();
     const factory = vi.fn(() => socket);
     const onWelcome = vi.fn();
     const onUpdate = vi.fn();
+    const onOrders = vi.fn();
+    const nextNation = nationFixture({ population: 1_050 });
 
-    connect("ws://example.test", { onWelcome, onUpdate }, factory);
-    socket.emit({ type: "welcome", state: makeWorld() });
+    connect("ws://example.test", { onWelcome, onUpdate, onOrders }, factory);
+    socket.emit({ type: "welcome", state: worldFixture() });
     socket.emit({
-      type: "update",
-      tick: 4,
-      agents: [
-        {
-          id: "ash",
-          name: "トネリコ",
-          pos: { x: 1, y: 0 },
-          carrying: { kind: "wood", amount: 2 },
-          activity: { kind: "idle" },
-          tasks: [],
-          planSource: "llm",
-          llmProvider: "claude",
-          thinking: true,
-          lastThought: null,
-          desires: { foodSecurity: 0 },
-          lastHungerInterruptTick: null,
-          hunger: 80,
-          fatigue: 70,
-          health: 90,
-          rationStrain: 0,
-          lastRationTick: null,
-        },
-      ],
-      stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
-      buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
-      deaths: [{ name: "シラカバ", tick: 4, cause: "starvation" }],
-      collectives: [
-        {
-          id: "collective-communalGranaryStore-3",
-          purpose: "communalGranaryStore",
-          supporterIds: ["ash"],
-          representativeId: "ash",
-          cohesion: 0.78,
-          formedAtTick: 3,
-          provenance: {
-            causedByEventIds: ["event-scarcity-1"],
-            proposedByAgentIds: ["ash"],
-            supportedByAgentIds: ["ash"],
-            opposedByAgentIds: [],
-            decidedAtTick: 3,
-          },
-        },
-      ],
-      institutions: [
-        {
-          id: "institution-communalGranaryStore-4",
-          kind: "communalGranaryStore",
-          supporterIds: ["ash"],
-          opposedIds: [],
-          establishedAtTick: 4,
-          provenance: {
-            causedByEventIds: ["event-scarcity-1"],
-            proposedByAgentIds: ["ash"],
-            supportedByAgentIds: ["ash"],
-            opposedByAgentIds: [],
-            decidedAtTick: 4,
-          },
-        },
-      ],
-      changedTiles: [{ index: 1, tile: { terrain: "forest", resource: null } }],
-      spatialDemands: [],
-      changedTrailCells: [],
+      type: "season",
+      tick: 300,
+      year: 1,
+      season: "summer",
+      nations: [nextNation],
+      changedCells: [],
     });
 
-    const welcomedState = onWelcome.mock.calls[0]?.[0];
-    const updatedState = onUpdate.mock.calls[0]?.[0];
+    const welcomed = onWelcome.mock.calls[0]?.[0];
+    const updated = onUpdate.mock.calls[0]?.[0];
     expect(factory).toHaveBeenCalledWith("ws://example.test");
-    expect(onWelcome).toHaveBeenCalledWith(expect.objectContaining({ tick: 0 }));
-    expect(updatedState?.history).toBe(welcomedState?.history);
-    expect(updatedState?.history.worldMap).toEqual(makeWorld().history.worldMap);
-    expect(onUpdate).toHaveBeenCalledWith({
-      ...makeWorld(),
-      tick: 4,
-      agents: [
-        {
-          id: "ash",
-          name: "トネリコ",
-          pos: { x: 1, y: 0 },
-          carrying: { kind: "wood", amount: 2 },
-          activity: { kind: "idle" },
-          tasks: [],
-          planSource: "llm",
-          llmProvider: "claude",
-          thinking: true,
-          lastThought: null,
-          desires: { foodSecurity: 0 },
-          lastHungerInterruptTick: null,
-          hunger: 80,
-          fatigue: 70,
-          health: 90,
-          rationStrain: 0,
-          lastRationTick: null,
-        },
-      ],
-      stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
-      buildings: [{ kind: "house", pos: { x: 1, y: 0 }, progress: 400, complete: true }],
-      deaths: [{ name: "シラカバ", tick: 4, cause: "starvation" }],
-      collectives: [
-        {
-          id: "collective-communalGranaryStore-3",
-          purpose: "communalGranaryStore",
-          supporterIds: ["ash"],
-          representativeId: "ash",
-          cohesion: 0.78,
-          formedAtTick: 3,
-          provenance: {
-            causedByEventIds: ["event-scarcity-1"],
-            proposedByAgentIds: ["ash"],
-            supportedByAgentIds: ["ash"],
-            opposedByAgentIds: [],
-            decidedAtTick: 3,
-          },
-        },
-      ],
-      institutions: [
-        {
-          id: "institution-communalGranaryStore-4",
-          kind: "communalGranaryStore",
-          supporterIds: ["ash"],
-          opposedIds: [],
-          establishedAtTick: 4,
-          provenance: {
-            causedByEventIds: ["event-scarcity-1"],
-            proposedByAgentIds: ["ash"],
-            supportedByAgentIds: ["ash"],
-            opposedByAgentIds: [],
-            decidedAtTick: 4,
-          },
-        },
-      ],
-      tiles: [
-        { terrain: "plains", resource: { kind: "food", amount: 3 } },
-        { terrain: "forest", resource: null },
-      ],
+    expect(welcomed).toEqual(worldFixture());
+    expect(updated).toEqual({
+      ...worldFixture(),
+      tick: 300,
+      year: 1,
+      season: "summer",
+      nations: [nextNation],
     });
+    expect(updated.history).toBe(welcomed.history);
+    expect(onOrders).not.toHaveBeenCalled();
   });
 
-  it("replaces only the trail cells an update names and keeps the rest by reference", () => {
+  it("applies a light clock while retaining history and nations by reference", () => {
     const socket = new MockWebSocket();
     const onWelcome = vi.fn();
     const onUpdate = vi.fn();
-    const worn = makeWornTrailCellFixture();
-    const demand = makeDemandFixture();
 
-    connect("ws://example.test", { onWelcome, onUpdate }, () => socket);
-    socket.emit({ type: "welcome", state: makeWorld() });
-    socket.emit(
-      makeUpdate({ spatialDemands: [demand], changedTrailCells: [{ index: 1, cell: worn }] }),
-    );
-    socket.emit(makeUpdate({ spatialDemands: [demand], changedTrailCells: [] }));
+    connect("ws://example.test", { onWelcome, onUpdate, onOrders: vi.fn() }, () => socket);
+    socket.emit({ type: "welcome", state: worldFixture() });
+    socket.emit({
+      type: "clock",
+      tick: 17,
+      year: 1,
+      season: "spring",
+      speed: 4,
+    });
 
     const welcomed = onWelcome.mock.calls[0]?.[0];
-    const first = onUpdate.mock.calls[0]?.[0];
-    const second = onUpdate.mock.calls[1]?.[0];
-    expect(first?.trailCells[0]).toBe(welcomed?.trailCells[0]);
-    expect(first?.trailCells[1]).toEqual(worn);
-    expect(first?.trailCells).not.toBe(welcomed?.trailCells);
-    expect(first?.spatialDemands).toEqual([demand]);
-    expect(first?.history).toBe(welcomed?.history);
-    expect(second?.trailCells).toBe(first?.trailCells);
+    const updated = onUpdate.mock.calls[0]?.[0];
+    expect(updated).toEqual({ ...worldFixture(), tick: 17, speed: 4 });
+    expect(updated.history).toBe(welcomed.history);
+    expect(updated.nations).toBe(welcomed.nations);
+  });
+
+  it("forwards orders without pretending they are nation state", () => {
+    const socket = new MockWebSocket();
+    const onUpdate = vi.fn();
+    const onOrders = vi.fn();
+    const orders: ServerMessage = {
+      type: "orders",
+      tick: 0,
+      nationId: "realm",
+      autoPilot: false,
+      options: [],
+      queued: null,
+      chancellorChoice: null,
+      rejected: "insufficientFood",
+    };
+
+    connect("ws://example.test", { onWelcome: vi.fn(), onUpdate, onOrders }, () => socket);
+    socket.emit({ type: "welcome", state: worldFixture() });
+    socket.emit(orders);
+
+    expect(onOrders).toHaveBeenCalledWith(orders);
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -319,5 +179,21 @@ describe("getWebSocketUrl", () => {
     expect(getWebSocketUrl({ host: "town.example", protocol: "https:" })).toBe(
       "wss://town.example/ws",
     );
+  });
+});
+
+describe("main shell", () => {
+  it("boots an empty nearest-neighbour Pixi application after preloading resident sprites", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", { body: { appendChild: pixiShell.appendChild } });
+
+    await expect(import("../src/main.js")).resolves.toBeDefined();
+
+    expect(pixiShell.load).toHaveBeenCalledWith([...SPRITE_PATHS]);
+    expect(pixiShell.init).toHaveBeenCalledWith({
+      background: 0x1d2428,
+      resizeTo: window,
+    });
+    expect(pixiShell.appendChild).toHaveBeenCalledWith(pixiShell.canvas);
   });
 });

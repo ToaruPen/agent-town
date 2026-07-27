@@ -1,4 +1,4 @@
-import { decodeServerMessage, type WorldState } from "@agent-town/shared";
+import { decodeServerMessage, type NationWorldState, type ServerMessage } from "@agent-town/shared";
 
 const RECONNECT_DELAY_MS = 1_000;
 
@@ -8,10 +8,12 @@ export interface WebSocketLike {
 }
 
 type WebSocketFactory = (url: string) => WebSocketLike;
+type OrdersMessage = Extract<ServerMessage, { type: "orders" }>;
 
 interface ConnectionHandlers {
-  onWelcome(state: WorldState): void;
-  onUpdate(state: WorldState): void;
+  onWelcome(state: NationWorldState): void;
+  onUpdate(state: NationWorldState): void;
+  onOrders(message: OrdersMessage): void;
 }
 
 interface WebSocketLocation {
@@ -38,32 +40,26 @@ function createBrowserSocket(url: string): WebSocketLike {
   return adapter;
 }
 
-function applyUpdate(
-  state: WorldState,
-  message: ReturnType<typeof decodeServerMessage>,
-): WorldState {
-  if (message.type !== "update") return state;
-
-  const tiles = message.changedTiles.length === 0 ? state.tiles : [...state.tiles];
-  for (const change of message.changedTiles) tiles[change.index] = change.tile;
-
-  const trailCells =
-    message.changedTrailCells.length === 0 ? state.trailCells : [...state.trailCells];
-  for (const change of message.changedTrailCells) trailCells[change.index] = change.cell;
-
-  return {
-    ...state,
-    tick: message.tick,
-    agents: message.agents,
-    stockpile: message.stockpile,
-    buildings: message.buildings,
-    deaths: message.deaths,
-    collectives: message.collectives,
-    institutions: message.institutions,
-    spatialDemands: message.spatialDemands,
-    tiles,
-    trailCells,
-  };
+function applyStateMessage(state: NationWorldState, message: ServerMessage): NationWorldState {
+  if (message.type === "clock") {
+    return {
+      ...state,
+      tick: message.tick,
+      year: message.year,
+      season: message.season,
+      speed: message.speed,
+    };
+  }
+  if (message.type === "season") {
+    return {
+      ...state,
+      tick: message.tick,
+      year: message.year,
+      season: message.season,
+      nations: message.nations,
+    };
+  }
+  return state;
 }
 
 export function connect(
@@ -71,7 +67,7 @@ export function connect(
   handlers: ConnectionHandlers,
   createSocket: WebSocketFactory = createBrowserSocket,
 ): void {
-  let state: WorldState | null = null;
+  let state: NationWorldState | null = null;
 
   const open = (): void => {
     const socket = createSocket(url);
@@ -83,9 +79,13 @@ export function connect(
         handlers.onWelcome(state);
         return;
       }
+      if (message.type === "orders") {
+        handlers.onOrders(message);
+        return;
+      }
       if (state === null) return;
 
-      state = applyUpdate(state, message);
+      state = applyStateMessage(state, message);
       handlers.onUpdate(state);
     };
     socket.onclose = () => {

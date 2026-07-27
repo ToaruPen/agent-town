@@ -1,23 +1,46 @@
-import type { TrailCell } from "./spatial.js";
-import type { AgentState, Position, Tile, WorldState } from "./world.js";
+import { SEASONS, SPEED_MULTIPLIERS } from "./constants.js";
+import type {
+  DirectiveBlockedReason,
+  DirectiveId,
+  DirectiveKind,
+  DirectiveOption,
+  NationId,
+  NationState,
+  NationWorldState,
+  Season,
+  SpeedMultiplier,
+  WorldCellChange,
+} from "./nation.js";
 
 export type ServerMessage =
-  | { type: "welcome"; state: WorldState }
+  | { type: "welcome"; state: NationWorldState }
+  | { type: "clock"; tick: number; year: number; season: Season; speed: SpeedMultiplier }
   | {
-      type: "update";
+      type: "season";
       tick: number;
-      agents: AgentState[];
-      stockpile: { pos: Position; wood: number; food: number };
-      buildings: WorldState["buildings"];
-      deaths: WorldState["deaths"];
-      collectives: WorldState["collectives"];
-      institutions: WorldState["institutions"];
-      spatialDemands: WorldState["spatialDemands"];
-      changedTiles: { index: number; tile: Tile }[];
-      changedTrailCells: { index: number; cell: TrailCell }[];
+      year: number;
+      season: Season;
+      nations: NationState[];
+      changedCells: WorldCellChange[];
+    }
+  | {
+      type: "orders";
+      tick: number;
+      nationId: NationId; // always the receiving client's own nation
+      autoPilot: boolean;
+      options: DirectiveOption[];
+      queued: { id: DirectiveId; kind: DirectiveKind; targetCityId: string | null } | null;
+      chancellorChoice: { kind: DirectiveKind; targetCityId: string | null } | null;
+      rejected: DirectiveBlockedReason | "notYourNation" | "unknownNation" | null;
     };
 
-export type ClientMessage = { type: "hello" };
+export type ClientMessage =
+  | { type: "hello" }
+  | { type: "selectNation"; nationId: NationId }
+  | { type: "issueDirective"; kind: DirectiveKind; targetCityId: string | null }
+  | { type: "cancelDirective"; directiveId: DirectiveId }
+  | { type: "setSpeed"; speed: SpeedMultiplier }
+  | { type: "setAutoPilot"; enabled: boolean };
 
 export function encodeMessage(msg: ServerMessage | ClientMessage): string {
   return JSON.stringify(msg);
@@ -62,38 +85,93 @@ function hasWorldHistory(value: unknown): boolean {
   return isRecord(value) && hasWorldMap(value.worldMap);
 }
 
+function isSeason(value: unknown): value is Season {
+  return typeof value === "string" && SEASONS.some((season) => season === value);
+}
+
+function isSpeed(value: unknown): value is SpeedMultiplier {
+  return typeof value === "number" && SPEED_MULTIPLIERS.some((speed) => speed === value);
+}
+
+function isTargetCityId(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isDirectiveKind(value: unknown): value is DirectiveKind {
+  switch (value) {
+    case "clearFarmland":
+    case "developTimber":
+    case "openMine":
+    case "growCity":
+    case "encourageStores":
+    case "holdFestival":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isTickMessage(value: Record<string, unknown>): boolean {
+  return typeof value.tick === "number" && typeof value.year === "number" && isSeason(value.season);
+}
+
+function isNationWorldState(value: unknown): value is NationWorldState {
+  return (
+    isRecord(value) &&
+    isTickMessage(value) &&
+    isSpeed(value.speed) &&
+    hasWorldHistory(value.history) &&
+    Array.isArray(value.nations) &&
+    (value.playerNationId === null || typeof value.playerNationId === "string")
+  );
+}
+
+function isOrdersMessage(value: Record<string, unknown>): boolean {
+  return (
+    hasRequiredKeys(value, [
+      "tick",
+      "nationId",
+      "autoPilot",
+      "options",
+      "queued",
+      "chancellorChoice",
+      "rejected",
+    ]) &&
+    typeof value.tick === "number" &&
+    typeof value.nationId === "string" &&
+    typeof value.autoPilot === "boolean" &&
+    Array.isArray(value.options)
+  );
+}
+
 function isServerMessage(value: unknown): value is ServerMessage {
   if (!isRecord(value)) return false;
-  if (value.type === "welcome") {
+  if (value.type === "welcome") return isNationWorldState(value.state);
+  if (value.type === "clock") return isTickMessage(value) && isSpeed(value.speed);
+  if (value.type === "season") {
     return (
-      isRecord(value.state) &&
-      hasRequiredKeys(value.state, [
-        "history",
-        "collectives",
-        "institutions",
-        "spatialDemands",
-        "trailCells",
-      ]) &&
-      hasWorldHistory(value.state.history)
+      isTickMessage(value) && Array.isArray(value.nations) && Array.isArray(value.changedCells)
     );
   }
-  if (value.type === "update") {
-    return hasRequiredKeys(value, [
-      "tick",
-      "agents",
-      "stockpile",
-      "buildings",
-      "deaths",
-      "collectives",
-      "institutions",
-      "spatialDemands",
-      "changedTiles",
-      "changedTrailCells",
-    ]);
-  }
-  return false;
+  return value.type === "orders" && isOrdersMessage(value);
 }
 
 function isClientMessage(value: unknown): value is ClientMessage {
-  return isRecord(value) && value.type === "hello";
+  if (!isRecord(value)) return false;
+  switch (value.type) {
+    case "hello":
+      return true;
+    case "selectNation":
+      return typeof value.nationId === "string";
+    case "issueDirective":
+      return isDirectiveKind(value.kind) && isTargetCityId(value.targetCityId);
+    case "cancelDirective":
+      return typeof value.directiveId === "string";
+    case "setSpeed":
+      return isSpeed(value.speed);
+    case "setAutoPilot":
+      return typeof value.enabled === "boolean";
+    default:
+      return false;
+  }
 }
