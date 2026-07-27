@@ -13,6 +13,7 @@ import {
 
 import { assignNationBanners } from "../render/nationBanner.js";
 import { type ProsperityComponent, prosperityComponentLabel } from "./nationText.js";
+import { hexColor } from "./worldMapView.js";
 
 export interface ProsperityRankRow {
   nationId: NationId;
@@ -65,11 +66,6 @@ const COMPONENT_WEIGHTS: Readonly<Record<ProsperityComponent, number>> = {
   stability: NATION_PROSPERITY_STABILITY_WEIGHT,
   culture: NATION_PROSPERITY_CULTURE_WEIGHT,
 };
-
-/** Duplicated from `worldMapView.ts:75`, where it is module-private. Three lines, no shared owner. */
-function hexColor(color: number): string {
-  return `#${color.toString(16).padStart(6, "0")}`;
-}
 
 /** The points a component is leaving on the table: what the marker in §4.1 actually points at. */
 function forgonePoints(prosperity: ProsperityScore, component: ProsperityComponent): number {

@@ -2,6 +2,7 @@ import type { CulturalValue, HistoryEventKind, Polity, WorldHistory } from "@age
 
 import {
   buildWorldMapViewModel,
+  hexColor,
   polityIdAtWorldMapPosition,
   renderWorldMapCanvas,
   worldMapPositionFromPointer,
@@ -214,7 +215,7 @@ function polityCard(polity: ChroniclePolityViewModel): HTMLElement {
     "article",
     `world-chronicle__polity${polity.isHomeland ? " world-chronicle__polity--homeland" : ""}`,
   );
-  card.style.setProperty("--polity-color", `#${polity.color.toString(16).padStart(6, "0")}`);
+  card.style.setProperty("--polity-color", hexColor(polity.color));
   card.append(
     element("h4", "world-chronicle__polity-name", polity.name),
     culturalValueList(polity.values),

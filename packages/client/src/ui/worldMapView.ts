@@ -72,7 +72,7 @@ export interface WorldMapViewModel {
   selectedPolityId: string | null;
 }
 
-function hexColor(color: number): string {
+export function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
