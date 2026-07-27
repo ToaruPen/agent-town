@@ -98,6 +98,11 @@ export const WORLD_MAP_WAR_BORDER_CELLS_PER_EVENT = 2;
 export const WORLD_MAP_CELL_SIZE_PX = 6;
 export const WORLD_MAP_SETTLEMENT_RADIUS_PX = 4;
 export const WORLD_MAP_POLITY_ALPHA = 0.28;
+/**
+ * Raises full-stack nation separation from ΔE 8.4 to 10.1 for peripheral recognition without screenshot-like highlighting.
+ * The rejected 0.36 reduced terrain discrimination to ΔE 7.9, obscuring hills versus forest under a blue banner.
+ */
+export const WORLD_MAP_PLAYER_POLITY_ALPHA = 0.32;
 export const WORLD_MAP_SELECTED_POLITY_ALPHA = 0.52;
 
 export const WORLD_MAP_TERRAIN_EXPANSION_WEIGHTS: Readonly<Record<WorldMapTerrain, number>> = {
