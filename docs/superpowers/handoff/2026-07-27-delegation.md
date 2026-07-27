@@ -176,10 +176,11 @@ nothing made optional.
   And **the 1 px full-alpha band is not decorative.** There is no casing at a nation-nation frontier, so
   after the fill change the frontier is wash against wash at 13.2 while the banners either side are at 45.2;
   the band is the only mark there still separated at the figure the palette was designed around.
-- **One banner pair to confirm was ruled out rather than missed.** Gold and moss measure 24.6 at full alpha,
-  which would undercut C1-1b's stated 40.86 floor if both were ever assigned together. The assignment the
-  generator actually produces at seed 12345 does not contain that pair, so this is not a contradiction —
-  only a pair worth finding explicitly in C1-1b's 163-set sweep rather than assuming it was covered.
+- **The gold/moss banner pair is closed — C1-1b already covers it.** The pair measures 24.6 at full alpha and
+  would undercut the 40.86 floor if both were ever assigned. `nationBanner.test.ts` enumerates every ring pair
+  below the bar and names this one explicitly ("olive/moss at ΔE 24.6 and violet/plum at ΔE 20.8, both a
+  primary against a fallback"), asserts the assignment *refuses* to hand both out, and guards against a
+  re-tuned ring making that pass vacuously. Checked rather than assumed; nothing to do.
 - No LLM work in N1. Ruler LLMs arrive in N4.
 
 ## A live worktree is not readable with a build
@@ -376,6 +377,65 @@ One deviation from the plan's letter, flagged rather than assumed: §4.3 said to
 in place in `worldChronicle.ts`; it moved to `nationText.ts` instead, because a pure view model importing a
 DOM controller would drag `document` into the node-only view-model tests. Accepted — that is the separation
 the repo asks for, and the chronicle imports it back so there is still one table.
+
+## Where C1-6b stopped
+
+`c1-06b-world-map-host` at **`89ba3df`**, one commit, base `ce37717`, tree clean, **gate-green and not WIP**:
+`just check` exit 0, `just test` **79 files / 1101 tests**. Not pushed, not merged. Five of nine pieces done.
+
+| piece | state |
+|---|---|
+| persistent host (`worldMapHost.ts`) | done — owns canvas, pointer handler, view-model closure; both surfaces mount it |
+| first mount in `index.html` + `main.ts` | done — `#world-map`, docked between the HUD panels, capped at native 576×384 |
+| repaint from `update` | done — server-driven, no dedupe key on purpose |
+| fill onto banner colours | done — off the archival `Polity.color` |
+| player alpha 0.32 vs 0.28 | done — nothing marked when there is no player nation |
+| 1 px inner rule | **not started** — decision now recorded, unblocked |
+| capital cross-hatch | **not started** — same |
+| hover-only selection (§2.2.1) | **not started** — 0.52 is still a persistent resting state, which the design says collapses terrain to ΔE 6.3 |
+| locate pulse | **not started** |
+
+The four answers to the worker's design questions arrived after it committed, so all four remaining pieces are
+unblocked with the decisions recorded and none begun. The decisions: `worldMapView.ts` paint internals are
+fair game because the design settles it (§2.6 calls the inner rule "the key move" and V-4's test line names
+the inner rule, not the alpha); the hover-only change is to be made deliberately; the hover state applies to
+*any* nation including rivals, under the spec's equality principle.
+
+**Owed before more work lands, both:**
+
+- **Rebase.** `7d39e36` is not an ancestor of `89ba3df`.
+- **The constant swap.** `MAP_PLAYER_POLITY_ALPHA = 0.32` is at `client/src/render/colors.ts:47` with five
+  references: `src/ui/worldMapView.ts:16` and `:113`, `test/worldMapView.test.ts:10` and `:243`,
+  `test/worldMapHost.test.ts:10`, `:160` and `:170`. Swap to `WORLD_MAP_PLAYER_POLITY_ALPHA` from
+  `@agent-town/shared` and **delete the local doc comment** rather than keeping it — the shared one carries
+  the ΔE reasoning, and duplicating the figures is how they drift.
+
+**Mid-decision state, so it is not rediscovered:**
+
+- `cellAlpha` reads selection → player → resting, and the branch order is right, but **its comment argues from
+  a framing that has been superseded** and should be rewritten. Hover is transient and universal; the player
+  rule is persistent and singular; they are not competing marks of ownership. The passing test "lets a
+  selection outrank the player's own step" stays valid but is named from the old framing.
+- **The locate pulse needs a second redraw source.** The host repaints only when `render` is called, ~1 Hz
+  from the heartbeat, so a 500 ms one-shot needs its own wall-clock frames. The shape the author reached: the
+  host owns an optional animation deadline and self-schedules frames only while one is live — deliberately
+  *not* the HUD's `requestAnimationFrame` loop, which belongs to the countdown.
+- `WorldMapMarks` is an object rather than a fourth nullable string, so it cannot be passed where
+  `selectedPolityId` belongs, and it has room for `hoveredPolityId` when the hover change lands.
+- The canvas class is a **required** host option, not a default: the chronicle's CSS keys off
+  `world-chronicle__map-canvas`, and a shared default would silently restyle whichever surface was written second.
+
+## `world.playerNationId` looks authoritative and is not
+
+The C1-6b probe caught this rather than confirming the work, and any future surface needing the player's
+nation will hit it. Reading the held nation from `world.playerNationId` left the map marking **nobody for the
+entire session** after a mid-session claim: only a `welcome` ever sets that field, a fresh connect carries
+null, and nothing afterwards updates it — `clock` has no such field and `season` does not copy one.
+
+Read the HUD's state instead, which takes the id from a `welcome` *and* from the `orders` echo, so the
+fresh-claim and reconnect paths both work. `nationHudState.test.ts` pins that the id survives later updates,
+because `applyUpdate` spreading the previous state is the only thing keeping it — a mutation copying the
+payload id fails that test.
 
 ## Queued cleanups
 
