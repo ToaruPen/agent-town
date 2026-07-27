@@ -304,6 +304,49 @@ This is a spec/implementation divergence, not a client question. Spec line 184 �
 always-chancellor. **One of the two is wrong and it is the owner's call which.** If the engine changes, one
 test in `nationDashboardViewModel.test.ts` is what flips.
 
+## C1-4 landed, and the transport was the interesting part
+
+`af74fc5`. The order desk is in: **78 test files / 1087 tests**, up from 75 / 989, everything inside
+`packages/client/`. The page now serves all six HUD roots including `directive-panel`, so of N1's browser
+criterion — "live nations, a moving ranking, a working directive panel and a working speed control" — only
+the world map is left, which is C1-6b.
+
+The finding worth keeping is not the panel. It is that **a dropped socket was silently eating every send**,
+and that fixing it forced a choice with a wrong answer available.
+
+`onclose` left `current` pointing at the closed socket for the full reconnect second. `createBrowserSocket`'s
+queue only buffers before the *first* open, so that adapter's `pending` was already null and every send
+reached a CLOSED socket — which browsers discard without throwing. Click and key both vanished with no error
+anywhere while the controls stayed enabled.
+
+**Rejected rather than queued, deliberately.** Queueing would have reintroduced at the transport layer
+exactly what the desk exists to prevent: submit, no answer, and a second later something happens. And a
+replayed `issueDirective` lands on a runtime whose season may have advanced, whose `queued` may have been
+cleared by a `selectNation`, and whose `autoPilot` may have been flipped from another connection — all three
+measured, not supposed. `SendClientMessage` now returns whether the message went out, and a refusal is
+announced in `#world-status` rather than inferred.
+
+Two things about how that fix arrived, both worth imitating. My objection named the 発令 button and stopped
+there; the worker found that **取消 was the worse of the two** and had been left live — withdrawing an order
+is what a player does *because* something looked wrong, and a silent 取消 leaves the order committing at the
+boundary anyway. And the keys had the same hole one layer down with nothing on screen to grey out, so every
+outbound message now goes through one wrapper and `main.ts` binds keys to `hud.send` rather than the raw
+channel.
+
+The worker also declined credit twice, which is the part that makes the other claims trustworthy. Restoring
+the `??` chain in the key map **fails no test** — `Number("a")` is `NaN`, so the explicit dispatch and the old
+chain are behaviourally identical and the change is structural only. And the build-time `markCanSend` has no
+observable path through the HUD, because `renderPanels` always calls `renderCanSend` straight after `render`;
+it was kept and tested against the controller's own contract instead of being reported as a caught mutation.
+
+One known gap, stated rather than hidden: `main.ts` binding keys to `hud.send` is a one-line wiring choice no
+test covers. The DOM test pins the contract and a comment pins the intent.
+
+One deviation from the plan's letter, flagged rather than assumed: §4.3 said to export `CULTURAL_VALUE_LABELS`
+in place in `worldChronicle.ts`; it moved to `nationText.ts` instead, because a pure view model importing a
+DOM controller would drag `document` into the node-only view-model tests. Accepted — that is the separation
+the repo asks for, and the chronicle imports it back so there is still one table.
+
 ## Queued cleanups
 
 Small, independent, and none of them blocking. Each is here because it was found while verifying something
@@ -319,7 +362,6 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Deepen `decodeServerMessage`'s validation to match its contract | `shared/src/protocol.ts` | It accepts `nations: [null]`, an all-`null` world map, and a history missing required fields. Needs shape-level work and a decision about how strict the boundary should be, so it is a task rather than a chore |
 | Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
 | Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
-| Import the shared city tier constant | `client/src/ui/worldCityViewModel.ts` | Replaces the local `as const` copy; values identical, type widens harmlessly (checked) |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
 | Bring the repo root under `tsc` | root `vitest.config.ts`, `test/` | `pnpm-workspace.yaml` lists only `packages/*`, so `pnpm -r exec tsc` never reaches the root |
 | Make server's Node types a direct dependency | `server/package.json` | Resolves `node:*` only transitively via `@types/ws`; drop or bump that and server tests silently lose Node types |
