@@ -1,6 +1,6 @@
 import type { WorldHistory } from "./history.js";
 import type { AgentDesires, Collective, Institution } from "./society.js";
-import type { Facility, SpatialDemand, TrailCell } from "./spatial.js";
+import type { Facility, FacilityKind, SpatialDemand, TrailCell } from "./spatial.js";
 
 export type Terrain = "plains" | "forest" | "water" | "rock";
 export type ResourceKind = "wood" | "food";
@@ -75,8 +75,14 @@ export function isHouse(building: Building): building is House {
   return building.kind === "house";
 }
 
+const FACILITY_KINDS = {
+  communalGranary: true,
+  grainMarket: true,
+  rationDepot: true,
+} as const satisfies Readonly<Record<FacilityKind, true>>;
+
 export function isFacility(building: Building): building is Facility {
-  return building.kind !== "house";
+  return Object.hasOwn(FACILITY_KINDS, building.kind);
 }
 
 export interface WorldState {
