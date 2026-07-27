@@ -1,4 +1,4 @@
-import type { AgentState, Terrain, Tile } from "@agent-town/shared";
+import type { AgentState, Building, Terrain, Tile } from "@agent-town/shared";
 
 import { TERRAIN_TINTS } from "./colors.js";
 
@@ -60,6 +60,15 @@ const MANY_AGENT_OFFSETS = [
 export interface AgentTilePlacement {
   agent: AgentState;
   offset: { x: number; y: number };
+}
+
+export interface BuildingSprites {
+  /** Tile drawn one row above the building's own tile. */
+  roof: string;
+  /** Tile drawn on the building's own tile. */
+  wall: string;
+  /** Optional emblem that names the institution at a glance. */
+  emblem: string | null;
 }
 
 export function agentTileOffset(
@@ -138,10 +147,41 @@ export const SPRITE_ASSETS = {
     // Tiny Town tile 17: a young green sprout.
     food: "/assets/tiny-town/Tiles/tile_0017.png",
   },
+  buildings: {
+    house: {
+      // Tiny Town tile 67: a red gable roof.
+      roof: "/assets/tiny-town/Tiles/tile_0067.png",
+      // Tiny Town tile 86: a timber wall with a door.
+      wall: "/assets/tiny-town/Tiles/tile_0086.png",
+      emblem: null,
+    },
+    communalGranary: {
+      // Tiny Town tile 63: a slate gable roof.
+      roof: "/assets/tiny-town/Tiles/tile_0063.png",
+      // Tiny Town tile 74: a timber wall with a wide doorway.
+      wall: "/assets/tiny-town/Tiles/tile_0074.png",
+      // Tiny Town tile 116: a pitchfork.
+      emblem: "/assets/tiny-town/Tiles/tile_0116.png",
+    },
+    grainMarket: {
+      // Tiny Town tile 55: a red roof with a dormer.
+      roof: "/assets/tiny-town/Tiles/tile_0055.png",
+      // Tiny Town tile 75: a plain timber wall.
+      wall: "/assets/tiny-town/Tiles/tile_0075.png",
+      // Tiny Town tile 93: a bundle of grain.
+      emblem: "/assets/tiny-town/Tiles/tile_0093.png",
+    },
+    rationDepot: {
+      // Tiny Town tile 51: a slate roof with a dormer.
+      roof: "/assets/tiny-town/Tiles/tile_0051.png",
+      // Tiny Town tile 78: a slate wall with a doorway.
+      wall: "/assets/tiny-town/Tiles/tile_0078.png",
+      // Tiny Town tile 83: a wooden notice board.
+      emblem: "/assets/tiny-town/Tiles/tile_0083.png",
+    },
+  },
   // Tiny Town tile 94: golden supply chest.
   stockpile: "/assets/tiny-town/Tiles/tile_0094.png",
-  // Tiny Town tile 67: red-roofed house front.
-  house: "/assets/tiny-town/Tiles/tile_0067.png",
   // Tiny Dungeon tile 65: gray inscribed tombstone.
   tombstone: "/assets/tiny-dungeon/Tiles/tile_0065.png",
   agents: [
@@ -160,8 +200,18 @@ export const SPRITE_PATHS = [
   ...SPRITE_ASSETS.terrain.undergrowth,
   SPRITE_ASSETS.resource.tree,
   SPRITE_ASSETS.resource.food,
+  SPRITE_ASSETS.buildings.house.roof,
+  SPRITE_ASSETS.buildings.house.wall,
+  SPRITE_ASSETS.buildings.communalGranary.roof,
+  SPRITE_ASSETS.buildings.communalGranary.wall,
+  SPRITE_ASSETS.buildings.communalGranary.emblem,
+  SPRITE_ASSETS.buildings.grainMarket.roof,
+  SPRITE_ASSETS.buildings.grainMarket.wall,
+  SPRITE_ASSETS.buildings.grainMarket.emblem,
+  SPRITE_ASSETS.buildings.rationDepot.roof,
+  SPRITE_ASSETS.buildings.rationDepot.wall,
+  SPRITE_ASSETS.buildings.rationDepot.emblem,
   SPRITE_ASSETS.stockpile,
-  SPRITE_ASSETS.house,
   SPRITE_ASSETS.tombstone,
   ...SPRITE_ASSETS.agents,
 ] as const;
@@ -174,6 +224,10 @@ export function agentFacingScale(agent: AgentState): -1 | 1 {
 
 export function agentSpritePath(agentIndex: number): string {
   return SPRITE_ASSETS.agents[agentIndex % SPRITE_ASSETS.agents.length] ?? SPRITE_ASSETS.agents[0];
+}
+
+export function buildingSprites(building: Building): BuildingSprites {
+  return SPRITE_ASSETS.buildings[building.kind];
 }
 
 export function resourceSpritePath(tile: Tile): string | null {
