@@ -68,6 +68,8 @@
         color: #c5d5d0;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 0.75rem;
+        line-height: 1.6;
+        white-space: pre-line;
       }
 
       .dev-stage {
@@ -104,7 +106,8 @@
         </label>
         <label class="dev-control">
           開発度
-          <input id="dev-development" type="range" min="1" max="10" step="1" value="4" />
+          <!-- max is set from NATION_CITY_DEVELOPMENT_CAP so this cannot offer an unreachable level -->
+          <input id="dev-development" type="range" min="1" step="1" value="4" />
         </label>
         <label class="dev-control">
           人口

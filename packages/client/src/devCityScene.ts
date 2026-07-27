@@ -1,6 +1,7 @@
 import {
   MAP_HEIGHT,
   MAP_WIDTH,
+  NATION_CITY_DEVELOPMENT_CAP,
   NATION_TICKS_PER_SEASON,
   type NationCityState,
   type NationState,
@@ -16,7 +17,11 @@ import {
 } from "@agent-town/shared";
 import { Application, Assets, Container, TextureStyle } from "pixi.js";
 
-import { type CitySceneInput, synthesizeCityScene } from "./local/cityScene.js";
+import {
+  type CitySceneInput,
+  directiveAnchorPositions,
+  synthesizeCityScene,
+} from "./local/cityScene.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
@@ -213,7 +218,10 @@ function describeScene(scene: WorldState): string {
     .join(" / ");
   const streets = scene.trailCells.filter(({ level }) => level !== "none").length;
   const trees = scene.tiles.filter((tile) => tile.resource?.kind === "wood").length;
-  return `家 ${scene.buildings.length} / 街路 ${streets} / 木 ${trees} / ${composition}`;
+  const anchors = Object.entries(directiveAnchorPositions(scene))
+    .map(([kind, pos]) => `${kind} ${pos.x},${pos.y}`)
+    .join(" / ");
+  return `家 ${scene.buildings.length} / 街路 ${streets} / 木 ${trees} / ${composition}\n施策の予約地: ${anchors}`;
 }
 
 const app = new Application();
@@ -257,6 +265,8 @@ for (const [index, season] of SEASONS.entries()) {
 for (const index of CITY_POSITIONS.keys()) {
   addOption(controls.city, String(index), `第${index + 1}都市`);
 }
+// The simulation cannot take a city past the cap, so the page must not be able to depict one that is.
+controls.development.max = String(NATION_CITY_DEVELOPMENT_CAP);
 controls.neighbourhood.value = "valley";
 
 function draw(): void {

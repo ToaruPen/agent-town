@@ -1,6 +1,8 @@
 import {
+  type DirectiveKind,
   MAP_HEIGHT,
   MAP_WIDTH,
+  NATION_CITY_DEVELOPMENT_CAP,
   NATION_TICKS_PER_SEASON,
   type NationCityState,
   type NationState,
@@ -17,7 +19,11 @@ import {
 import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
-import { type CitySceneInput, synthesizeCityScene } from "../src/local/cityScene.js";
+import {
+  type CitySceneInput,
+  directiveAnchorPositions,
+  synthesizeCityScene,
+} from "../src/local/cityScene.js";
 import { citySceneSeed } from "../src/local/sceneRng.js";
 import { renderMapLayer, TILE_SIZE } from "../src/render/mapLayer.js";
 import { HOUSE_OBJECT_LABEL, renderStructureLayer } from "../src/render/structureLayer.js";
@@ -129,6 +135,26 @@ function countTerrain(scene: ReturnType<typeof synthesizeCityScene>, terrain: st
   return scene.tiles.filter((tile) => tile.terrain === terrain).length;
 }
 
+/** Every kind the simulation can have running at once: `isAlreadyActive` gates per kind and city. */
+const DIRECTIVE_KINDS: readonly DirectiveKind[] = [
+  "clearFarmland",
+  "developTimber",
+  "openMine",
+  "growCity",
+  "encourageStores",
+  "holdFestival",
+];
+
+/** The most crowded quarter the simulation can ask for: development at its cap, houses maxed out. */
+const CROWDED_CITY: Partial<SceneOptions> = {
+  developmentLevel: NATION_CITY_DEVELOPMENT_CAP,
+  population: 6000,
+};
+
+function chebyshev(from: Position, to: Position): number {
+  return Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
+}
+
 describe("citySceneSeed", () => {
   it("keeps one seed per identifier and position", () => {
     expect(citySceneSeed("city-polity-1-1", { x: 40, y: 30 })).toBe(
@@ -164,7 +190,7 @@ describe("synthesizeCityScene", () => {
   });
 
   it("grows the drawn quarter with development level and never shrinks it", () => {
-    const counts = [1, 2, 3, 4, 5].map(
+    const counts = Array.from({ length: NATION_CITY_DEVELOPMENT_CAP }, (_, index) => index + 1).map(
       (developmentLevel) => synthesizeCityScene(makeInput({ developmentLevel })).buildings.length,
     );
 
@@ -177,9 +203,11 @@ describe("synthesizeCityScene", () => {
   it("saturates the drawn quarter against a small city's population", () => {
     const villagePopulation = 100;
     const village = synthesizeCityScene(
-      makeInput({ population: villagePopulation, developmentLevel: 5 }),
+      makeInput({ population: villagePopulation, developmentLevel: NATION_CITY_DEVELOPMENT_CAP }),
     );
-    const capital = synthesizeCityScene(makeInput({ population: 4000, developmentLevel: 5 }));
+    const capital = synthesizeCityScene(
+      makeInput({ population: 4000, developmentLevel: NATION_CITY_DEVELOPMENT_CAP }),
+    );
 
     expect(village.buildings.length).toBeLessThan(capital.buildings.length);
   });
@@ -217,6 +245,14 @@ describe("synthesizeCityScene", () => {
     });
   });
 
+  /** The store's own props sit at `stockpileX ± TILE_SIZE/4`, so a neighbouring house collides. */
+  it("leaves the square around the store open", () => {
+    const scene = synthesizeCityScene(makeInput(CROWDED_CITY));
+
+    const crowding = scene.buildings.filter(({ pos }) => chebyshev(pos, scene.stockpile.pos) <= 1);
+    expect(crowding).toEqual([]);
+  });
+
   /** What the dev page draws, pinned where a browser is not available to look at it. */
   it("gives the frozen renderers a ground sprite per tile, a street and a house apiece", () => {
     const scene = synthesizeCityScene(makeInput());
@@ -248,5 +284,70 @@ describe("synthesizeCityScene", () => {
       .map(({ position }) => position.x);
     expect(store).toContain(storeX - TILE_SIZE / 4);
     expect(store).toContain(storeX + TILE_SIZE / 4);
+  });
+});
+
+/**
+ * C1-8 draws a mark per active directive and `directive-sprites.md` §7 left the anchor point open.
+ * These pin the room the layout keeps for it, so that slice never reverse-engineers the patch layout.
+ */
+describe("directiveAnchorPositions", () => {
+  it("gives every directive kind an anchor of its own beside the store", () => {
+    const scene = synthesizeCityScene(makeInput());
+    const anchors = directiveAnchorPositions(scene);
+
+    const positions = DIRECTIVE_KINDS.map((kind) => anchors[kind]);
+    expect(new Set(positions.map(({ x, y }) => `${x},${y}`)).size).toBe(DIRECTIVE_KINDS.length);
+    for (const pos of positions) {
+      // On the ring just outside the square, which is what keeps them off the store's own props.
+      expect(chebyshev(pos, scene.stockpile.pos)).toBe(2);
+      expect(pos.x).toBeGreaterThanOrEqual(0);
+      expect(pos.y).toBeGreaterThanOrEqual(0);
+      expect(pos.x).toBeLessThan(MAP_WIDTH);
+      expect(pos.y).toBeLessThan(MAP_HEIGHT);
+    }
+  });
+
+  /**
+   * One ring cannot hold six non-adjacent tiles, so the loose-prop groups are the ones spread out.
+   * `openMine` is a building in `directive-sprites.md` §3 and is here only for the optional spoil
+   * chunk §5 lists beside it; spacing it too is free, and cheaper than revisiting this if it lands.
+   */
+  it("keeps the anchors that may carry loose props well clear of each other", () => {
+    const anchors = directiveAnchorPositions(synthesizeCityScene(makeInput()));
+    const propKinds: readonly DirectiveKind[] = ["developTimber", "holdFestival", "openMine"];
+
+    for (const kind of propKinds) {
+      for (const other of propKinds) {
+        if (kind === other) continue;
+        expect(chebyshev(anchors[kind], anchors[other])).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it("keeps every anchor free of houses, streets and standing resources", () => {
+    for (const terrain of ["plains", "forest", "hills", "mountains", "sea"] as const) {
+      const scene = synthesizeCityScene(makeInput({ ...CROWDED_CITY, terrain }));
+      const anchors = directiveAnchorPositions(scene);
+
+      expect(scene.buildings.length).toBeGreaterThan(0);
+      for (const kind of DIRECTIVE_KINDS) {
+        const pos = anchors[kind];
+        const index = pos.y * scene.width + pos.x;
+        expect(scene.buildings.filter((building) => chebyshev(building.pos, pos) === 0)).toEqual(
+          [],
+        );
+        expect(scene.trailCells[index]?.level).toBe("none");
+        // A prop group needs bare ground under it: no tree or grain already standing on the tile.
+        expect(scene.tiles[index]?.terrain).toBe("plains");
+        expect(scene.tiles[index]?.resource).toBeNull();
+      }
+    }
+  });
+
+  it("puts the anchors in the same places for the same city twice", () => {
+    expect(directiveAnchorPositions(synthesizeCityScene(makeInput()))).toEqual(
+      directiveAnchorPositions(synthesizeCityScene(makeInput())),
+    );
   });
 });

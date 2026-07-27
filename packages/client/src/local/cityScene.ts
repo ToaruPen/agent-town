@@ -1,6 +1,7 @@
 import {
   type Building,
   DAYS_PER_SEASON,
+  type DirectiveKind,
   FOOD_RESOURCE_MAX,
   FOOD_RESOURCE_MIN,
   FOOD_TILE_CHANCE,
@@ -78,6 +79,61 @@ const RESIDENTS_PER_DRAWN_HOUSE = 50;
 const PLAZA_RADIUS = 1;
 /** Tiles beyond the outermost house the street grid still reaches, enclosing the last block. */
 const STREET_MARGIN = 1;
+
+function shift(origin: Position, offset: Position): Position {
+  return { x: origin.x + offset.x, y: origin.y + offset.y };
+}
+
+/**
+ * One reserved tile per directive kind, on the ring just outside the square. `isAlreadyActive` gates
+ * a directive per kind and city, so six is every mark one city can need at once, and a `Record` keyed
+ * by the kind means a seventh kind would fail this file to compile rather than quietly lack a home.
+ *
+ * All six sit off the avenues (`dx` and `dy` both non-zero) and are held clear of houses, streets and
+ * standing resources, so a mark drawn here lands on bare ground whatever the surrounding terrain.
+ *
+ * They are spread as far as one ring allows rather than as far as would be ideal: excluding the four
+ * avenue tiles leaves twelve, in four corner runs of three, and no more than four of those are
+ * pairwise non-adjacent. So two pairs touch diagonally. The three kinds `directive-sprites.md` draws
+ * as loose props — timber, festival, and the mine's spoil chunk — are the ones kept three tiles apart,
+ * because those are the groups that would read as one heap at 16 px if they met.
+ */
+const DIRECTIVE_ANCHOR_OFFSETS: Readonly<Record<DirectiveKind, Position>> = {
+  developTimber: { x: -2, y: -2 },
+  openMine: { x: 1, y: -2 },
+  encourageStores: { x: 2, y: -1 },
+  growCity: { x: 2, y: 2 },
+  clearFarmland: { x: -1, y: 2 },
+  holdFestival: { x: -2, y: 1 },
+};
+
+const ANCHOR_POSITIONS: readonly Position[] = Object.values(DIRECTIVE_ANCHOR_OFFSETS).map(
+  (offset) => shift(QUARTER_CENTRE, offset),
+);
+
+const ANCHOR_KEYS: ReadonlySet<string> = new Set(ANCHOR_POSITIONS.map(({ x, y }) => `${x},${y}`));
+
+function isDirectiveAnchor(pos: Position): boolean {
+  return ANCHOR_KEYS.has(`${pos.x},${pos.y}`);
+}
+
+/**
+ * Where C1-8 may put the mark for each active directive, read off the returned state rather than
+ * re-derived from the layout: the anchors are fixed offsets from the store the scene already carries.
+ */
+export function directiveAnchorPositions(
+  scene: WorldState,
+): Readonly<Record<DirectiveKind, Position>> {
+  const store = scene.stockpile.pos;
+  return {
+    clearFarmland: shift(store, DIRECTIVE_ANCHOR_OFFSETS.clearFarmland),
+    developTimber: shift(store, DIRECTIVE_ANCHOR_OFFSETS.developTimber),
+    openMine: shift(store, DIRECTIVE_ANCHOR_OFFSETS.openMine),
+    growCity: shift(store, DIRECTIVE_ANCHOR_OFFSETS.growCity),
+    encourageStores: shift(store, DIRECTIVE_ANCHOR_OFFSETS.encourageStores),
+    holdFestival: shift(store, DIRECTIVE_ANCHOR_OFFSETS.holdFestival),
+  };
+}
 
 function randomInteger(rng: () => number, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
@@ -200,10 +256,18 @@ function chebyshevDistance(from: Position, to: Position): number {
   return Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
 }
 
+/**
+ * The square and the directive anchors are the city's own open ground. Without this the nearest
+ * plots land diagonally against the store, on top of the props `renderMapLayer` draws beside it.
+ */
+function isReservedGround(pos: Position): boolean {
+  return chebyshevDistance(pos, QUARTER_CENTRE) <= PLAZA_RADIUS || isDirectiveAnchor(pos);
+}
+
 /** Plots fill outward from the store, shuffled within each ring, so growth reads as growth. */
 function choosePlots(count: number, rng: () => number): Position[] {
   return plotCandidates()
-    .filter(isInsideQuarter)
+    .filter((pos) => isInsideQuarter(pos) && !isReservedGround(pos))
     .map((pos) => ({ pos, order: chebyshevDistance(pos, QUARTER_CENTRE) + rng() }))
     .toSorted((left, right) => left.order - right.order)
     .slice(0, count)
@@ -258,6 +322,8 @@ function layStreets(bounds: QuarterBounds | null): Street[] {
   const streets: Street[] = [];
   for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
     for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+      // The avenues still cross the square; only the anchors are kept out from under a road.
+      if (isDirectiveAnchor({ x, y })) continue;
       const level = streetLevelAt({ x, y });
       if (level !== null) streets.push({ pos: { x, y }, level });
     }
@@ -343,7 +409,12 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
   const tiles = createTiles(sampleTerrainMix(input.worldMap, input.city.pos), rng);
   const plots = choosePlots(drawnHouseCount(input.cityState), rng);
   const streets = layStreets(houseBounds(plots));
-  clearFootprint(tiles, [...plazaPositions(), ...plots, ...streets.map(({ pos }) => pos)]);
+  clearFootprint(tiles, [
+    ...plazaPositions(),
+    ...ANCHOR_POSITIONS,
+    ...plots,
+    ...streets.map(({ pos }) => pos),
+  ]);
 
   const scene: WorldState = {
     tick: displayTick(input.tick),
