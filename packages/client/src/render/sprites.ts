@@ -122,9 +122,11 @@ export function layoutAgentsFrontToBack(agents: AgentState[]): AgentTilePlacemen
 
 export const SPRITE_ASSETS = {
   terrain: {
-    grass: [
+    plains: [
       // Tiny Town tile 0: plain green grass.
       "/assets/tiny-town/Tiles/tile_0000.png",
+    ],
+    forest: [
       // Tiny Town tile 1: green grass with scattered tufts.
       "/assets/tiny-town/Tiles/tile_0001.png",
     ],
@@ -195,7 +197,8 @@ export const SPRITE_ASSETS = {
 } as const;
 
 export const SPRITE_PATHS = [
-  ...SPRITE_ASSETS.terrain.grass,
+  ...SPRITE_ASSETS.terrain.plains,
+  ...SPRITE_ASSETS.terrain.forest,
   ...SPRITE_ASSETS.terrain.rock,
   ...SPRITE_ASSETS.terrain.undergrowth,
   SPRITE_ASSETS.resource.tree,
@@ -238,11 +241,11 @@ export function resourceSpritePath(tile: Tile): string | null {
 
 export function terrainSpritePath(terrain: Terrain, tileIndex: number): string | null {
   if (terrain === "water") return null;
-  const variants = terrain === "rock" ? SPRITE_ASSETS.terrain.rock : SPRITE_ASSETS.terrain.grass;
+  const variants = SPRITE_ASSETS.terrain[terrain];
   return variants[tileIndex % variants.length] ?? variants[0];
 }
 
-/** Multiply applied to a terrain tile, so one grass sprite can serve plains and forest. */
+/** A restrained multiply suggests terrain shade without obscuring its identifying texture. */
 export function terrainTint(terrain: Terrain): number {
   return TERRAIN_TINTS[terrain];
 }

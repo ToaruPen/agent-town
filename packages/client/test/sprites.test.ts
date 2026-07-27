@@ -139,10 +139,14 @@ describe("resourceSpritePath", () => {
 
 describe("terrainSpritePath", () => {
   it("uses grass for walkable ground, dirt for rock, and Graphics for water", () => {
-    expect(terrainSpritePath("plains", 0)).toBe(SPRITE_ASSETS.terrain.grass[0]);
-    expect(terrainSpritePath("forest", 1)).toBe(SPRITE_ASSETS.terrain.grass[1]);
+    expect(terrainSpritePath("plains", 0)).toBe(SPRITE_ASSETS.terrain.plains[0]);
+    expect(terrainSpritePath("forest", 1)).toBe(SPRITE_ASSETS.terrain.forest[0]);
     expect(terrainSpritePath("rock", 0)).toBe(SPRITE_ASSETS.terrain.rock[0]);
     expect(terrainSpritePath("water", 0)).toBeNull();
+  });
+
+  it("distinguishes plains and forest by texture at the same tile index", () => {
+    expect(terrainSpritePath("plains", 0)).not.toBe(terrainSpritePath("forest", 0));
   });
 });
 
@@ -153,6 +157,7 @@ describe("terrainTint", () => {
     const rock = terrainTint("rock");
 
     expect(plains).toBe(0xffffff);
+    expect(forest).toBe(0xedf3ec);
     expect((forest >> 8) & 0xff).toBeLessThan((plains >> 8) & 0xff);
     expect(rock & 0xff).toBeGreaterThan((rock >> 16) & 0xff);
   });

@@ -1,6 +1,6 @@
 export const TERRAIN_TINTS = {
   plains: 0xffffff,
-  forest: 0xcfe0d8,
+  forest: 0xedf3ec,
   rock: 0x8795a6,
   water: 0xffffff,
 } as const;
