@@ -145,6 +145,8 @@ Read `traversal.md` §1.3 and §3 (L0).
 
 Read `hud.md` §1 for the established idiom, §3.1 and §3.2 for the interaction model, §4.1 and §4.3 for the inventory.
 
+**You start from a shell, not from today's `main.ts`.** N1 Task 5 reshapes the protocol, which breaks the client, and since every commit must stay green that migration lands with Task 5 under a scoped exception: it rewrites `wsClient.ts` and its test for the new messages and reduces `main.ts` to a shell that mounts nothing, keeps the Pixi `Application` with its `nearest` scale mode and sprite preload, and makes no UI decision. Everything the HUD is, you build on top of that. Read the shell before designing against your memory of the old `main.ts`.
+
 - Follow the client's existing shape: a pure tested view model plus a thin DOM controller, with JSON-key dedupe to avoid redundant re-renders. Text-heavy panels are DOM; Pixi is not involved.
 - Always on screen: the year and season readout, the countdown to the next boundary, the speed control including pause, the player's own dashboard, and the ranking with each nation's prosperity total and its five component contributions.
 - The calendar year the player sees is `history.currentYear + nationYearOfTick(tick) - 1`, computed here at the display edge and nowhere else.

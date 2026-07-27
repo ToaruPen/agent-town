@@ -415,6 +415,16 @@ Nothing in `directives.ts` mutates a `NationState`.
 - `index.ts` accepts a `SEED` env var (positive integer) and keeps the time-based default when unset. Determinism tests use `SEED`.
 - The old resident-sim wiring is removed from `wsServer.ts`. Its modules and tests stay untouched in the tree.
 - Update the protocol tests to the new shapes; do not delete them.
+- **A scoped, supervisor-authorised exception to the ownership split.** Reshaping `protocol.ts` breaks the client, because `packages/client/src/net/wsClient.ts` switches on `"update"` and assigns `welcome.state` to a `WorldState`. Every commit must be green, so the migration cannot straddle two tasks, and `AGENTS.md` says not to keep backward compatibility — a dual wire format would leave a fake protocol in the tree for someone to remember to remove. So Task 5 may edit exactly three client files and no others:
+  - `packages/client/src/net/wsClient.ts` — decode the new messages, hold `NationWorldState`.
+  - `packages/client/test/wsClient.test.ts` — update to the new shapes. Do not delete a test. If one cannot be expressed against the new protocol, stop and report.
+  - `packages/client/src/main.ts` — reduce to a shell.
+
+  The shell has hard requirements, because the client plan builds on it and two of them are easy to lose:
+  - **Keep the Pixi `Application` alive**, along with `TextureStyle.defaultOptions.scaleMode = "nearest"` and the `Assets.load([...SPRITE_PATHS])` preload. It renders nothing for now and becomes the local city view's renderer. Deleting it would mean a second WebGL context later for no reason.
+  - Unmount the resident stack; delete no render module, no view model and no test. They stay in the tree, green, and the city view drives several of them unchanged.
+  - The page must boot without throwing.
+  - **No design decisions.** No HUD, no layout, no panel, no new UI file. C1-3 builds all of that against this shell. If the shell seems to need a UI decision to compile, that is the signal to stop and report.
 - Tests: welcome shape; `clock` carries no nation state; `season` fires exactly on boundaries; identical state at tick N under speeds 1, 4 and a pause/resume cycle; every invalid client message rejected; a headless run of `NATION_TICKS_PER_YEAR * 20` ticks completes with no thrown error, no negative stock and no spawned process.
 
 ### Task 6 — Client (moved)
