@@ -26,6 +26,17 @@ export function makeTrailCellsFixture(width: number, height: number): TrailCell[
   }));
 }
 
+/**
+ * Reads back a trail cell that a test just wrote into a fixture array, for
+ * building an overridden copy via `{ ...requireTrailCell(cells, i), ... }`.
+ * Throws instead of returning `undefined` so callers can spread it safely.
+ */
+export function requireTrailCell(cells: readonly TrailCell[], index: number): TrailCell {
+  const cell = cells[index];
+  if (cell === undefined) throw new Error(`missing trail cell fixture at index ${index}`);
+  return cell;
+}
+
 export function makeFacilityFixture(kind: FacilityKind, pos: Position): Facility {
   return {
     kind,

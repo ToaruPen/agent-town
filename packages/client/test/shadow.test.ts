@@ -1,4 +1,5 @@
 import type { AgentState, Building, WorldState } from "@agent-town/shared";
+import type { FillInstruction, GraphicsInstructions } from "pixi.js";
 import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
@@ -58,12 +59,14 @@ function makeTreeWorld(): WorldState {
   };
 }
 
+function isFillInstruction(instruction: GraphicsInstructions): instruction is FillInstruction {
+  return instruction.action === "fill";
+}
+
 describe("shadowGraphic", () => {
   it("draws one soft ellipse that cannot become a hit target", () => {
     const shadow = shadowGraphic(0.75);
-    const fillInstructions = shadow.context.instructions.filter(
-      (instruction) => instruction.action === "fill",
-    );
+    const fillInstructions = shadow.context.instructions.filter(isFillInstruction);
     const fill = fillInstructions[0];
 
     expect(fillInstructions).toHaveLength(1);

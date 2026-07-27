@@ -568,7 +568,11 @@ describe("ThoughtBroker", () => {
       providerForAgent: () => "claude",
       planFn,
     });
-    const newcomer = { ...getAgent(engine, 0), id: missingId, tasks: [{ kind: "deposit" }] };
+    const newcomer = {
+      ...getAgent(engine, 0),
+      id: missingId,
+      tasks: [{ kind: "deposit" }] satisfies AgentTask[],
+    };
     newcomer.hunger = HUNGER_EAT_THRESHOLD - 1;
     engine.world.agents.push(newcomer);
 

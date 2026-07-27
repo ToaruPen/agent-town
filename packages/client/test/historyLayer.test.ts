@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { landmarkSelectionColor, renderHistoryLayer } from "../src/render/historyLayer.js";
 
-const landmarks: HistoricalLandmark[] = [
+const landmarks: [HistoricalLandmark, HistoricalLandmark, HistoricalLandmark] = [
   {
     id: "ruin",
     kind: "ruin",

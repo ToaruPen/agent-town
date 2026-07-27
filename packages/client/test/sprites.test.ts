@@ -236,7 +236,10 @@ describe("seasonal map sprites", () => {
     );
 
     expect(seasonalTrees).toHaveLength(6);
-    expect([...seasonalTrees].every((path) => SPRITE_PATHS.includes(path))).toBe(true);
+    // treeSpritePath returns a plain string; widen SPRITE_PATHS for this
+    // membership check rather than narrowing the test's inputs to it.
+    const spritePaths: readonly string[] = SPRITE_PATHS;
+    expect([...seasonalTrees].every((path) => spritePaths.includes(path))).toBe(true);
   });
 
   it("gives every season a distinct tint and makes winter palest and least saturated", () => {

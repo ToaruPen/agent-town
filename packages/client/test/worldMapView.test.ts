@@ -196,8 +196,10 @@ describe("buildWorldMapViewModel", () => {
 
   it("omits trade routes whose city IDs cannot be resolved", () => {
     const history = historyFixture();
+    const tradeRoute = history.worldMap.tradeRoutes[0];
+    if (tradeRoute === undefined) throw new Error("missing trade route fixture");
     history.worldMap.tradeRoutes[0] = {
-      ...history.worldMap.tradeRoutes[0],
+      ...tradeRoute,
       cityIds: ["city-polity-1-1", "city-missing"],
     };
 
@@ -219,8 +221,10 @@ describe("buildWorldMapViewModel", () => {
 
   it("falls back to the plain city fill when a city's nation has no banner", () => {
     const history = historyFixture();
+    const city = history.worldMap.cities[0];
+    if (city === undefined) throw new Error("missing city fixture");
     history.worldMap.cities[0] = {
-      ...history.worldMap.cities[0],
+      ...city,
       polityId: "polity-vanished",
     };
 

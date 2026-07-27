@@ -1,4 +1,4 @@
-import type { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams, SpawnOptions, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 
@@ -14,13 +14,26 @@ import {
 } from "../src/llm/claudeRunner.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 
-function createFakeChild(): ChildProcessWithoutNullStreams {
+// The real child process exposes stdin/stdout/stderr as one-directional
+// streams, but the fake needs both ends: tests write "process output" into
+// stdout/stderr and read "process input" off stdin.
+type FakeChildProcess = ChildProcessWithoutNullStreams & {
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+};
+
+function createFakeChild(): FakeChildProcess {
   return Object.assign(new EventEmitter(), {
     stdin: new PassThrough(),
     stdout: new PassThrough(),
     stderr: new PassThrough(),
     kill: vi.fn(() => true),
-  }) as unknown as ChildProcessWithoutNullStreams;
+  }) as unknown as FakeChildProcess;
+}
+
+function createSpawnMock(child: ChildProcessWithoutNullStreams) {
+  return vi.fn((_command: string, _args: readonly string[], _options: SpawnOptions) => child);
 }
 
 async function expectPending(resultPromise: Promise<unknown>): Promise<void> {
@@ -35,7 +48,7 @@ async function expectPending(resultPromise: Promise<unknown>): Promise<void> {
 describe("CliClaudeRunner", () => {
   it("spawns claude in print JSON mode and returns the wrapper result", async () => {
     const child = createFakeChild();
-    const spawnMock = vi.fn(() => child);
+    const spawnMock = createSpawnMock(child);
     const spawnFn = spawnMock as unknown as typeof spawn;
     let stdin = "";
     child.stdin.on("data", (chunk: Buffer) => {
@@ -78,7 +91,7 @@ describe("CliClaudeRunner", () => {
 
   it("passes the configured model to claude", async () => {
     const child = createFakeChild();
-    const spawnMock = vi.fn(() => child);
+    const spawnMock = createSpawnMock(child);
     const spawnFn = spawnMock as unknown as typeof spawn;
     const resultPromise = new CliClaudeRunner({ model: "sonnet", spawnFn }).run("prompt");
 
@@ -114,7 +127,7 @@ describe("CliClaudeRunner", () => {
     vi.stubEnv("DYLD_INSERT_LIBRARIES", "must-not-load");
     try {
       const child = createFakeChild();
-      const spawnMock = vi.fn(() => child);
+      const spawnMock = createSpawnMock(child);
       const spawnFn = spawnMock as unknown as typeof spawn;
       const runner = new CliClaudeRunner({ spawnFn });
 
@@ -150,7 +163,7 @@ describe("CliClaudeRunner", () => {
 
   it("accepts a wrapper result exactly at its UTF-8 byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const message = "é".repeat(CLAUDE_RESULT_MAX_BYTES / 2);
     const resultPromise = new CliClaudeRunner({ spawnFn }).run("prompt");
 
@@ -162,7 +175,7 @@ describe("CliClaudeRunner", () => {
 
   it("rejects a wrapper result over its UTF-8 byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const message = `${"é".repeat(CLAUDE_RESULT_MAX_BYTES / 2)}a`;
     const resultPromise = new CliClaudeRunner({ spawnFn }).run("prompt");
 
@@ -177,7 +190,7 @@ describe("CliClaudeRunner", () => {
 
   it("returns an error when claude exits non-zero", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
 
     const runner: LlmRunner = new CliClaudeRunner({ spawnFn });
     const resultPromise = runner.run("Plan トネリコ's day.");
@@ -195,7 +208,7 @@ describe("CliClaudeRunner", () => {
     vi.useFakeTimers();
     try {
       const child = createFakeChild();
-      const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+      const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
 
       const runner: LlmRunner = new CliClaudeRunner({ spawnFn, timeoutMs: 25 });
       const resultPromise = runner.run("Plan トネリコ's day.");
@@ -225,7 +238,7 @@ describe("CliClaudeRunner", () => {
     vi.useFakeTimers();
     try {
       const child = createFakeChild();
-      const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+      const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
       const runner = new CliClaudeRunner({ spawnFn, timeoutMs: 25 });
 
       const resultPromise = runner.run("prompt");
@@ -253,7 +266,7 @@ describe("CliClaudeRunner", () => {
     ["stderr", CLAUDE_STDERR_MAX_BYTES],
   ] as const)("stops claude when %s exceeds its UTF-8 byte limit", async (streamName, maxBytes) => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const resultPromise = new CliClaudeRunner({ spawnFn }).run("prompt");
 
     child[streamName].write(Buffer.alloc(maxBytes + 1, 0x20));
@@ -269,7 +282,7 @@ describe("CliClaudeRunner", () => {
 
   it("terminates and waits for close after a process error", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const resultPromise = new CliClaudeRunner({ spawnFn }).run("prompt");
 
     child.emit("error", new Error("lost executable"));
@@ -285,7 +298,7 @@ describe("CliClaudeRunner", () => {
 
   it("terminates and waits for close after an output stream error", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const resultPromise = new CliClaudeRunner({ spawnFn }).run("prompt");
 
     child.stdout.emit("error", new Error("broken output"));

@@ -1,4 +1,4 @@
-import type { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams, SpawnOptions, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,16 +29,29 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...original, rmSync: rmSyncMock };
 });
 
-function createFakeChild(): ChildProcessWithoutNullStreams {
+// The real child process exposes stdin/stdout/stderr as one-directional
+// streams, but the fake needs both ends: tests write "process output" into
+// stdout/stderr and read "process input" off stdin.
+type FakeChildProcess = ChildProcessWithoutNullStreams & {
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+};
+
+function createFakeChild(): FakeChildProcess {
   return Object.assign(new EventEmitter(), {
     stdin: new PassThrough(),
     stdout: new PassThrough(),
     stderr: new PassThrough(),
     kill: vi.fn(() => true),
-  }) as unknown as ChildProcessWithoutNullStreams;
+  }) as unknown as FakeChildProcess;
 }
 
-function emitSuccessfulTurn(child: ChildProcessWithoutNullStreams, text: string): void {
+function createSpawnMock(child: ChildProcessWithoutNullStreams) {
+  return vi.fn((_command: string, _args: readonly string[], _options: SpawnOptions) => child);
+}
+
+function emitSuccessfulTurn(child: FakeChildProcess, text: string): void {
   child.stdout.write(
     `${JSON.stringify({
       type: "item.completed",
@@ -61,7 +74,7 @@ async function expectPending(resultPromise: Promise<unknown>): Promise<void> {
 describe("CliCodexRunner", () => {
   it("runs codex in an isolated non-interactive mode and returns its agent message", async () => {
     const child = createFakeChild();
-    const spawnMock = vi.fn(() => child);
+    const spawnMock = createSpawnMock(child);
     const spawnFn = spawnMock as unknown as typeof spawn;
     let stdin = "";
     child.stdin.on("data", (chunk: Buffer) => {
@@ -177,7 +190,7 @@ describe("CliCodexRunner", () => {
     vi.stubEnv("DYLD_INSERT_LIBRARIES", "must-not-load");
     try {
       const child = createFakeChild();
-      const spawnMock = vi.fn(() => child);
+      const spawnMock = createSpawnMock(child);
       const spawnFn = spawnMock as unknown as typeof spawn;
       const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
@@ -215,7 +228,7 @@ describe("CliCodexRunner", () => {
 
   it("returns the last completed agent message", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -232,7 +245,7 @@ describe("CliCodexRunner", () => {
 
   it("accepts a final agent message exactly at its UTF-8 byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
     const message = "é".repeat(CODEX_AGENT_MESSAGE_MAX_BYTES / 2);
 
@@ -244,7 +257,7 @@ describe("CliCodexRunner", () => {
 
   it("rejects a final agent message over its UTF-8 byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
     const message = `${"é".repeat(CODEX_AGENT_MESSAGE_MAX_BYTES / 2)}a`;
 
@@ -263,7 +276,7 @@ describe("CliCodexRunner", () => {
     ["item.completed", "mcp_tool_call"],
   ])("rejects the %s %s action item", async (eventType, itemType) => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -278,7 +291,7 @@ describe("CliCodexRunner", () => {
 
   it("allows reasoning items in a normal text-only turn", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -292,7 +305,7 @@ describe("CliCodexRunner", () => {
 
   it("rejects any item event after turn completion", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -316,7 +329,7 @@ describe("CliCodexRunner", () => {
 
   it("rejects an agent message emitted after turn completion", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -340,7 +353,7 @@ describe("CliCodexRunner", () => {
     ["an event without a string type", JSON.stringify({ type: 42 })],
   ])("rejects %s in JSONL output", async (_description, line) => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -355,7 +368,7 @@ describe("CliCodexRunner", () => {
 
   it("rejects turn completion without an agent message", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -370,7 +383,7 @@ describe("CliCodexRunner", () => {
 
   it("rejects an agent message without turn completion", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -390,7 +403,7 @@ describe("CliCodexRunner", () => {
 
   it("returns a turn.failed message", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -407,7 +420,7 @@ describe("CliCodexRunner", () => {
 
   it("returns a top-level error event message", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -422,7 +435,7 @@ describe("CliCodexRunner", () => {
 
   it("surfaces the exit code and trimmed stderr on nonzero exit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -514,7 +527,7 @@ describe("CliCodexRunner", () => {
       vi.mocked(child.kill).mockImplementation(() => {
         throw new Error("termination failed");
       });
-      const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+      const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
       const runner = new CliCodexRunner({
         spawnFn,
         timeoutMs: 25,
@@ -541,7 +554,7 @@ describe("CliCodexRunner", () => {
     try {
       const child = createFakeChild();
       vi.mocked(child.kill).mockReturnValue(false);
-      const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+      const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
       const runner = new CliCodexRunner({
         spawnFn,
         timeoutMs: 25,
@@ -657,7 +670,7 @@ describe("CliCodexRunner", () => {
 
   it("returns a failure when the child emits a process error", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -674,7 +687,7 @@ describe("CliCodexRunner", () => {
 
   it("returns a failure when writing the prompt emits a stdin error", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -694,7 +707,7 @@ describe("CliCodexRunner", () => {
     ["stderr", "codex stderr error: broken output"],
   ] as const)("returns a failure when %s emits an error", async (streamName, expectedError) => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -708,7 +721,7 @@ describe("CliCodexRunner", () => {
 
   it("accepts stdout at its byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
     const events = `${JSON.stringify({
       type: "item.completed",
@@ -725,7 +738,7 @@ describe("CliCodexRunner", () => {
 
   it("stops codex when stdout exceeds its byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -742,7 +755,7 @@ describe("CliCodexRunner", () => {
 
   it("accepts stderr at its byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -757,7 +770,7 @@ describe("CliCodexRunner", () => {
 
   it("stops codex when stderr exceeds its byte limit", async () => {
     const child = createFakeChild();
-    const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+    const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn, workingDirectory: "test-codex-cwd" });
 
     const resultPromise = runner.run("prompt");
@@ -776,7 +789,7 @@ describe("CliCodexRunner", () => {
     const workingDirectory = mkdtempSync(join(tmpdir(), "agent-town-codex-test-provided-"));
     try {
       const child = createFakeChild();
-      const spawnFn = vi.fn(() => child) as unknown as typeof spawn;
+      const spawnFn = createSpawnMock(child) as unknown as typeof spawn;
       const runner = new CliCodexRunner({ spawnFn, workingDirectory });
 
       const resultPromise = runner.run("prompt");
@@ -791,7 +804,7 @@ describe("CliCodexRunner", () => {
 
   it("removes only the temporary working directory it creates", async () => {
     const child = createFakeChild();
-    const spawnMock = vi.fn(() => child);
+    const spawnMock = createSpawnMock(child);
     const spawnFn = spawnMock as unknown as typeof spawn;
     const runner = new CliCodexRunner({ spawnFn });
 

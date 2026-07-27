@@ -1006,7 +1006,9 @@ describe("createEngine", () => {
 
   it("requires strictly free completed housing capacity", () => {
     const equalCapacity = immigrationWorld();
-    const second = { ...equalCapacity.agents[0], id: "agent-2", name: "シラカバ" };
+    const first = equalCapacity.agents[0];
+    if (first === undefined) throw new Error("missing test agent");
+    const second = { ...first, id: "agent-2", name: "シラカバ" };
     equalCapacity.agents.push(second);
     setFoodDays(equalCapacity, IMMIGRATION_FOOD_DAYS_MIN);
     expect(HOUSE_CAPACITY).toBe(equalCapacity.agents.length);

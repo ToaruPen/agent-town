@@ -25,7 +25,7 @@ function agent(id: string, name: string): AgentState {
   };
 }
 
-const agents = [
+const agents: [AgentState, AgentState, AgentState] = [
   agent("agent-0", "トネリコ"),
   agent("agent-1", "シラカバ"),
   agent("agent-2", "スギ"),

@@ -33,7 +33,7 @@ import {
   resolveScreenBubblePlacement,
 } from "../src/ui/infoBubble.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
-import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture, requireTrailCell } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -368,7 +368,9 @@ describe("resolveInfoBubbleTarget", () => {
       kind: "landmark",
       landmarkId: "landmark-1",
     });
-    expect(buildLandmarkBubbleText(world.history.landmarks[0], world.history)).toBe(
+    const landmark = world.history.landmarks[0];
+    if (landmark === undefined) throw new Error("missing landmark fixture");
+    expect(buildLandmarkBubbleText(landmark, world.history)).toBe(
       "古き黒貂国境砦 — 黒貂・金環国境戦争の後に築かれた（−80年）",
     );
   });
@@ -403,7 +405,7 @@ describe("resolveInfoBubbleTarget", () => {
       buildings: [],
     });
     trailWorld.trailCells[0] = {
-      ...trailWorld.trailCells[0],
+      ...requireTrailCell(trailWorld.trailCells, 0),
       level: "trail",
       wear: 9,
       passagesToday: 4,
@@ -421,7 +423,7 @@ describe("resolveInfoBubbleTarget", () => {
     });
 
     trailWorld.trailCells[0] = {
-      ...trailWorld.trailCells[0],
+      ...requireTrailCell(trailWorld.trailCells, 0),
       level: "none",
       wear: 0,
     };
@@ -430,7 +432,7 @@ describe("resolveInfoBubbleTarget", () => {
     );
 
     trailWorld.trailCells[0] = {
-      ...trailWorld.trailCells[0],
+      ...requireTrailCell(trailWorld.trailCells, 0),
       level: "trail",
       wear: 9,
     };

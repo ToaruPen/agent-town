@@ -55,8 +55,8 @@ const validPlan = JSON.stringify({ reasoning: "集落を見守る。", plan: [{ 
 describe("provider routing integration", () => {
   it("routes トネリコ only to Claude and シラカバ only to Codex", async () => {
     const { engine, fallback } = setup();
-    const claudeRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
-    const codexRun = vi.fn(async () => ({ ok: true as const, text: validPlan }));
+    const claudeRun = vi.fn<LlmRunner["run"]>(async () => ({ ok: true as const, text: validPlan }));
+    const codexRun = vi.fn<LlmRunner["run"]>(async () => ({ ok: true as const, text: validPlan }));
     const runners: Readonly<Record<LlmProvider, LlmRunner>> = {
       claude: runner(claudeRun),
       codex: runner(codexRun),

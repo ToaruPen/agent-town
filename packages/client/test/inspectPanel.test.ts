@@ -8,7 +8,7 @@ import {
   resolveInspectPanelViewModel,
   updateThoughtBubbleSchedule,
 } from "../src/ui/inspectPanel.js";
-import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture, requireTrailCell } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -220,7 +220,7 @@ describe("generic inspect panel view models", () => {
       trailCells: makeTrailCellsFixture(2, 2),
     });
     world.trailCells[3] = {
-      ...world.trailCells[3],
+      ...requireTrailCell(world.trailCells, 3),
       level: "trail",
       wear: 9,
       passagesToday: 4,
@@ -261,7 +261,7 @@ describe("generic inspect panel view models", () => {
     expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 99 }, world)).toBeNull();
 
     world.trailCells[3] = {
-      ...world.trailCells[3],
+      ...requireTrailCell(world.trailCells, 3),
       level: "none",
       wear: 0,
     };
@@ -391,7 +391,7 @@ describe("createInspectPanel", () => {
       trailCells: makeTrailCellsFixture(2, 2),
     });
     world.trailCells[3] = {
-      ...world.trailCells[3],
+      ...requireTrailCell(world.trailCells, 3),
       level: "trail",
       wear: 9,
       passagesToday: 4,

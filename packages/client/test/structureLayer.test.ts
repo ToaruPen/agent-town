@@ -43,7 +43,10 @@ describe("buildingSprites", () => {
       house,
       ...FACILITY_KINDS.map((kind, index) => makeFacilityFixture(kind, { x: index + 1, y: 0 })),
     ];
-    const visuals = buildings.map(buildingSprites);
+    const visuals = buildings.map((building) => {
+      if (building.kind === "field") throw new Error("unexpected field in building sprite fixture");
+      return buildingSprites(building);
+    });
 
     expect(new Set(visuals.map(({ roof, wall }) => `${roof}|${wall}`))).toHaveLength(
       buildings.length,

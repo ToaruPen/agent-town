@@ -15,7 +15,7 @@ import {
   createSpatialMilestoneSchedule,
   updateSpatialMilestoneSchedule,
 } from "../src/ui/spatialViewModel.js";
-import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture, requireTrailCell } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeAgent(id: string, name: string): AgentState {
@@ -167,7 +167,7 @@ describe("spatial view models", () => {
       ],
     });
     world.trailCells[2] = {
-      ...world.trailCells[2],
+      ...requireTrailCell(world.trailCells, 2),
       level: "trail",
       wear: 9.5,
       causedByFacilityIds: [granary.id],
@@ -311,14 +311,14 @@ describe("spatial milestone schedule", () => {
       buildings: [completedFacility],
     });
     trailed.trailCells[3] = {
-      ...trailed.trailCells[3],
+      ...requireTrailCell(trailed.trailCells, 3),
       level: "trace",
       wear: 2,
       passagesToday: 1,
       dominantPurpose: "facilityService",
       causedByFacilityIds: [completedFacility.id],
     };
-    trailed.trailCells[2] = { ...trailed.trailCells[3] };
+    trailed.trailCells[2] = { ...requireTrailCell(trailed.trailCells, 3) };
 
     let schedule = createSpatialMilestoneSchedule(initial);
     schedule = updateSpatialMilestoneSchedule(schedule, initial, seeking);
@@ -363,12 +363,12 @@ describe("spatial milestone schedule", () => {
       buildings: [blockedMarket],
     });
     active.trailCells[2] = {
-      ...active.trailCells[2],
+      ...requireTrailCell(active.trailCells, 2),
       level: "trace",
       wear: 3,
       passagesToday: 1,
     };
-    operationBlocked.trailCells[2] = { ...active.trailCells[2] };
+    operationBlocked.trailCells[2] = { ...requireTrailCell(active.trailCells, 2) };
     const noisyDailyUpdate = makeWorld({
       tick: 4,
       buildings: [
@@ -383,7 +383,7 @@ describe("spatial milestone schedule", () => {
       ],
     });
     noisyDailyUpdate.trailCells[2] = {
-      ...noisyDailyUpdate.trailCells[2],
+      ...requireTrailCell(noisyDailyUpdate.trailCells, 2),
       level: "trail",
       wear: 12,
       passagesToday: 5,
