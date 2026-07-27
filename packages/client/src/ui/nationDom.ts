@@ -25,8 +25,3 @@ export function meter(className: string, ratio: number, valueText: string): HTML
   bar.setAttribute("aria-valuetext", valueText);
   return bar;
 }
-
-/** Replaces a panel's contents in one go, the destroy-and-rebuild half of the established idiom. */
-export function replaceChildren(root: HTMLElement, ...children: readonly Node[]): void {
-  root.replaceChildren(...children);
-}
