@@ -225,6 +225,31 @@
         pointer-events: auto;
       }
 
+      /* 576×384 is the map's native size at WORLD_MAP_CELL_SIZE_PX = 6. It is capped there and centred
+         rather than stretched: a 6 px cell has to carry territory, tier and change at once, and any
+         non-integer scale smears the 1 px border that is the whole identity channel. */
+      .world-map {
+        display: flex;
+        flex: 0 1 auto;
+        align-items: flex-start;
+        justify-content: center;
+        min-width: 0;
+        pointer-events: auto;
+      }
+
+      .world-map__canvas {
+        width: 100%;
+        max-width: 576px;
+        height: auto;
+        aspect-ratio: 3 / 2;
+        background: #1b3442;
+        border: 1px solid var(--world-iron);
+        box-shadow: inset 0 0 0 1px rgb(222 211 179 / 8%);
+        image-rendering: pixelated;
+        cursor: crosshair;
+        touch-action: manipulation;
+      }
+
       .nation-dashboard__name,
       .prosperity__title {
         margin: 0 0 0.5rem;
@@ -1495,6 +1520,10 @@
         class="nation-dashboard"
         aria-label="自国の状況"
       ></section>
+      <!-- The primary surface, docked between the two panels rather than overlaid on them: neither ever
+           covers the other, and closing the city view will widen this rather than reveal it
+           (traversal.md §2.2). Empty until a `welcome` arrives, like every panel here. -->
+      <section id="world-map" class="world-map" aria-label="世界地図"></section>
       <section id="nation-ranking" class="prosperity" aria-label="繁栄度の順位"></section>
     </main>
     <!-- Always on screen (hud.md §4.1's decision strip). Empty, not hidden, until a welcome arrives for

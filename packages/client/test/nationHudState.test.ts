@@ -208,6 +208,24 @@ describe("claiming a nation", () => {
     expect(after.orders).toBe(orders);
   });
 
+  /**
+   * The id has to outlive every later payload, because no later payload carries it: `clock` has no such
+   * field and `season` does not copy one, so `applyUpdate` spreading the previous state is the only thing
+   * keeping it. The world map depends on this — it reads the held nation from here rather than from
+   * `world.playerNationId`, which a live probe showed is null for the whole session after a mid-session
+   * claim. Reading the payload instead left the map marking no territory at all.
+   */
+  it("keeps the held nation across later updates, which carry no id of their own", () => {
+    const claimed = applyOrders(
+      applyWelcome(initialNationHudState(), worldFixture({ playerNationId: null })),
+      ordersFixture(),
+    );
+
+    const later = applyUpdate(claimed, worldFixture({ playerNationId: null }), 2_000);
+
+    expect(later.playerNationId).toBe("polity-1");
+  });
+
   it("names the nation in the command it sends", () => {
     expect(selectNationCommand("polity-2")).toEqual({ type: "selectNation", nationId: "polity-2" });
   });

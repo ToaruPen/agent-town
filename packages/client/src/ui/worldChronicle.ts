@@ -1,13 +1,8 @@
 import type { HistoryEventKind, Polity, WorldHistory } from "@agent-town/shared";
 
 import { culturalValueLabel } from "./nationText.js";
-import {
-  buildWorldMapViewModel,
-  hexColor,
-  polityIdAtWorldMapPosition,
-  renderWorldMapCanvas,
-  worldMapPositionFromPointer,
-} from "./worldMapView.js";
+import { createWorldMapHost } from "./worldMapHost.js";
+import { hexColor } from "./worldMapView.js";
 
 export interface ChronicleOriginViewModel {
   homelandName: string;
@@ -365,27 +360,22 @@ function mapPanel(history: WorldHistory, chronicle: WorldChronicleViewModel): HT
   panel.setAttribute("aria-labelledby", "world-chronicle-map-tab");
 
   const canvasWrapper = element("div", "world-chronicle__map-canvas-wrapper");
-  const canvas = element("canvas", "world-chronicle__map-canvas");
-  canvas.setAttribute("aria-label", "現存国家、都市、交易路、現在地を示す世界地図");
-  canvasWrapper.append(canvas);
-
   const selection = element("div", "world-chronicle__map-selection");
   const polityViews = selectedPolityViews(history, chronicle);
-  let mapView = buildWorldMapViewModel(history, null);
-  renderWorldMapCanvas(canvas, mapView);
-  replaceMapSelection(selection, polityViews, null);
-  canvas.addEventListener("pointerup", (event) => {
-    const pos = worldMapPositionFromPointer(
-      mapView,
-      canvas.getBoundingClientRect(),
-      event.clientX,
-      event.clientY,
-    );
-    const selectedPolityId = pos === null ? null : polityIdAtWorldMapPosition(mapView, pos);
-    mapView = buildWorldMapViewModel(history, selectedPolityId);
-    renderWorldMapCanvas(canvas, mapView);
-    replaceMapSelection(selection, polityViews, selectedPolityId);
+
+  // The canvas, the pointer handler and the view-model closure all moved to `createWorldMapHost`, which
+  // is the same surface the nation page mounts permanently. What stays here is the chronicle's own half:
+  // the legend, and the card for whichever nation was clicked.
+  const host = createWorldMapHost(canvasWrapper, {
+    className: "world-chronicle__map-canvas",
+    onSelect: (selectedPolityId) => {
+      replaceMapSelection(selection, polityViews, selectedPolityId);
+    },
   });
+  // No nation state and no player: the chronicle is the archive of the world that was, so every city
+  // draws at its smallest tier and no territory is marked as anyone's.
+  host.render({ history, cityStates: [], playerPolityId: null });
+  replaceMapSelection(selection, polityViews, null);
 
   panel.append(canvasWrapper, mapLegend(), selection);
   return panel;

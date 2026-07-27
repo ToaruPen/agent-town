@@ -9,7 +9,12 @@ import {
   type WorldMapTerrain,
 } from "@agent-town/shared";
 
-import { MAP_ACCENT_COLOR, MAP_CASING_COLOR, MAP_CITY_FILL_COLOR } from "../render/colors.js";
+import {
+  MAP_ACCENT_COLOR,
+  MAP_CASING_COLOR,
+  MAP_CITY_FILL_COLOR,
+  MAP_PLAYER_POLITY_ALPHA,
+} from "../render/colors.js";
 import { assignNationBanners } from "../render/nationBanner.js";
 import { type CityGlyph, chronicleCityGlyph } from "./worldCityViewModel.js";
 import { extractTerritoryEdges, type TerritoryEdge } from "./worldTerritoryViewModel.js";
@@ -30,6 +35,8 @@ export interface WorldMapCellViewModel {
   polityId: string | null;
   polityColor: string | null;
   polityAlpha: number;
+  /** Whether this cell belongs to the nation the player holds. False for every cell when nobody does. */
+  isPlayer: boolean;
 }
 
 export interface WorldMapCityViewModel {
@@ -58,6 +65,21 @@ export interface WorldMapRouteViewModel {
   isHighlighted: boolean;
 }
 
+/**
+ * Who the map is drawn *for*, as opposed to what is selected in it. The player's nation is a resting
+ * state that lasts a session; a selection is a momentary question. Keeping them apart is what stops one
+ * from being read as the other at a call site.
+ */
+export interface WorldMapMarks {
+  /**
+   * The polity the player holds. `NationWorldState` calls the same id `playerNationId`; on the map every
+   * owner is a `polityId`, so it takes the map's vocabulary here. Null marks no nation at all.
+   */
+  playerPolityId: string | null;
+}
+
+const NO_MARKS: WorldMapMarks = { playerPolityId: null };
+
 export interface WorldMapViewModel {
   width: number;
   height: number;
@@ -76,27 +98,42 @@ export function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-function cellAlpha(polityId: string | null, selectedPolityId: string | null): number {
+/**
+ * Selection outranks the player step, and both outrank the resting alpha. Selection has to win or a
+ * player who selects their own nation would get no answer to "which cells are theirs"; the player step
+ * is a resting state and selection is not, so there is nothing to trade.
+ */
+function cellAlpha(
+  polityId: string | null,
+  selectedPolityId: string | null,
+  playerPolityId: string | null,
+): number {
   if (polityId === null) return 0;
-  return polityId === selectedPolityId ? WORLD_MAP_SELECTED_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
+  if (polityId === selectedPolityId) return WORLD_MAP_SELECTED_POLITY_ALPHA;
+  return polityId === playerPolityId ? MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
 }
 
+/**
+ * The fill takes the **banner** colour, not the archival `Polity.color` it used to. The archival values
+ * are muted for large flat areas and collide across worlds (visual.md §1.3), so the wash was the one
+ * surface still carrying a colour the identity channel had already abandoned.
+ */
 function buildCells(
   history: WorldHistory,
   selectedPolityId: string | null,
+  banners: ReadonlyMap<string, string>,
+  playerPolityId: string | null,
 ): WorldMapCellViewModel[] {
   const { width } = history.worldMap;
-  const polityColors = new Map(
-    history.polities.map(({ id, color }) => [id, hexColor(color)] as const),
-  );
   return history.worldMap.cells.map(({ terrain, polityId }, index) => ({
     pos: { x: index % width, y: Math.floor(index / width) },
     terrain,
     terrainLabel: TERRAIN_VIEW[terrain].label,
     terrainColor: TERRAIN_VIEW[terrain].color,
     polityId,
-    polityColor: polityId === null ? null : (polityColors.get(polityId) ?? null),
-    polityAlpha: cellAlpha(polityId, selectedPolityId),
+    polityColor: polityId === null ? null : (banners.get(polityId) ?? null),
+    polityAlpha: cellAlpha(polityId, selectedPolityId, playerPolityId),
+    isPlayer: polityId !== null && polityId === playerPolityId,
   }));
 }
 
@@ -162,17 +199,21 @@ function buildRoutes(
  * `cityStates` is optional because the chronicle map has no nation state to give it: the live host
  * that carries one arrives with the world map's own surface. Cities without it draw at the smallest
  * tier. Pass `nations.flatMap(({ cities }) => cities)` once there is a nation snapshot to hand.
+ *
+ * `marks` is an object rather than a fourth nullable string so it cannot be passed where
+ * `selectedPolityId` belongs — the two mean opposite things, one transient and one a resting state.
  */
 export function buildWorldMapViewModel(
   history: WorldHistory,
   selectedPolityId: string | null,
   cityStates: readonly NationCityState[] = [],
+  marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
-    cells: buildCells(history, selectedPolityId),
+    cells: buildCells(history, selectedPolityId, banners, marks.playerPolityId),
     cities: buildCities(
       history,
       selectedPolityId,

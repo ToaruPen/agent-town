@@ -5,7 +5,11 @@ import {
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { MAP_CITY_FILL_COLOR, NATION_BANNER_RING } from "../src/render/colors.js";
+import {
+  MAP_CITY_FILL_COLOR,
+  MAP_PLAYER_POLITY_ALPHA,
+  NATION_BANNER_RING,
+} from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
 import {
   buildWorldMapViewModel,
@@ -15,6 +19,15 @@ import {
 
 function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
+}
+
+/** The banner a nation is assigned, which is now the fill colour as well as the border colour. */
+function bannerFor(history: WorldHistory, polityId: string): string {
+  const assignment = assignNationBanners(history.polities).find(
+    ({ nationId }) => nationId === polityId,
+  );
+  if (assignment === undefined) throw new Error(`no banner for ${polityId}`);
+  return hexColor(NATION_BANNER_RING[assignment.slot] ?? 0);
 }
 
 function historyFixture(): WorldHistory {
@@ -154,7 +167,8 @@ function historyFixture(): WorldHistory {
 
 describe("buildWorldMapViewModel", () => {
   it("formats Japanese terrain, polity colors, settlement, and selection highlights", () => {
-    const view = buildWorldMapViewModel(historyFixture(), "polity-1");
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(history, "polity-1");
 
     expect(view.settlement).toEqual({
       pos: { x: 3, y: 2 },
@@ -162,7 +176,7 @@ describe("buildWorldMapViewModel", () => {
     });
     expect(view.cells.find(({ pos }) => pos.x === 1 && pos.y === 1)).toMatchObject({
       terrainLabel: "平地",
-      polityColor: "#6f7f88",
+      polityColor: bannerFor(history, "polity-1"),
       polityAlpha: WORLD_MAP_SELECTED_POLITY_ALPHA,
     });
     expect(view.cities).toEqual([
@@ -181,10 +195,11 @@ describe("buildWorldMapViewModel", () => {
   });
 
   it("uses normal alpha for unselected overlays and no overlay for unclaimed cells", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(history, null);
 
     expect(view.cells[1]).toMatchObject({
-      polityColor: "#6f7f88",
+      polityColor: bannerFor(history, "polity-1"),
       polityAlpha: WORLD_MAP_POLITY_ALPHA,
     });
     expect(view.cells.at(-1)).toMatchObject({
@@ -192,6 +207,71 @@ describe("buildWorldMapViewModel", () => {
       polityColor: null,
       polityAlpha: 0,
     });
+  });
+
+  /**
+   * The wash was the last surface still painted in `Polity.color`. Those values are muted for large flat
+   * areas and collide across worlds (visual.md §1.3), so territory *extent* was being carried by a colour
+   * the identity channel had already abandoned — a nation's border and its own fill could disagree.
+   */
+  it("fills territory in the banner colour rather than the archival one", () => {
+    const history = historyFixture();
+
+    const view = buildWorldMapViewModel(history, null);
+
+    const fills = new Set(view.cells.flatMap(({ polityColor }) => polityColor ?? []));
+    expect(fills).toEqual(
+      new Set([bannerFor(history, "polity-1"), bannerFor(history, "polity-2")]),
+    );
+    expect(fills).not.toContain("#6f7f88");
+    expect(fills).not.toContain("#c49a4b");
+  });
+
+  /** Bullet 3: one nation carries the player step, at 0.32 against every rival's 0.28. */
+  it("gives exactly one nation the player's fill alpha", () => {
+    const history = historyFixture();
+
+    const view = buildWorldMapViewModel(history, null, [], { playerPolityId: "polity-2" });
+
+    const owned = view.cells.filter(({ polityId }) => polityId !== null);
+    const player = owned.filter(({ isPlayer }) => isPlayer);
+    const rivals = owned.filter(({ isPlayer }) => !isPlayer);
+    expect(player.length).toBeGreaterThan(0);
+    expect(rivals.length).toBeGreaterThan(0);
+    expect(new Set(player.map(({ polityId }) => polityId))).toEqual(new Set(["polity-2"]));
+    expect(new Set(player.map(({ polityAlpha }) => polityAlpha))).toEqual(
+      new Set([MAP_PLAYER_POLITY_ALPHA]),
+    );
+    expect(new Set(rivals.map(({ polityAlpha }) => polityAlpha))).toEqual(
+      new Set([WORLD_MAP_POLITY_ALPHA]),
+    );
+  });
+
+  /** Spectating is a real state — the picker exists — and it must not decorate an arbitrary nation. */
+  it("marks no nation at all when the player holds none", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: null });
+
+    expect(view.cells.some(({ isPlayer }) => isPlayer)).toBe(false);
+    const owned = view.cells.filter(({ polityId }) => polityId !== null);
+    expect(new Set(owned.map(({ polityAlpha }) => polityAlpha))).toEqual(
+      new Set([WORLD_MAP_POLITY_ALPHA]),
+    );
+  });
+
+  /**
+   * A player selecting their own nation must still get the selection answer. If the player step won, the
+   * one nation whose cells you most often click would be the one that never responded to a click.
+   */
+  it("lets a selection outrank the player's own step", () => {
+    const view = buildWorldMapViewModel(historyFixture(), "polity-2", [], {
+      playerPolityId: "polity-2",
+    });
+
+    const player = view.cells.filter(({ isPlayer }) => isPlayer);
+    expect(player.length).toBeGreaterThan(0);
+    expect(new Set(player.map(({ polityAlpha }) => polityAlpha))).toEqual(
+      new Set([WORLD_MAP_SELECTED_POLITY_ALPHA]),
+    );
   });
 
   it("omits trade routes whose city IDs cannot be resolved", () => {
