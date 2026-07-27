@@ -5,11 +5,17 @@ import {
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
+import { MAP_CITY_FILL_COLOR, NATION_BANNER_RING } from "../src/render/colors.js";
+import { assignNationBanners } from "../src/render/nationBanner.js";
 import {
   buildWorldMapViewModel,
   polityIdAtWorldMapPosition,
   worldMapPositionFromPointer,
 } from "../src/ui/worldMapView.js";
+
+function hexColor(color: number): string {
+  return `#${color.toString(16).padStart(6, "0")}`;
+}
 
 function historyFixture(): WorldHistory {
   return {
@@ -196,6 +202,31 @@ describe("buildWorldMapViewModel", () => {
     };
 
     expect(buildWorldMapViewModel(history, "polity-1").tradeRoutes).toEqual([]);
+  });
+
+  it("gives each city its nation's banner colour, not the colliding archival one", () => {
+    const history = historyFixture();
+    const banners = assignNationBanners(history.polities);
+
+    const view = buildWorldMapViewModel(history, null);
+
+    expect(view.cities.map(({ bannerColor }) => bannerColor)).toEqual(
+      banners.map(({ slot }) => hexColor(NATION_BANNER_RING[slot] ?? 0)),
+    );
+    expect(view.cities.map(({ bannerColor }) => bannerColor)).not.toContain("#6f7f88");
+    expect(view.cities.map(({ bannerColor }) => bannerColor)).not.toContain("#c49a4b");
+  });
+
+  it("falls back to the plain city fill when a city's nation has no banner", () => {
+    const history = historyFixture();
+    history.worldMap.cities[0] = {
+      ...history.worldMap.cities[0],
+      polityId: "polity-vanished",
+    };
+
+    expect(buildWorldMapViewModel(history, null).cities[0]?.bannerColor).toBe(
+      hexColor(MAP_CITY_FILL_COLOR),
+    );
   });
 
   it("uses the exact Japanese label for every terrain kind", () => {

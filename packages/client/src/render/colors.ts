@@ -19,3 +19,18 @@ export const TRAIL_COLORS = {
 export const TRAIL_GRIT_COLOR = 0x493722;
 export const AGENT_LABEL_COLOR = 0xffffff;
 export const HUD_TEXT_COLOR = 0xffffff;
+/** Nation banner ring. Twelve slots, separated for use at alpha 1.0 on borders and city glyphs.
+ *  Higher chroma than Polity.color on purpose: those are muted for large flat areas (the 国柄 card),
+ *  these are for thin marks. Slots 0-7 are primaries (min ΔE76 31.2); 8-11 are collision fallbacks
+ *  that differ from their hue neighbours on lightness as well as hue. */
+export const NATION_BANNER_RING = [
+  0xd34f55, 0xeea043, 0x94953b, 0x68b072, 0x12968f, 0x0082bd, 0x685ea8, 0xce68ac, 0x8a4a22,
+  0x557035, 0x8ecfe0, 0x512f6b,
+] as const;
+/** The dark casing under every foreground mark, which is what makes a banner colour legible on any
+ *  terrain (moss 0x557035 is only ΔE76 16.8 from plains). Already the world-map city stroke. */
+export const MAP_CASING_COLOR = 0x141b1e;
+/** Progress and highlight. Already both the facility progress bar and the highlighted trade route. */
+export const MAP_ACCENT_COLOR = 0xfff176;
+/** The world map's city fill before nations owned a banner colour; now only the unclaimed fallback. */
+export const MAP_CITY_FILL_COLOR = 0xf1e8ce;

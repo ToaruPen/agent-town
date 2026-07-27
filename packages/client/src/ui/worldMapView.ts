@@ -10,6 +10,9 @@ import {
   type WorldMapTerrain,
 } from "@agent-town/shared";
 
+import { MAP_ACCENT_COLOR, MAP_CASING_COLOR, MAP_CITY_FILL_COLOR } from "../render/colors.js";
+import { assignNationBanners } from "../render/nationBanner.js";
+
 const TERRAIN_VIEW = {
   sea: { label: "海", color: "#1b3442" },
   plains: { label: "平地", color: "#7d8c62" },
@@ -33,6 +36,9 @@ export interface WorldMapCityViewModel {
   name: string;
   pos: Position;
   polityId: string;
+  /** The nation's derived banner colour, which is the identity channel at alpha 1.0 — not the
+   *  archival `Polity.color`, whose muted values collide. See visual.md §2.0 and §2.1. */
+  bannerColor: string;
   isCapital: boolean;
   isHighlighted: boolean;
 }
@@ -85,15 +91,27 @@ function buildCells(
   }));
 }
 
+/** Banners come from `history.polities`, the set fixed at world generation, so a nation's colour
+ *  never shifts because the live list changed order or lost a member (visual.md §2.1, property 1). */
+function bannerColors(history: WorldHistory): Map<string, string> {
+  return new Map(
+    assignNationBanners(history.polities).map(
+      ({ nationId, color }) => [nationId, hexColor(color)] as const,
+    ),
+  );
+}
+
 function buildCities(
   history: WorldHistory,
   selectedPolityId: string | null,
+  banners: ReadonlyMap<string, string>,
 ): WorldMapCityViewModel[] {
   return history.worldMap.cities.map(({ id, name, pos, polityId, isCapital }) => ({
     id,
     name,
     pos,
     polityId,
+    bannerColor: banners.get(polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
     isCapital,
     isHighlighted: polityId === selectedPolityId,
   }));
@@ -127,7 +145,7 @@ export function buildWorldMapViewModel(
     width: history.worldMap.width,
     height: history.worldMap.height,
     cells: buildCells(history, selectedPolityId),
-    cities: buildCities(history, selectedPolityId),
+    cities: buildCities(history, selectedPolityId, bannerColors(history)),
     tradeRoutes: buildRoutes(history, selectedPolityId),
     settlement: {
       pos: history.worldMap.settlementFrontierPos,
@@ -234,9 +252,10 @@ function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel):
     const radius = city.isCapital ? WORLD_MAP_CAPITAL_RADIUS_PX : WORLD_MAP_CITY_RADIUS_PX;
     context.beginPath();
     context.arc(center.x, center.y, radius, 0, Math.PI * 2);
-    context.fillStyle = city.isHighlighted ? "#fff176" : "#f1e8ce";
+    context.fillStyle = city.isHighlighted ? hexColor(MAP_ACCENT_COLOR) : city.bannerColor;
     context.fill();
-    context.strokeStyle = "#141b1e";
+    // The casing is what keeps a banner colour legible on any terrain — visual.md §2.2.2.
+    context.strokeStyle = hexColor(MAP_CASING_COLOR);
     context.lineWidth = 1;
     context.stroke();
   }
