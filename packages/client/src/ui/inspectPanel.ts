@@ -16,6 +16,7 @@ import {
   type TrailInspectPanelViewModel,
 } from "./spatialViewModel.js";
 import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
+import { element as createElement } from "./worldChronicle.js";
 
 export const THOUGHT_BUBBLE_DURATION_MS = 6_000;
 export const THOUGHT_BUBBLE_MAX_CHARS = 40;
@@ -164,17 +165,6 @@ export function updateThoughtBubbleSchedule(
   }
 
   return { observedThoughts, bubbles };
-}
-
-function createElement<K extends keyof HTMLElementTagNameMap>(
-  tagName: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tagName);
-  element.className = className;
-  if (text !== undefined) element.textContent = text;
-  return element;
 }
 
 function createTaskList(tasks: InspectTaskViewModel[]): HTMLElement {

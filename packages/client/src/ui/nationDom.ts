@@ -1,18 +1,4 @@
-/**
- * The element helper the nation panels share. `worldChronicle.ts:177` has the same six lines as a
- * module-private function; importing it would mean exporting from a file C1-4 is about to reshape, so
- * the nation layer keeps its own copy rather than creating a merge conflict over a helper.
- */
-export function element<K extends keyof HTMLElementTagNameMap>(
-  tagName: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tagName);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
+import { element } from "./worldChronicle.js";
 
 /**
  * A bar the player reads as a proportion. Native `<progress>` so it carries its own semantics, with

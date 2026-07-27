@@ -3,7 +3,7 @@ import type {
   NationDashboardViewModel,
   NationMetricRow,
 } from "./nationDashboardViewModel.js";
-import { element } from "./nationDom.js";
+import { element } from "./worldChronicle.js";
 
 export interface NationDashboardController {
   render(view: NationDashboardViewModel | null, generation: number): void;

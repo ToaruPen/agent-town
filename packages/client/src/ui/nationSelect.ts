@@ -1,8 +1,8 @@
 import type { NationState, WorldHistory } from "@agent-town/shared";
 
 import type { SendClientMessage } from "../net/wsClient.js";
-import { element } from "./nationDom.js";
 import { selectNationCommand } from "./nationHudState.js";
+import { element } from "./worldChronicle.js";
 
 export interface NationSelectController {
   render(nations: readonly NationState[], history: WorldHistory | null): void;

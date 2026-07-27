@@ -2,9 +2,9 @@ import { SPEED_MULTIPLIERS, type SpeedMultiplier } from "@agent-town/shared";
 
 import type { SendClientMessage } from "../net/wsClient.js";
 import type { NationClockViewModel } from "./nationClockViewModel.js";
-import { element } from "./nationDom.js";
 import { setSpeedCommand } from "./nationHudState.js";
 import { speedLabel } from "./nationText.js";
+import { element } from "./worldChronicle.js";
 
 export interface NationClockBarController {
   render(view: NationClockViewModel, speed: SpeedMultiplier): void;

@@ -175,7 +175,7 @@ export function buildWorldChronicleViewModel(history: WorldHistory): WorldChroni
   };
 }
 
-function element<K extends keyof HTMLElementTagNameMap>(
+export function element<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
   className: string,
   text?: string,

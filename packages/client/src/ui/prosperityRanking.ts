@@ -1,9 +1,10 @@
-import { element, meter } from "./nationDom.js";
+import { meter } from "./nationDom.js";
 import type {
   ProsperityContributionRow,
   ProsperityRankingViewModel,
   ProsperityRankRow,
 } from "./prosperityViewModel.js";
+import { element } from "./worldChronicle.js";
 
 export interface ProsperityRankingController {
   render(view: ProsperityRankingViewModel, generation: number): void;
