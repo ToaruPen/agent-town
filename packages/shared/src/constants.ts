@@ -35,6 +35,12 @@ export const TREE_REGROWTH_CAP = 30;
 export const HOUSE_WOOD_COST = 15;
 export const HOUSE_BUILD_TICKS = 400;
 export const HOUSE_CAPACITY = 2;
+/** Food a single ripe field yields when harvested. Sized in Task 7 by measurement. */
+export const FIELD_YIELD = 25;
+/** Work units to till a new field, mirroring house construction progress. */
+export const FIELD_TILL_WORK = 30;
+/** Fields the settlement wants, one per this many residents. */
+export const RESIDENTS_PER_FIELD = 1;
 export const IMMIGRATION_FOOD_DAYS_MIN = 4; // arrive on spring morning if stored food ≥ 4 days AND free housing
 export const MAX_POPULATION = 10;
 export const MAP_WIDTH = 64;

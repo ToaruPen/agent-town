@@ -69,10 +69,24 @@ export interface House {
   complete: boolean;
 }
 
-export type Building = House | Facility;
+export type CropStage = "fallow" | "sown" | "growing" | "ripe";
+
+export interface Field {
+  kind: "field";
+  pos: Position;
+  progress: number;
+  complete: boolean;
+  stage: CropStage;
+}
+
+export type Building = House | Facility | Field;
 
 export function isHouse(building: Building): building is House {
   return building.kind === "house";
+}
+
+export function isField(building: Building): building is Field {
+  return building.kind === "field";
 }
 
 const FACILITY_KINDS = {

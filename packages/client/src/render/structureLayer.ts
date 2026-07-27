@@ -3,7 +3,9 @@ import {
   FACILITY_BUILD_TICKS,
   type Facility,
   type FacilityKind,
+  type House,
   isFacility,
+  isField,
   isHouse,
 } from "@agent-town/shared";
 import { Container, Graphics, Sprite } from "pixi.js";
@@ -50,7 +52,7 @@ function buildingPart(
   return sprite;
 }
 
-function buildingContainer(building: Building): Container {
+function buildingContainer(building: House | Facility): Container {
   const isHouseBuilding = isHouse(building);
   const kind: WorldObjectKind = isHouseBuilding ? "house" : "facility";
   const label = isHouseBuilding ? HOUSE_OBJECT_LABEL : FACILITY_OBJECT_LABEL;
@@ -88,6 +90,7 @@ export function renderStructureLayer(layer: Container, buildings: Building[]): v
   clearStructures(layer);
 
   for (const building of buildings) {
+    if (isField(building)) continue;
     layer.addChild(buildingContainer(building));
   }
 }

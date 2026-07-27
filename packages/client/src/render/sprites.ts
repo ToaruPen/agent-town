@@ -1,4 +1,4 @@
-import type { AgentState, Building, SEASONS, Terrain, Tile } from "@agent-town/shared";
+import type { AgentState, Facility, House, SEASONS, Terrain, Tile } from "@agent-town/shared";
 
 import { TERRAIN_TINTS } from "./colors.js";
 
@@ -278,7 +278,7 @@ export function agentSpritePath(agentId: string): string {
   );
 }
 
-export function buildingSprites(building: Building): BuildingSprites {
+export function buildingSprites(building: House | Facility): BuildingSprites {
   return SPRITE_ASSETS.buildings[building.kind];
 }
 
