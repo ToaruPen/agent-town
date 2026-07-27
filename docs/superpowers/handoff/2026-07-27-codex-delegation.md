@@ -16,8 +16,14 @@ added field, nothing made optional.
 
 ## Current state
 
-- `main` is green through the world-map slice (S4). The colony sim, world-history generation and
-  world-map generation are all implemented and tested.
+- Local `main` is green through S5 (social facilities and trails), V3 (readable settlement) and the
+  farming slice: `just check`, `just test` (55 files, 730 tests), client build, secretlint, and the
+  `Date.now`/`Math.random` determinism scan all pass.
+- Local `main` is 59 commits ahead of `origin/main`. Anyone reading the GitHub remote sees the S4-era
+  tree, which is not what the N1 plan is written against. Check `git log origin/main..main` before
+  trusting any statement about "what main has".
+- The farming plan's Task 10 is closed except for two items that need the owner: a browser judgement
+  of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plan: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (tasks N1-1..7, sequential).
 - Nothing of N1 is implemented yet. Task 1 is the next assignment.
 - No LLM work in N1. Ruler LLMs arrive in N4.
@@ -73,10 +79,10 @@ Parallel tasks would need separate git worktrees. N1 is sequential, so a single 
 - Repo docs stay English; specs stay Japanese. The owner reads Japanese.
 - Every slice must run to completion with LLMs disabled.
 
-## Moving this session to a local machine
+## Where the supervisor runs
 
-The supervisor thread can be pulled from the web session into a local terminal with
-`claude --teleport` (or `/teleport` inside a running CLI session). It requires the same claude.ai
-account, a clean working tree, a checkout of this repository, and the session branch pushed to the
-remote. The conversation history and the branch both come across, after which the local Codex CLI can
-take the worker assignments directly.
+The supervision thread started as a Claude Code web session and was pulled onto the owner's machine
+with `claude --teleport`, so the supervisor now runs locally alongside the Codex CLI and can hand out
+worker assignments directly. To move it again: `claude --teleport` (or `/teleport` in a running CLI
+session) needs the same claude.ai account, a clean working tree, a checkout of this repository, and
+the session branch pushed to the remote.

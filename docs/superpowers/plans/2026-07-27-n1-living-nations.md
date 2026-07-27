@@ -4,7 +4,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-27-nation-rulers-realtime-design.md` (§4, §10).
 
-**Architecture:** Freeze the live-nation contracts in `packages/shared/src/nation.ts` and all tuning numbers in `packages/shared/src/constants.ts`. Build the simulation as pure modules under `packages/server/src/sim/nation/`, driven by a tick loop in `net/wsServer.ts`. Reuse `historyGen` and `worldMapGen` unchanged as the world generator. The resident-scale simulation (`sim/engine.ts`, `sim/executor.ts`, `sim/astar.ts`, `sim/society.ts`, `sim/foodAnxiety.ts`, `sim/fakePlanner.ts`) and the client resident layers are frozen: they stay in the tree with their tests green, but nothing in this slice imports them.
+**Architecture:** Freeze the live-nation contracts in `packages/shared/src/nation.ts` and all tuning numbers in `packages/shared/src/constants.ts`. Build the simulation as pure modules under `packages/server/src/sim/nation/`, driven by a tick loop in `net/wsServer.ts`. Reuse `historyGen`, `worldMapGen` and `rng` unchanged as the world generator. The whole resident-scale simulation is frozen — `sim/engine.ts`, `executor.ts`, `astar.ts`, `fakePlanner.ts`, `worldGen.ts`, `society.ts`, `foodAnxiety.ts`, `spatialDemand.ts`, `siteSelection.ts`, `construction.ts`, `facilityOperation.ts`, `traffic.ts`, `farming.ts`, the `shared/spatial.ts` contracts, and the client resident/terrain layers. They stay in the tree with their tests green, but nothing in this slice imports them.
 
 **Tech Stack:** TypeScript 7, Vitest, WebSocket, HTML Canvas 2D, Vite, Biome, pnpm, just.
 
@@ -207,6 +207,8 @@ export type ClientMessage =
 
 `welcome` carries the full initial state exactly once. `clock` is a light heartbeat, emitted on a wall-clock interval so its rate does not change with game speed, and carries no nation state. Nation state changes only at season boundaries, so `season` is the only message that carries `nations`. `changedCells` stays empty in N1 and exists so N3 does not break the wire format.
 
+This replaces the resident-scale wire format wholesale. The current `welcome` payload (`WorldState` with `tiles`, `agents`, `stockpile`, `buildings`, `deaths`, `collectives`, `institutions`, `spatialDemands`, `trailCells`, `history`) and the current `update` payload (`agents`, `stockpile`, `buildings`, `deaths`, `collectives`, `institutions`, `spatialDemands`, `changedTiles`, `changedTrailCells`) are no longer sent. `WorldState` itself stays in `world.ts` because the frozen resident modules and their tests still use it.
+
 ### Constants (`packages/shared/src/constants.ts`, appended — never rename existing ones)
 
 Nation-scale time is separate from the frozen resident-scale time constants:
@@ -294,7 +296,7 @@ Tasks are sequential; each depends on the previous commit. One worker, one branc
 - Reuse the existing world-map canvas and chronicle/国柄 renderers. Do not fork them.
 - Add, as pure tested view models plus a thin DOM adapter, in Japanese: nation selection at start, own-nation dashboard (備蓄・人口・安定度・進行中の施策), ranking table (順位・国名・繁栄度・内訳), directive panel (候補・コスト・所要季数・国柄適合・不可理由), season report panel (前季の増減と理由), speed control (一時停止 / x1 / x2 / x4 / x8) with year and season readout, and auto-pilot toggle.
 - The client computes no score and no directive availability; it renders what the server sends.
-- Resident layers (`agentLayer`, `deathLayer`, `hudLayer`, `tickerLayer`, `structureLayer`, survival/society view models) are no longer mounted from `main.ts` but remain in the tree with their tests green.
+- Resident and local-terrain layers (`agentLayer`, `deathLayer`, `hudLayer`, `tickerLayer`, `structureLayer`, `trailLayer`, `terrainDecor`, `shadow`, `motion`, `mapLayer`, `sprites`, plus the survival/society view models) are no longer mounted from `main.ts` but remain in the tree with their tests green.
 - Tests: view models for ranking, directive list, and season report; the controller sends the right client message for each control; blocked directives render their reason and cannot be submitted.
 
 ### Task 7 — Balance

@@ -211,17 +211,20 @@ total = 1000 × Σ ( weight_i × normalize_i(component_i) )
 
 ## 5. 既存資産の扱い
 
+凍結対象は、S5（社会施設と小道）・V3（読める入植地）・farming（畑と季節の作物）まで作り込まれた住民スケールの一式である。捨てるのではなく、動く状態のまま止める。ロードマップN7で、プレイヤー国の首都内部ビューとして再接続する候補になる。
+
 | 資産 | 扱い |
 |---|---|
-| `sim/historyGen.ts`、`sim/worldMapGen.ts` | **そのまま流用**。国家ゲームの初期世界生成器になる |
+| `sim/historyGen.ts`、`sim/worldMapGen.ts`、`sim/rng.ts` | **そのまま流用**。国家ゲームの初期世界生成器になる |
 | `shared/history.ts`、`shared/worldMap.ts` | **契約維持**。フィールド追加も当面行わない |
-| クライアントの世界地図・年代記・国柄カード | **流用**。領土のライブ更新を追加する |
-| `sim/engine.ts`、`executor.ts`、`astar.ts`、`fakePlanner.ts` | **凍結**。ライブループから外すがモジュールとテストは残す。将来の都市内部ビューの素材として保持する |
-| `sim/society.ts`、`foodAnxiety.ts` | **凍結**。国家スケールの制度モデルは別モジュールとして作り、住民スケールの実装は流用しない |
+| クライアントの `worldMapView`、`worldChronicle`、`historyLayer`（世界地図・年代記・国柄カード） | **流用**。領土のライブ更新を追加する |
 | `llm/` 一式（ランナー、ルーティング、スキーマ、予算） | **流用**。プロンプトと出力スキーマを統治者用に差し替える |
-| クライアントの住民描画層（agentLayer など） | 画面から外すがモジュールとテストは残す |
+| `sim/engine.ts`、`executor.ts`、`astar.ts`、`fakePlanner.ts`、`worldGen.ts`（64×48ローカル地図） | **凍結**。ライブループから外すがモジュールとテストは残す |
+| `sim/society.ts`、`foodAnxiety.ts`、`spatialDemand.ts`、`siteSelection.ts`、`construction.ts`、`facilityOperation.ts`、`traffic.ts`、`farming.ts` | **凍結**。国家スケールの制度・建設モデルは別モジュールとして新設し、住民スケールの実装を流用しない |
+| `shared/spatial.ts`（`Facility`、`SpatialDemand`、`TrailCell`）、`shared/world.ts` の `Building` union | **凍結**。契約は残すが国家層は参照しない |
+| クライアントの住民・地形描画層（`agentLayer`、`deathLayer`、`hudLayer`、`tickerLayer`、`structureLayer`、`trailLayer`、`terrainDecor`、`shadow`、`motion`、`mapLayer`、`sprites`） | 画面から外すがモジュールとテストは残す |
 
-凍結対象のテストは削除も無効化もしない。純粋モジュールとして通り続けることを維持条件とする。
+凍結対象のテストは削除も無効化もしない。純粋モジュールとして通り続けることを維持条件とする。凍結時点の状態は `just check`、`just test`（55ファイル・730テスト）、クライアントビルド、決定論スキャンが通っている。
 
 ## 6. LLM境界と予算
 
@@ -327,7 +330,7 @@ total = 1000 × Σ ( weight_i × normalize_i(component_i) )
 
 ### 住民個体シミュレーションの同時実行
 
-表現は豊かだが、国家スケールの意思決定と両立させると設計難度と計算量が跳ね上がる。都市内部ビューとして後日再導入する余地だけ残す。
+表現は豊かだが、国家スケールの意思決定と両立させると設計難度と計算量が跳ね上がる。既存の住民スケール一式（S5・V3・farming）は動く状態で凍結し、N7で首都内部ビューとして再接続する余地を残す。
 
 ## 12. ロードマップ
 
@@ -339,5 +342,6 @@ total = 1000 × Σ ( weight_i × normalize_i(component_i) )
 | N4 | LLM元首をCodexで接続。年次方針、危機対応、命名と宣言文 |
 | N5 | 危機イベント（凶作、疫病、魔術異常）と世界史との接続、年代記へのライブ追記 |
 | N6 | 勝敗条件のオプション化、リプレイ、バランス調整 |
+| N7（候補） | 凍結した住民スケール一式を、プレイヤー国の首都内部ビューとして再接続する。国家層の施策が住民層の需要として降りてくる形にできるかを検証する |
 
 各スライスは単独でブラウザから確認でき、LLM無効でも完走することを条件とする。
