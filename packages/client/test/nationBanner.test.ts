@@ -31,6 +31,23 @@ const DECLARED_SEPARATION_FLOOR = 40;
 const CHROMA_FLOOR = 18;
 /** visual.md §2.1: "maximum hue drift among chromatic polities is 12°". */
 const MAX_CHROMATIC_HUE_DRIFT_DEG = 12;
+/** `WORLD_POLITY_COUNT` is 4 today. Held as a literal so the floor declared for a count stays
+ *  pinned to the count it was measured at even if the generator's number moves. */
+const WORLD_POLITY_COUNT_TODAY = 4;
+/** The ΔE76 a candidate slot must clear before hue proximity is allowed to decide, mirroring the
+ *  private `MIN_SEPARATION` in nationBanner.ts (visual.md §2.1). */
+const DECLARED_ACCEPTANCE_BAR = 26;
+/** Worst-case min pairwise ΔE76 per nation count, each declared one below the value measured here
+ *  the way `DECLARED_SEPARATION_FLOOR` sits below 40.86. visual.md §2.1's table reads
+ *  39.6 / 36.4 / 33.2 / 33.2; measured against this implementation, 39.5541 / 36.3539 / 33.2409 /
+ *  33.2409. Eight nations is the ceiling: `historyGen` shuffles eight templates and slices, so
+ *  raising `WORLD_POLITY_COUNT` past eight still yields eight. */
+const DECLARED_SEPARATION_FLOOR_BY_COUNT: Readonly<Record<number, number>> = {
+  5: 39,
+  6: 36,
+  7: 33,
+  8: 33,
+};
 
 // An independent CIE ΔE76 implementation, deliberately not the one under test: sRGB -> D65 Lab.
 function labOf(color: number): [number, number, number] {
@@ -108,13 +125,13 @@ function minPairwiseDeltaE(banners: readonly NationBanner[]): number {
   return worst;
 }
 
-/** Every ordered draw of four templates from the eight, which is what `shuffled().slice(0, 4)` makes
- *  and what visual.md §2.1 enumerated to measure the floor: 8 x 7 x 6 x 5 = 1680 worlds. */
-function generatedWorlds(): number[][] {
+/** Every ordered draw of `size` templates from the eight, which is what `shuffled().slice(0, size)`
+ *  makes and what visual.md §2.1 enumerated to measure the floor: 8 x 7 x 6 x 5 = 1680 at four. */
+function generatedWorlds(size: number): number[][] {
   const colors = Object.values(ARCHIVAL_COLORS);
   const worlds: number[][] = [];
   const walk = (drawn: number[]): void => {
-    if (drawn.length === 4) {
+    if (drawn.length === size) {
       worlds.push(drawn);
       return;
     }
@@ -125,6 +142,20 @@ function generatedWorlds(): number[][] {
   };
   walk([]);
   return worlds;
+}
+
+/** The ring pairs sitting below the acceptance bar. These are the only places the bar can change a
+ *  choice: everywhere else every candidate clears it, so the bar has nothing to refuse. Measured
+ *  here as olive/moss at ΔE 24.6 and violet/plum at ΔE 20.8, both a primary against a fallback. */
+function ringPairsBelowBar(): [number, number][] {
+  const pairs: [number, number][] = [];
+  for (let left = 0; left < NATION_BANNER_RING.length; left += 1) {
+    for (let right = left + 1; right < NATION_BANNER_RING.length; right += 1) {
+      const gap = deltaE76(NATION_BANNER_RING[left] ?? 0, NATION_BANNER_RING[right] ?? 0);
+      if (gap < DECLARED_ACCEPTANCE_BAR) pairs.push([left, right]);
+    }
+  }
+  return pairs;
 }
 
 function permutations<T>(items: readonly T[]): T[][] {
@@ -190,7 +221,7 @@ describe("assignNationBanners", () => {
   // slower, so the stated budget is far above that rather than merely three times it.
   it("keeps every four-nation world the generator can make above the declared separation floor", () => {
     let worst = Number.POSITIVE_INFINITY;
-    for (const world of generatedWorlds()) {
+    for (const world of generatedWorlds(WORLD_POLITY_COUNT_TODAY)) {
       worst = Math.min(worst, minPairwiseDeltaE(assignNationBanners(drawnPolities(world))));
     }
 
@@ -199,7 +230,7 @@ describe("assignNationBanners", () => {
 
   it("keeps a chromatic polity's banner within the stated hue drift of its archival colour", () => {
     let worstDrift = 0;
-    for (const world of generatedWorlds()) {
+    for (const world of generatedWorlds(WORLD_POLITY_COUNT_TODAY)) {
       const polities = drawnPolities(world);
       const banners = assignNationBanners(polities);
       for (const { id, color } of polities) {
@@ -243,5 +274,57 @@ describe("assignNationBanners", () => {
     expect(slotOf(overridden, "polity-1")).toBe(contestedSlot);
     expect(slotOf(overridden, "polity-2")).not.toBe(contestedSlot);
     expect(overridden.filter(({ slot }) => slot === contestedSlot)).toHaveLength(1);
+  });
+
+  // Enumerating five through eight nations walks 6720 + 20160 + 40320 + 40320 = 107520 worlds,
+  // measured at 0.95 s locally. CI runs about 2.7x slower, so the budget sits well above that.
+  it("keeps every nation count the generator can reach above its declared floor", () => {
+    const shortfalls = Object.entries(DECLARED_SEPARATION_FLOOR_BY_COUNT).flatMap(
+      ([count, floor]) => {
+        let worst = Number.POSITIVE_INFINITY;
+        for (const world of generatedWorlds(Number(count))) {
+          worst = Math.min(worst, minPairwiseDeltaE(assignNationBanners(drawnPolities(world))));
+        }
+        return worst >= floor ? [] : [`${count} nations: ${worst.toFixed(2)} is below ${floor}`];
+      },
+    );
+
+    expect(shortfalls).toEqual([]);
+  }, 10_000);
+
+  /** The acceptance bar's only job is refusing a slot that would sit too close to one already taken.
+   *  Reaching it needs two nations contending for the same region of the ring, which the eight
+   *  archival colours never do — only four of them clear the chroma floor, so at most four hues are
+   *  ever claimed. Feeding the two ring colours of a below-bar pair is what puts the bar under load. */
+  it("refuses a hue-exact slot whose neighbour is already taken", () => {
+    const pairs = ringPairsBelowBar();
+    // If a re-tuned ring left no pair below the bar, this test would pass by doing nothing.
+    expect(pairs.length).toBeGreaterThan(0);
+
+    for (const [left, right] of pairs) {
+      const banners = assignNationBanners(
+        drawnPolities([NATION_BANNER_RING[left] ?? 0, NATION_BANNER_RING[right] ?? 0]),
+      );
+
+      expect(new Set(banners.map(({ slot }) => slot))).not.toEqual(new Set([left, right]));
+      expect(minPairwiseDeltaE(banners)).toBeGreaterThanOrEqual(DECLARED_ACCEPTANCE_BAR);
+    }
+  });
+
+  it("spends the ring once at twelve nations and repeats a colour past it", () => {
+    const twelve = assignNationBanners(drawnPolities([...NATION_BANNER_RING]));
+
+    expect(twelve).toHaveLength(NATION_BANNER_RING.length);
+    expect(new Set(twelve.map(({ slot }) => slot)).size).toBe(NATION_BANNER_RING.length);
+
+    // Past twelve, `freeSlots` offers the whole ring again — visual.md §2.1 answers that count with a
+    // second channel, not a thirteenth hue. Every nation still gets a banner and two now share one,
+    // so there is no separation floor to assert here and claiming one would be false.
+    const thirteen = assignNationBanners(
+      drawnPolities([...NATION_BANNER_RING, ARCHIVAL_COLORS.sable]),
+    );
+
+    expect(thirteen).toHaveLength(NATION_BANNER_RING.length + 1);
+    expect(new Set(thirteen.map(({ slot }) => slot)).size).toBe(NATION_BANNER_RING.length);
   });
 });
