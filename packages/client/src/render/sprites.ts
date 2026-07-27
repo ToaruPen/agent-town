@@ -230,6 +230,10 @@ export const SPRITE_ASSETS = {
     "/assets/tiny-dungeon/Tiles/tile_0100.png",
     // Tiny Dungeon tile 112: bearded farmer with a green headband.
     "/assets/tiny-dungeon/Tiles/tile_0112.png",
+    // Tiny Farm tile 108: brown-haired settler in blue dungarees.
+    "/assets/tiny-farm/Tiles/tile_0108.png",
+    // Tiny Farm tile 109: straw-hatted settler in blue dungarees.
+    "/assets/tiny-farm/Tiles/tile_0109.png",
   ],
 } as const;
 
