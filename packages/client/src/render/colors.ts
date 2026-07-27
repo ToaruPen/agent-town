@@ -14,6 +14,7 @@ export const TRAIL_COLORS = {
   trail: 0x876a43,
   establishedTrail: 0x6c5234,
 } as const;
+export const TRAIL_GRIT_COLOR = 0x493722;
 export const AGENT_LABEL_COLOR = 0xffffff;
 export const CARRY_INDICATOR_COLOR = 0xffe66d;
 export const HUD_TEXT_COLOR = 0xffffff;

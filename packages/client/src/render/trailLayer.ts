@@ -6,7 +6,7 @@ import {
 } from "@agent-town/shared";
 import { type Container, Graphics } from "pixi.js";
 
-import { TRAIL_COLORS } from "./colors.js";
+import { TRAIL_COLORS, TRAIL_GRIT_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
 
 export const TRAIL_OBJECT_LABEL = "trail-object";
@@ -23,6 +23,13 @@ const TRAIL_VISUALS = {
   trail: { color: TRAIL_COLORS.trail, alpha: 0.72, width: 7 },
   establishedTrail: { color: TRAIL_COLORS.establishedTrail, alpha: 0.9, width: 10 },
 } as const satisfies Readonly<Record<Exclude<TrailLevel, "none">, TrailVisual>>;
+
+const TRAIL_GRIT_COUNTS = {
+  trace: 1,
+  trail: 2,
+  establishedTrail: 3,
+} as const satisfies Readonly<Record<Exclude<TrailLevel, "none">, number>>;
+const TRAIL_GRIT_ALPHA = 0.35;
 
 export function trailVisual(level: Exclude<TrailLevel, "none">): TrailVisual {
   return TRAIL_VISUALS[level];
@@ -58,10 +65,14 @@ function trafficVisual(
 }
 
 /** A small radius keeps joined runs straight while softening isolated path corners. */
+function bandRadius(width: number): number {
+  return Math.min(2, width / 4);
+}
+
 function drawBand(graphic: Graphics, visual: TrailVisual): void {
   const offset = (TILE_SIZE - visual.width) / 2;
   graphic
-    .roundRect(offset, offset, visual.width, visual.width, Math.min(2, visual.width / 4))
+    .roundRect(offset, offset, visual.width, visual.width, bandRadius(visual.width))
     .fill({ color: visual.color, alpha: visual.alpha });
 }
 
@@ -98,10 +109,37 @@ function drawBridge(
   });
 }
 
+/** A tile-index mix keeps the ground texture fixed across redraws and replay. */
+function gritCoordinate(tileIndex: number, salt: number, span: number): number {
+  const mixed = Math.imul(tileIndex + 1, 0x45d9f3b) ^ Math.imul(salt + 1, 0x27d4eb2d);
+  return (mixed >>> 0) % span;
+}
+
+function drawGrit(
+  graphic: Graphics,
+  visual: TrailVisual,
+  level: Exclude<TrailLevel, "none">,
+  tileIndex: number,
+): void {
+  const bandOffset = (TILE_SIZE - visual.width) / 2;
+  const radius = bandRadius(visual.width);
+  const inset = Math.ceil(bandOffset + radius);
+  const lastStart = Math.floor(bandOffset + visual.width - radius - 1);
+  const span = Math.max(1, lastStart - inset + 1);
+  const baseX = gritCoordinate(tileIndex, 0, span);
+  const baseY = gritCoordinate(tileIndex, 1, span);
+  for (let index = 0; index < TRAIL_GRIT_COUNTS[level]; index += 1) {
+    const x = inset + ((baseX + index * 2) % span);
+    const y = inset + ((baseY + index * 3) % span);
+    graphic.rect(x, y, 1, 1).fill({ color: TRAIL_GRIT_COLOR, alpha: TRAIL_GRIT_ALPHA });
+  }
+}
+
 function trailGraphic(
   world: WorldState,
   pos: Position,
   level: Exclude<TrailLevel, "none">,
+  tileIndex: number,
   showTrafficOverlay: boolean,
 ) {
   const cell = world.trailCells[pos.y * world.width + pos.x];
@@ -120,6 +158,7 @@ function trailGraphic(
       offset,
     );
   }
+  drawGrit(graphic, visual, level, tileIndex);
   graphic.position.set(pos.x * TILE_SIZE, pos.y * TILE_SIZE);
   graphic.label = TRAIL_OBJECT_LABEL;
   return graphic;
@@ -144,6 +183,6 @@ export function renderTrailLayer(
     const pos = positionAt(world, index);
     const level = wornLevel(world, pos);
     if (level === null) continue;
-    layer.addChild(trailGraphic(world, pos, level, showTrafficOverlay));
+    layer.addChild(trailGraphic(world, pos, level, index, showTrafficOverlay));
   }
 }
