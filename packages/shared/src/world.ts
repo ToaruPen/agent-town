@@ -57,6 +57,8 @@ export type AgentTask =
   | { kind: "forage"; target: Position }
   | { kind: "build"; pos: Position }
   | { kind: "till"; pos: Position }
+  | { kind: "sow"; pos: Position }
+  | { kind: "harvest"; pos: Position }
   | { kind: "transferToFacility"; facilityId: string; resource: ResourceKind }
   | { kind: "buildFacility"; facilityId: string }
   | { kind: "maintainFacility"; facilityId: string }

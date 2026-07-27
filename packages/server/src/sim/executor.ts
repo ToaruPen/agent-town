@@ -9,6 +9,7 @@ import {
   FATIGUE_REST_RECOVERY_PER_DAY,
   type Facility,
   FIELD_TILL_WORK,
+  FIELD_YIELD,
   type Field,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
@@ -22,6 +23,7 @@ import {
   isHouse,
   type MovementPurpose,
   type Position,
+  seasonOfTick,
   TICKS_PER_DAY,
   type Tile,
   type WorldState,
@@ -467,6 +469,41 @@ function stepTill(
   if (field.complete) finishHeadTask(agent);
 }
 
+function stepSow(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "sow" }>,
+): void {
+  const field = fieldAt(world, task.pos);
+  if (
+    seasonOfTick(world.tick) === "spring" &&
+    field?.complete === true &&
+    field.stage === "fallow" &&
+    isAdjacentOrOn(agent.pos, task.pos)
+  ) {
+    field.stage = "sown";
+  }
+  finishHeadTask(agent);
+}
+
+function stepHarvest(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "harvest" }>,
+): void {
+  const field = fieldAt(world, task.pos);
+  if (
+    seasonOfTick(world.tick) === "autumn" &&
+    field?.complete === true &&
+    field.stage === "ripe" &&
+    isAdjacentOrOn(agent.pos, task.pos)
+  ) {
+    world.stockpile.food += FIELD_YIELD;
+    field.stage = "fallow";
+  }
+  finishHeadTask(agent);
+}
+
 function restTarget(world: WorldState, agent: AgentState): Position | null {
   const completeHouses = world.buildings
     .filter(isHouse)
@@ -644,6 +681,12 @@ export function stepAgent(
       break;
     case "till":
       stepTill(world, agent, task, step);
+      break;
+    case "sow":
+      stepSow(world, agent, task);
+      break;
+    case "harvest":
+      stepHarvest(world, agent, task);
       break;
     case "rest":
       stepRest(world, agent, step);

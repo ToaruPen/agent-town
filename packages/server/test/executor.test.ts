@@ -1,6 +1,8 @@
 import {
   type AgentState,
   CARRY_CAPACITY,
+  type CropStage,
+  DAYS_PER_SEASON,
   EAT_TICKS,
   FACILITY_BUILD_TICKS,
   FACILITY_MAINTENANCE_PER_DAY,
@@ -10,6 +12,8 @@ import {
   type Facility,
   type FacilityKind,
   FIELD_TILL_WORK,
+  FIELD_YIELD,
+  type Field,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
@@ -113,6 +117,58 @@ function worldWithAgentAt(pos: Position): WorldState {
   const world = createWorld(pos.x + 1, pos.y + 1);
   world.agents.push(createAgent({ pos }));
   return world;
+}
+
+function springTick(): number {
+  return 0;
+}
+
+function summerTick(): number {
+  return DAYS_PER_SEASON * TICKS_PER_DAY;
+}
+
+function autumnTick(): number {
+  return 2 * DAYS_PER_SEASON * TICKS_PER_DAY;
+}
+
+function winterTick(): number {
+  return 3 * DAYS_PER_SEASON * TICKS_PER_DAY;
+}
+
+function worldWithCompleteField(stage: CropStage, tick: number): WorldState {
+  const world = worldWithAgentAt({ x: 3, y: 3 });
+  world.tick = tick;
+  world.buildings = [
+    {
+      kind: "field",
+      pos: { x: 3, y: 3 },
+      progress: FIELD_TILL_WORK,
+      complete: true,
+      stage,
+    },
+  ];
+  return world;
+}
+
+function fieldOf(world: WorldState): Field {
+  const field = world.buildings.find(isField);
+  if (field === undefined) throw new Error("missing test field");
+  return field;
+}
+
+function runFieldTask(world: WorldState, task: "sow" | "harvest", pos: Position): void {
+  const agent = world.agents[0];
+  if (agent === undefined) throw new Error("missing test agent");
+  agent.tasks = task === "sow" ? [{ kind: "sow", pos }] : [{ kind: "harvest", pos }];
+  stepAgent(world, agent);
+}
+
+function sowAt(world: WorldState, pos: Position): void {
+  runFieldTask(world, "sow", pos);
+}
+
+function harvestAt(world: WorldState, pos: Position): void {
+  runFieldTask(world, "harvest", pos);
 }
 
 describe("stepAgent", () => {
@@ -510,6 +566,39 @@ describe("stepAgent", () => {
     const field = world.buildings.filter(isField)[0];
     expect(field?.complete).toBe(true);
     expect(field?.stage).toBe("fallow");
+  });
+
+  it("sows a fallow field in spring and refuses outside spring", () => {
+    const spring = worldWithCompleteField("fallow", springTick());
+    sowAt(spring, { x: 3, y: 3 });
+    expect(fieldOf(spring).stage).toBe("sown");
+
+    for (const tick of [summerTick(), autumnTick(), winterTick()]) {
+      const outsideSpring = worldWithCompleteField("fallow", tick);
+      sowAt(outsideSpring, { x: 3, y: 3 });
+      expect(fieldOf(outsideSpring).stage).toBe("fallow");
+    }
+  });
+
+  it("harvests a ripe field into the stockpile and leaves it fallow", () => {
+    const world = worldWithCompleteField("ripe", autumnTick());
+    const before = world.stockpile.food;
+
+    harvestAt(world, { x: 3, y: 3 });
+
+    expect(world.stockpile.food).toBe(before + FIELD_YIELD);
+    expect(fieldOf(world).stage).toBe("fallow");
+  });
+
+  it("refuses to harvest a field that is not ripe", () => {
+    for (const stage of ["fallow", "sown", "growing"] as const) {
+      const world = worldWithCompleteField(stage, autumnTick());
+      const before = world.stockpile.food;
+
+      harvestAt(world, { x: 3, y: 3 });
+
+      expect(world.stockpile.food).toBe(before);
+    }
   });
 
   it("rests at the nearest reachable complete house and restores gross fatigue per tick", () => {

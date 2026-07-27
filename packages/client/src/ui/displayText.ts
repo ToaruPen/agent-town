@@ -19,9 +19,11 @@ const TASK_LABELS: Record<AgentTask["kind"], string> = {
   eat: "食事",
   forage: "採食",
   gather: "採集",
+  harvest: "収穫",
   maintainFacility: "施設維持",
   moveTo: "移動",
   rest: "休息",
+  sow: "播種",
   till: "開墾",
   transferToFacility: "施設へ搬入",
 };
