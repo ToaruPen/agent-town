@@ -7,6 +7,7 @@ import {
   HOUSE_WOOD_COST,
   MAX_PLAN_REASONING_CHARS,
   MAX_PLAN_TASKS,
+  RATION_FOOD_PER_MEAL,
   type Tile,
   type WorldState,
 } from "@agent-town/shared";
@@ -17,6 +18,7 @@ import {
   parsePlanResponse,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(): AgentState {
@@ -36,6 +38,8 @@ function createAgent(): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 
@@ -59,6 +63,8 @@ function createWorld(agent: AgentState): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(3, 2),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -120,6 +126,14 @@ describe("parsePlanResponse", () => {
     expectParseFailure(
       parsePlanResponse(JSON.stringify({ reasoning: "眠る。", plan: [{ kind: "sleep" }] })),
     );
+  });
+
+  it.each([
+    { kind: "buildFacility", facilityId: "facility-1" },
+    { kind: "maintainFacility", facilityId: "facility-1" },
+    { kind: "transferToFacility", facilityId: "facility-1", resource: "wood" },
+  ])("refuses to let a plan claim privileged facility work: $kind", (task) => {
+    expectParseFailure(parsePlanResponse(JSON.stringify({ reasoning: "x", plan: [task] })));
   });
 
   it("rejects plans longer than MAX_PLAN_TASKS", () => {
@@ -230,6 +244,30 @@ describe("validatePlanExecutability", () => {
       validatePlanExecutability(world, agent, [{ kind: "eat" }, { kind: "eat" }, { kind: "eat" }])
         .ok,
     ).toBe(false);
+  });
+
+  it("funds eat from an active facility when the stockpile is empty", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const granary = makeFacilityFixture("communalGranary", agent.pos);
+    granary.complete = true;
+    granary.operation = "active";
+    granary.inventory.food = FOOD_PER_MEAL;
+    world.buildings.push(granary);
+
+    expect(validatePlanExecutability(world, agent, [{ kind: "eat" }])).toEqual({ ok: true });
+  });
+
+  it("accepts a shortage ration meal funded with the ration-sized amount", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const depot = makeFacilityFixture("rationDepot", agent.pos);
+    depot.complete = true;
+    depot.operation = "active";
+    depot.inventory.food = RATION_FOOD_PER_MEAL;
+    world.buildings.push(depot);
+
+    expect(validatePlanExecutability(world, agent, [{ kind: "eat" }])).toEqual({ ok: true });
   });
 
   it("funds a later eat from carried food deposited earlier in the plan", () => {

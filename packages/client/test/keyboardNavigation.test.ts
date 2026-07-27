@@ -7,6 +7,7 @@ import {
   resolveKeyboardTarget,
 } from "../src/ui/keyboardNavigation.js";
 import type { DeathEvent } from "../src/ui/survivalViewModel.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function makeWorld(): WorldState {
@@ -37,6 +38,8 @@ function makeWorld(): WorldState {
         hunger: 100,
         fatigue: 100,
         health: 100,
+        rationStrain: 0,
+        lastRationTick: null,
       },
     ],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
@@ -44,6 +47,8 @@ function makeWorld(): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(2, 2),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -93,11 +98,16 @@ describe("resolveKeyboardTarget", () => {
     expect(resolveKeyboardTarget(world, [], new Map(), cursor)?.kind).toBe("terrain");
   });
 
-  it("opens the full panel only when the active agent is activated again", () => {
+  it("opens the full panel when the same inspectable target is activated again", () => {
     const agent = { kind: "agent", agentId: "ash" } as const;
+    const facility = { kind: "facility", facilityId: "granary" } as const;
+    const trail = { kind: "trail", tileIndex: 1 } as const;
 
     expect(keyboardActivationAction(null, agent)).toBe("show-bubble");
-    expect(keyboardActivationAction(agent, agent)).toBe("open-agent");
+    expect(keyboardActivationAction(agent, agent)).toBe("open-inspect");
+    expect(keyboardActivationAction(facility, facility)).toBe("open-inspect");
+    expect(keyboardActivationAction(trail, trail)).toBe("open-inspect");
     expect(keyboardActivationAction({ kind: "terrain", tileIndex: 0 }, agent)).toBe("show-bubble");
+    expect(keyboardActivationAction(facility, trail)).toBe("show-bubble");
   });
 });

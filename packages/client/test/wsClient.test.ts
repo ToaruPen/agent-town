@@ -1,7 +1,14 @@
-import type { ServerMessage, WorldState } from "@agent-town/shared";
+import {
+  type ServerMessage,
+  type SpatialDemand,
+  TRAIL_LEVEL_WEAR,
+  type TrailCell,
+  type WorldState,
+} from "@agent-town/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import { connect, getWebSocketUrl, type WebSocketLike } from "../src/net/wsClient.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 class MockWebSocket implements WebSocketLike {
@@ -59,6 +66,8 @@ function makeWorld(): WorldState {
         },
       },
     ],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(2, 1),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -68,6 +77,61 @@ function makeWorld(): WorldState {
       settlementOrigin: null,
       worldMap: makeWorldMapFixture(),
     },
+  };
+}
+
+/** The single cell a hauling route wore in, which is all a sparse update carries. */
+function makeWornTrailCellFixture(): TrailCell {
+  return {
+    ...makeTrailCellsFixture(1, 1)[0],
+    wear: TRAIL_LEVEL_WEAR.trail,
+    level: "trail",
+    passagesToday: 8,
+    dominantPurpose: "facilityService",
+    causedByFacilityIds: ["facility-institution-communalGranaryStore-200"],
+    lastUsedAtTick: 200,
+  } as TrailCell;
+}
+
+function makeDemandFixture(): SpatialDemand {
+  return {
+    id: "demand-institution-communalGranaryStore-200",
+    facilityKind: "communalGranary",
+    source: { kind: "institution", id: "institution-communalGranaryStore-200" },
+    supporterIds: ["ash"],
+    requiredWood: 15,
+    requiredLabor: 240,
+    status: "building",
+    blockedReason: null,
+    site: { x: 1, y: 0 },
+    siteRationale: { score: 1, contributions: [] },
+    provenance: {
+      causedByEventIds: [],
+      proposedByAgentIds: ["ash"],
+      supportedByAgentIds: ["ash"],
+      opposedByAgentIds: [],
+      decidedAtTick: 4,
+    },
+  };
+}
+
+function makeUpdate(
+  overrides: Pick<
+    Extract<ServerMessage, { type: "update" }>,
+    "spatialDemands" | "changedTrailCells"
+  >,
+): ServerMessage {
+  return {
+    type: "update",
+    tick: 5,
+    agents: [],
+    stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
+    buildings: [],
+    deaths: [],
+    collectives: [],
+    institutions: [],
+    changedTiles: [],
+    ...overrides,
   };
 }
 
@@ -100,6 +164,8 @@ describe("connect", () => {
           hunger: 80,
           fatigue: 70,
           health: 90,
+          rationStrain: 0,
+          lastRationTick: null,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
@@ -139,6 +205,8 @@ describe("connect", () => {
         },
       ],
       changedTiles: [{ index: 1, tile: { terrain: "forest", resource: null } }],
+      spatialDemands: [],
+      changedTrailCells: [],
     });
 
     const welcomedState = onWelcome.mock.calls[0]?.[0];
@@ -167,6 +235,8 @@ describe("connect", () => {
           hunger: 80,
           fatigue: 70,
           health: 90,
+          rationStrain: 0,
+          lastRationTick: null,
         },
       ],
       stockpile: { pos: { x: 0, y: 0 }, wood: 5, food: 1 },
@@ -210,6 +280,31 @@ describe("connect", () => {
         { terrain: "forest", resource: null },
       ],
     });
+  });
+
+  it("replaces only the trail cells an update names and keeps the rest by reference", () => {
+    const socket = new MockWebSocket();
+    const onWelcome = vi.fn();
+    const onUpdate = vi.fn();
+    const worn = makeWornTrailCellFixture();
+    const demand = makeDemandFixture();
+
+    connect("ws://example.test", { onWelcome, onUpdate }, () => socket);
+    socket.emit({ type: "welcome", state: makeWorld() });
+    socket.emit(
+      makeUpdate({ spatialDemands: [demand], changedTrailCells: [{ index: 1, cell: worn }] }),
+    );
+    socket.emit(makeUpdate({ spatialDemands: [demand], changedTrailCells: [] }));
+
+    const welcomed = onWelcome.mock.calls[0]?.[0];
+    const first = onUpdate.mock.calls[0]?.[0];
+    const second = onUpdate.mock.calls[1]?.[0];
+    expect(first?.trailCells[0]).toBe(welcomed?.trailCells[0]);
+    expect(first?.trailCells[1]).toEqual(worn);
+    expect(first?.trailCells).not.toBe(welcomed?.trailCells);
+    expect(first?.spatialDemands).toEqual([demand]);
+    expect(first?.history).toBe(welcomed?.history);
+    expect(second?.trailCells).toBe(first?.trailCells);
   });
 });
 

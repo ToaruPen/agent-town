@@ -7,18 +7,22 @@ const ACTIVITY_LABELS: Record<AgentActivity["kind"], string> = {
   foraging: "採食中",
   gathering: "採集中",
   idle: "待機中",
+  maintaining: "施設維持中",
   moving: "移動中",
   resting: "休息中",
 };
 
 const TASK_LABELS: Record<AgentTask["kind"], string> = {
   build: "建設",
+  buildFacility: "施設建設",
   deposit: "搬入",
   eat: "食事",
   forage: "採食",
   gather: "採集",
+  maintainFacility: "施設維持",
   moveTo: "移動",
   rest: "休息",
+  transferToFacility: "施設へ搬入",
 };
 
 const RESOURCE_LABELS: Record<ResourceKind, string> = {

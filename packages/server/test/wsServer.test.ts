@@ -7,6 +7,7 @@ import {
   IMMIGRANT_NAMES,
   MAP_HEIGHT,
   MAP_WIDTH,
+  MOVE_TICKS_PER_TILE,
   SEASONS,
   type ServerMessage,
   TICKS_PER_DAY,
@@ -20,6 +21,7 @@ import { createUpdateMessage, startServer } from "../src/net/wsServer.js";
 import { createEngine } from "../src/sim/engine.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
 import { generateWorld } from "../src/sim/worldGen.js";
+import { makeDemandFixture, makeFacilityFixture } from "./spatialFixture.js";
 
 function getEphemeralPort(): Promise<number> {
   const probe = createServer();
@@ -132,6 +134,38 @@ describe("startServer", () => {
     expect(update.agents.map(({ name }) => name)).toEqual(["トネリコ", IMMIGRANT_NAMES[0]]);
     expect(update.collectives).toEqual(world.collectives);
     expect(update.institutions).toEqual(world.institutions);
+  });
+
+  it("sends a worn trail cell once and reports nothing on the next update", () => {
+    const world = generateWorld(42);
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    world.agents = [agent];
+    const start = agent.pos;
+    const step = { x: start.x + 1, y: start.y };
+    const changedIndex = step.y * world.width + step.x;
+    agent.tasks = [{ kind: "moveTo", dest: step }];
+    const facility = makeFacilityFixture("communalGranary", { x: start.x, y: start.y + 2 });
+    world.buildings = [facility];
+    world.spatialDemands = [makeDemandFixture("communalGranary", facility.pos)];
+    const engine = createEngine(world, { plan: () => [] } satisfies Planner, () => 0);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) engine.step();
+    const first = createUpdateMessage(engine);
+    const second = createUpdateMessage(engine);
+
+    if (first.type !== "update" || second.type !== "update") {
+      throw new Error("expected update messages");
+    }
+    expect(agent.pos).toEqual(step);
+    expect(first.changedTrailCells).toEqual([
+      { index: changedIndex, cell: world.trailCells[changedIndex] },
+    ]);
+    expect(second.changedTrailCells).toEqual([]);
+    expect(first.spatialDemands).toEqual(world.spatialDemands);
+    expect(first.buildings).toContainEqual(facility);
+    expect("history" in first).toBe(false);
+    expect("worldMap" in first).toBe(false);
   });
 
   it("accepts /ws upgrades, sends updates, and closes cleanly", async () => {

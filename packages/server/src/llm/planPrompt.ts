@@ -5,6 +5,7 @@ import {
   foodDaysRemaining,
   HOUSE_CAPACITY,
   HOUSE_WOOD_COST,
+  isHouse,
   MAX_PLAN_TASKS,
   type ResourceKind,
   SEASONS,
@@ -71,7 +72,7 @@ function daysUntilWinter(tick: number): number {
 }
 
 function completedHousingCapacity(world: WorldState): number {
-  return world.buildings.filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+  return world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
 }
 
 function futureWinterBurnDays(tick: number): number {
@@ -112,7 +113,7 @@ export function buildPlanPrompt(world: WorldState, agent: AgentState): string {
     formatResourceTiles(world, agent, "wood"),
     formatResourceTiles(world, agent, "food"),
     "Action guidance:",
-    `- eat: when hunger is low and the stockpile has enough food; it navigates to the stockpile and consumes a meal.`,
+    "- eat: when hunger is low and a reachable stockpile or facility has enough food; it navigates to that store and consumes a meal.",
     `- forage: when hungry and stored food cannot provide a meal; target a live food tile and eat there.`,
     `- build: choose the house site only; this action navigates adjacent and builds. It costs ${HOUSE_WOOD_COST} wood for a new house; never add moveTo onto a build site.`,
     `- rest: when fatigue is low; it navigates to a completed house or the stockpile.`,

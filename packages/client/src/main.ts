@@ -1,4 +1,5 @@
 import {
+  isFacility,
   MAP_HEIGHT,
   MAP_WIDTH,
   type Position,
@@ -23,6 +24,7 @@ import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
 import { renderTickerLayer } from "./render/tickerLayer.js";
+import { renderTrailLayer } from "./render/trailLayer.js";
 import { createDoubleTapHistory, createWorldViewport } from "./render/worldViewport.js";
 import {
   bubbleText,
@@ -42,6 +44,7 @@ import {
 import {
   createInspectPanel,
   createThoughtBubbleSchedule,
+  type InspectTarget,
   updateThoughtBubbleSchedule,
 } from "./ui/inspectPanel.js";
 import {
@@ -51,10 +54,16 @@ import {
 } from "./ui/keyboardNavigation.js";
 import {
   createSocialMilestoneSchedule,
-  currentSocialMilestone,
+  currentMilestone,
+  mergeMilestoneQueues,
   type SocialMilestoneSchedule,
   updateSocialMilestoneSchedule,
 } from "./ui/societyViewModel.js";
+import {
+  createSpatialMilestoneSchedule,
+  type SpatialMilestoneSchedule,
+  updateSpatialMilestoneSchedule,
+} from "./ui/spatialViewModel.js";
 import {
   createDeathEventSchedule,
   type DeathEventSchedule,
@@ -87,8 +96,9 @@ app.canvas.setAttribute("role", "application");
 app.canvas.setAttribute("aria-label", CANVAS_LABEL);
 app.canvas.setAttribute("aria-describedby", "world-instructions world-status");
 
-const inspectPanelRoot = document.querySelector<HTMLElement>("#inspect-panel");
-if (inspectPanelRoot === null) throw new Error("Missing #inspect-panel root");
+const inspectPanelElement = document.querySelector<HTMLElement>("#inspect-panel");
+if (inspectPanelElement === null) throw new Error("Missing #inspect-panel root");
+const inspectPanelRoot: HTMLElement = inspectPanelElement;
 const worldStatusElement = document.querySelector<HTMLElement>("#world-status");
 if (worldStatusElement === null) throw new Error("Missing #world-status root");
 const worldStatusRoot: HTMLElement = worldStatusElement;
@@ -97,8 +107,12 @@ if (chronicleRoot === null) throw new Error("Missing #world-chronicle root");
 const chronicleToggleElement = document.querySelector<HTMLButtonElement>("#chronicle-toggle");
 if (chronicleToggleElement === null) throw new Error("Missing #chronicle-toggle root");
 const chronicleToggleRoot: HTMLButtonElement = chronicleToggleElement;
+const trafficOverlayToggleElement =
+  document.querySelector<HTMLButtonElement>("#traffic-overlay-toggle");
+if (trafficOverlayToggleElement === null) throw new Error("Missing #traffic-overlay-toggle root");
+const trafficOverlayToggleRoot: HTMLButtonElement = trafficOverlayToggleElement;
 
-let selectedAgentId: string | null = null;
+let selectedInspectTarget: InspectTarget | null = null;
 let hoveredAgentId: string | null = null;
 let activeInfoTarget: InfoBubbleTarget | null = null;
 let agentsDirty = false;
@@ -118,9 +132,11 @@ let lastPointerScreenPosition: Position | null = null;
 let keyboardCursorPosition: Position = { x: 0, y: 0 };
 let keyboardFocused = false;
 let keyboardWorldInitialized = false;
+let trafficOverlayEnabled = false;
 
 const world = new Container();
 const groundLayer = new Container();
+const trailLayer = new Container();
 const objectLayer = new Container();
 const infoBubbleLayer = new Container();
 const hudLayer = new Container();
@@ -131,16 +147,18 @@ const keyboardCursor = new Graphics()
 world.sortableChildren = true;
 objectLayer.sortableChildren = true;
 groundLayer.zIndex = 0;
-objectLayer.zIndex = 1;
-keyboardCursor.zIndex = 2;
+trailLayer.zIndex = 1;
+objectLayer.zIndex = 2;
+keyboardCursor.zIndex = 3;
 keyboardCursor.eventMode = "none";
 keyboardCursor.visible = false;
-world.addChild(groundLayer, objectLayer, keyboardCursor);
+trailLayer.eventMode = "none";
+world.addChild(groundLayer, trailLayer, objectLayer, keyboardCursor);
 hudLayer.position.set(HUD_PADDING, HUD_PADDING);
 app.stage.addChild(world, infoBubbleLayer, hudLayer, tickerLayer);
 
 function closeInspectPanel(): void {
-  selectedAgentId = null;
+  selectedInspectTarget = null;
   inspectPanel.close();
   agentsDirty = true;
 }
@@ -258,7 +276,12 @@ function cancelTap(event: FederatedPointerEvent): void {
 
 function positionTicker(width: number): void {
   const y =
-    width < NARROW_SCREEN_MAX_WIDTH ? HUD_PADDING + HUD_PANEL_HEIGHT + TICKER_HUD_GAP : HUD_PADDING;
+    width < NARROW_SCREEN_MAX_WIDTH
+      ? Math.max(
+          HUD_PADDING + HUD_PANEL_HEIGHT + TICKER_HUD_GAP,
+          trafficOverlayToggleRoot.getBoundingClientRect().bottom + TICKER_HUD_GAP,
+        )
+      : HUD_PADDING;
   tickerLayer.position.set(width / 2, y);
 }
 
@@ -291,37 +314,67 @@ let state: WorldState | null = null;
 let bubbleSchedule = createThoughtBubbleSchedule();
 let deathSchedule: DeathEventSchedule = { observedDeaths: 0, events: [] };
 let socialSchedule: SocialMilestoneSchedule | null = null;
+let spatialSchedule: SpatialMilestoneSchedule | null = null;
 let mapDirty = false;
+let trailsDirty = false;
 let structuresDirty = false;
 let deathsDirty = false;
 let tickerDirty = false;
 let hudDirty = false;
 let historyDirty = false;
 
+function inspectTargetExists(target: InspectTarget, next: WorldState): boolean {
+  if (target.kind === "agent") return next.agents.some(({ id }) => id === target.agentId);
+  if (target.kind === "facility") {
+    return next.buildings.filter(isFacility).some(({ id }) => id === target.facilityId);
+  }
+  return next.trailCells[target.tileIndex] !== undefined;
+}
+
 function syncInspectPanel(next: WorldState): void {
-  if (selectedAgentId === null) return;
-  const selectedAgent = next.agents.find((agent) => agent.id === selectedAgentId);
-  if (selectedAgent === undefined) {
+  if (selectedInspectTarget === null) return;
+  if (!inspectTargetExists(selectedInspectTarget, next)) {
     closeInspectPanel();
     return;
   }
-  inspectPanel.show(selectedAgent, next);
+  inspectPanel.show(selectedInspectTarget, next);
 }
 
-function openInspectPanel(agentId: string): void {
+function openInspectPanel(target: InspectTarget): void {
   if (state === null) return;
-  const agent = state.agents.find((candidate) => candidate.id === agentId);
-  if (agent === undefined) return;
   closeWorldChronicle();
-  selectedAgentId = agentId;
-  inspectPanel.show(agent, state);
+  selectedInspectTarget = target;
+  inspectPanel.show(target, state);
+  if (inspectPanelRoot.hidden) {
+    selectedInspectTarget = null;
+    return;
+  }
   agentsDirty = true;
-  announce(`${agent.name}の詳細を開きました。`);
+  announce(`${targetAnnouncement(target)} 詳細を開きました。`);
 }
 
-function openInspectPanelFromBubble(agentId: string): void {
-  if (activeInfoTarget?.kind !== "agent" || activeInfoTarget.agentId !== agentId) return;
-  openInspectPanel(agentId);
+function inspectTargetsEqual(left: InspectTarget, right: InspectTarget): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "agent" && right.kind === "agent") return left.agentId === right.agentId;
+  if (left.kind === "facility" && right.kind === "facility") {
+    return left.facilityId === right.facilityId;
+  }
+  return left.kind === "trail" && right.kind === "trail" && left.tileIndex === right.tileIndex;
+}
+
+function isInspectTarget(target: InfoBubbleTarget): target is InspectTarget {
+  return target.kind === "agent" || target.kind === "facility" || target.kind === "trail";
+}
+
+function openInspectPanelFromBubble(target: InspectTarget): void {
+  if (
+    activeInfoTarget === null ||
+    !isInspectTarget(activeInfoTarget) ||
+    !inspectTargetsEqual(activeInfoTarget, target)
+  ) {
+    return;
+  }
+  openInspectPanel(target);
   closeInfoBubble();
 }
 
@@ -399,10 +452,10 @@ function activateKeyboardSelection(): void {
     return;
   }
   if (
-    target.kind === "agent" &&
-    keyboardActivationAction(activeInfoTarget, target) === "open-agent"
+    isInspectTarget(target) &&
+    keyboardActivationAction(activeInfoTarget, target) === "open-inspect"
   ) {
-    openInspectPanel(target.agentId);
+    openInspectPanel(target);
     closeInfoBubble();
     return;
   }
@@ -453,6 +506,7 @@ function replaceState(next: WorldState): void {
   );
   deathSchedule = createDeathEventSchedule(next);
   socialSchedule = createSocialMilestoneSchedule(next);
+  spatialSchedule = createSpatialMilestoneSchedule(next);
   knownResourceKinds.clear();
   observeResourceKinds(next);
   state = next;
@@ -463,6 +517,7 @@ function replaceState(next: WorldState): void {
   viewport.fit(next.width * TILE_SIZE, next.height * TILE_SIZE);
   syncInspectPanel(next);
   mapDirty = true;
+  trailsDirty = true;
   structuresDirty = true;
   agentsDirty = true;
   deathsDirty = true;
@@ -474,28 +529,65 @@ function replaceState(next: WorldState): void {
   if (keyboardFocused) announceKeyboardCursor();
 }
 
+function normalizeMilestoneSchedules() {
+  if (socialSchedule === null || spatialSchedule === null) return [];
+  const merged = mergeMilestoneQueues(socialSchedule.events, spatialSchedule.events);
+  const timingById = new Map(
+    merged.map(({ id, visibleFromTick, expiresAtTick }) => [
+      id,
+      { visibleFromTick, expiresAtTick },
+    ]),
+  );
+  socialSchedule = {
+    ...socialSchedule,
+    events: socialSchedule.events.map((event) => ({
+      ...event,
+      ...timingById.get(event.id),
+    })),
+  };
+  spatialSchedule = {
+    ...spatialSchedule,
+    events: spatialSchedule.events.map((event) => ({
+      ...event,
+      ...timingById.get(event.id),
+    })),
+  };
+  return merged;
+}
+
+function updateMilestoneSchedules(previous: WorldState, next: WorldState): boolean {
+  const previousMilestones = normalizeMilestoneSchedules();
+  const previousMilestone = currentMilestone(previousMilestones, previous.tick);
+  const previousMilestoneIds = previousMilestones.map((event) => event.id);
+  socialSchedule = updateSocialMilestoneSchedule(
+    socialSchedule ?? createSocialMilestoneSchedule(previous),
+    previous,
+    next,
+  );
+  spatialSchedule = updateSpatialMilestoneSchedule(
+    spatialSchedule ?? createSpatialMilestoneSchedule(previous),
+    previous,
+    next,
+  );
+  const nextMilestones = normalizeMilestoneSchedules();
+  const nextMilestone = currentMilestone(nextMilestones, next.tick);
+  const queueChanged =
+    previousMilestoneIds.join("\n") !== nextMilestones.map((event) => event.id).join("\n");
+  return queueChanged || previousMilestone?.id !== nextMilestone?.id;
+}
+
 function updateState(next: WorldState): void {
   if (state === null) {
     replaceState(next);
     return;
   }
   mapDirty = mapDirty || next.tiles !== state.tiles;
+  trailsDirty = trailsDirty || next.trailCells !== state.trailCells;
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
-  const previousSocialMilestone =
-    socialSchedule === null ? null : currentSocialMilestone(socialSchedule, state.tick);
-  const previousSocialEventIds = socialSchedule?.events.map((event) => event.id) ?? [];
   const previousDeathEventId = latestDeathEvent(deathSchedule)?.id ?? null;
   deathSchedule = updateDeathEventSchedule(deathSchedule, state, next);
-  socialSchedule = updateSocialMilestoneSchedule(
-    socialSchedule ?? createSocialMilestoneSchedule(state),
-    state,
-    next,
-  );
-  const socialMilestone = currentSocialMilestone(socialSchedule, next.tick);
-  const socialQueueChanged =
-    previousSocialEventIds.join("\n") !== socialSchedule.events.map((event) => event.id).join("\n");
-  const activeSocialWindowChanged = previousSocialMilestone?.id !== socialMilestone?.id;
+  const milestoneTickerChanged = updateMilestoneSchedules(state, next);
   const deathTickerChanged = previousDeathEventId !== (latestDeathEvent(deathSchedule)?.id ?? null);
   observeResourceKinds(next);
   state = next;
@@ -503,8 +595,7 @@ function updateState(next: WorldState): void {
   syncInspectPanel(next);
   agentsDirty = true;
   deathsDirty = true;
-  tickerDirty =
-    tickerDirty || socialQueueChanged || activeSocialWindowChanged || deathTickerChanged;
+  tickerDirty = tickerDirty || milestoneTickerChanged || deathTickerChanged;
   hudDirty = true;
   infoBubbleDirty = preserveInfoBubbleInvalidation(infoBubbleDirty, activeInfoTarget);
 }
@@ -521,6 +612,12 @@ function openWorldChronicle(): void {
 }
 
 chronicleToggleRoot.addEventListener("click", openWorldChronicle);
+trafficOverlayToggleRoot.addEventListener("click", () => {
+  trafficOverlayEnabled = !trafficOverlayEnabled;
+  trafficOverlayToggleRoot.setAttribute("aria-pressed", String(trafficOverlayEnabled));
+  trafficOverlayToggleRoot.textContent = trafficOverlayEnabled ? "通行量を隠す" : "通行量を表示";
+  trailsDirty = true;
+});
 app.canvas.addEventListener("pointerleave", clearHoveredAgent);
 app.canvas.addEventListener("keydown", handleCanvasKeydown);
 app.canvas.addEventListener("focus", () => {
@@ -540,10 +637,20 @@ function expireSpeechBubbles(now: number, currentState: WorldState): void {
   }
 }
 
+function selectedAgentRenderId(): string | null {
+  if (activeInfoTarget?.kind === "agent") return activeInfoTarget.agentId;
+  if (selectedInspectTarget?.kind === "agent") return selectedInspectTarget.agentId;
+  return null;
+}
+
 function renderDirtyWorldLayers(currentState: WorldState): void {
   if (mapDirty) {
     renderMapLayer(groundLayer, objectLayer, currentState);
     mapDirty = false;
+  }
+  if (trailsDirty) {
+    renderTrailLayer(trailLayer, currentState, trafficOverlayEnabled);
+    trailsDirty = false;
   }
   if (structuresDirty) {
     renderStructureLayer(objectLayer, currentState.buildings);
@@ -560,10 +667,8 @@ function renderDirtyWorldLayers(currentState: WorldState): void {
     historyDirty = false;
   }
   if (agentsDirty) {
-    const bubbleAgentId =
-      activeInfoTarget?.kind === "agent" ? activeInfoTarget.agentId : selectedAgentId;
     renderAgentLayer(objectLayer, currentState.agents, bubbleSchedule.bubbles, {
-      selectedAgentId: bubbleAgentId,
+      selectedAgentId: selectedAgentRenderId(),
       hoveredAgentId,
     });
     agentsDirty = false;
@@ -624,15 +729,17 @@ function renderActiveInfoBubble(currentState: WorldState): void {
 
 function renderScreenLayers(currentState: WorldState): void {
   if (tickerDirty) {
-    const socialMilestone =
-      socialSchedule === null ? null : currentSocialMilestone(socialSchedule, currentState.tick);
+    const milestone = currentMilestone(
+      mergeMilestoneQueues(socialSchedule?.events ?? [], spatialSchedule?.events ?? []),
+      currentState.tick,
+    );
     const deathEvent = latestDeathEvent(deathSchedule);
     const tickerMessage =
-      socialMilestone === null
+      milestone === null
         ? deathEvent === null
           ? null
           : { text: deathEvent.text, tone: "death" as const }
-        : { text: socialMilestone.text, tone: "social" as const };
+        : { text: milestone.text, tone: "social" as const };
     renderTickerLayer(tickerLayer, tickerMessage);
     tickerDirty = false;
   }

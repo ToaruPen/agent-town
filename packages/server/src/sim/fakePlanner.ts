@@ -6,6 +6,7 @@ import {
   HOUSE_CAPACITY,
   HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
+  isHouse,
   type Position,
   type ResourceKind,
   STOCKPILE_TARGET_FOOD,
@@ -15,6 +16,7 @@ import {
 } from "@agent-town/shared";
 
 import { filterReachable, findNearestReachable, isWalkable } from "./astar.js";
+import { planFacilityTasks } from "./construction.js";
 
 export interface Planner {
   plan(world: WorldState, agent: AgentState): AgentTask[];
@@ -75,7 +77,10 @@ function positionsEqual(left: Position, right: Position): boolean {
 }
 
 function incompleteHouseTarget(world: WorldState, agent: AgentState): Position | null {
-  const candidates = world.buildings.filter(({ complete }) => !complete).map(({ pos }) => pos);
+  const candidates = world.buildings
+    .filter(isHouse)
+    .filter(({ complete }) => !complete)
+    .map(({ pos }) => pos);
   return findNearestReachable(world, agent.pos, candidates);
 }
 
@@ -103,6 +108,8 @@ function priorityTasks(world: WorldState, agent: AgentState): AgentTask[] | null
   }
   if (agent.hunger < HUNGER_EAT_THRESHOLD) return [{ kind: "eat" }];
   if (agent.fatigue < FATIGUE_REST_THRESHOLD) return [{ kind: "rest" }];
+  const facilityTasks = planFacilityTasks(world, agent);
+  if (facilityTasks !== null) return facilityTasks;
   const incompleteTarget = incompleteHouseTarget(world, agent);
   return incompleteTarget === null ? null : [{ kind: "build", pos: incompleteTarget }];
 }
@@ -113,7 +120,7 @@ function newHouseTasks(
   winterWoodTarget: number,
 ): AgentTask[] | null {
   const completedCapacity =
-    world.buildings.filter(({ complete }) => complete).length * HOUSE_CAPACITY;
+    world.buildings.filter(isHouse).filter(({ complete }) => complete).length * HOUSE_CAPACITY;
   const canAfford = world.stockpile.wood >= HOUSE_WOOD_COST + winterWoodTarget;
   if (completedCapacity > world.agents.length || !canAfford) return null;
   const site = newHouseSite(world, agent);

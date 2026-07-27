@@ -23,12 +23,24 @@ export interface SocietyViewModel {
 
 export type SocialMilestoneKind = "recognition" | "collective" | "proposal" | "institution";
 
-export interface SocialMilestone {
+export type MilestoneKind =
+  | SocialMilestoneKind
+  | "demand"
+  | "construction"
+  | "facility"
+  | "blocked"
+  | "trail";
+
+export interface Milestone {
   id: string;
-  kind: SocialMilestoneKind;
+  kind: MilestoneKind;
   text: string;
   visibleFromTick: number;
   expiresAtTick: number;
+}
+
+export interface SocialMilestone extends Milestone {
+  kind: SocialMilestoneKind;
 }
 
 export interface SocialMilestoneSchedule {
@@ -228,5 +240,57 @@ export function currentSocialMilestone(
   return (
     schedule.events.find((event) => event.visibleFromTick <= tick && tick < event.expiresAtTick) ??
     null
+  );
+}
+
+const MILESTONE_KIND_ORDER = {
+  recognition: 0,
+  collective: 1,
+  proposal: 2,
+  institution: 3,
+  demand: 4,
+  construction: 5,
+  facility: 6,
+  blocked: 7,
+  trail: 8,
+} as const satisfies Readonly<Record<MilestoneKind, number>>;
+
+function compareText(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareMilestones(left: Milestone, right: Milestone): number {
+  return (
+    left.visibleFromTick - right.visibleFromTick ||
+    MILESTONE_KIND_ORDER[left.kind] - MILESTONE_KIND_ORDER[right.kind] ||
+    compareText(left.id, right.id)
+  );
+}
+
+export function mergeMilestoneQueues(
+  socialEvents: readonly SocialMilestone[],
+  spatialEvents: readonly Milestone[],
+): Milestone[] {
+  const merged: Milestone[] = [];
+  for (const event of [...socialEvents, ...spatialEvents].toSorted(compareMilestones)) {
+    const duration = Math.max(1, event.expiresAtTick - event.visibleFromTick);
+    const visibleFromTick = Math.max(
+      event.visibleFromTick,
+      merged.at(-1)?.expiresAtTick ?? event.visibleFromTick,
+    );
+    merged.push({
+      ...event,
+      visibleFromTick,
+      expiresAtTick: visibleFromTick + duration,
+    });
+  }
+  return merged;
+}
+
+export function currentMilestone(events: readonly Milestone[], tick: number): Milestone | null {
+  return (
+    events.find((event) => event.visibleFromTick <= tick && tick < event.expiresAtTick) ?? null
   );
 }

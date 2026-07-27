@@ -1,5 +1,6 @@
 import type { WorldHistory } from "./history.js";
 import type { AgentDesires, Collective, Institution } from "./society.js";
+import type { Facility, SpatialDemand, TrailCell } from "./spatial.js";
 
 export type Terrain = "plains" | "forest" | "water" | "rock";
 export type ResourceKind = "wood" | "food";
@@ -24,6 +25,7 @@ export type AgentActivity =
   | { kind: "eating"; ticksRemaining: number }
   | { kind: "foraging"; target: Position; ticksRemaining: number }
   | { kind: "building"; target: Position }
+  | { kind: "maintaining"; facilityId: string }
   | { kind: "resting"; target: Position }
   | { kind: "depositing" };
 
@@ -44,6 +46,8 @@ export interface AgentState {
   hunger: number;
   fatigue: number;
   health: number;
+  rationStrain: number;
+  lastRationTick: number | null;
 }
 
 export type AgentTask =
@@ -52,6 +56,9 @@ export type AgentTask =
   | { kind: "eat" }
   | { kind: "forage"; target: Position }
   | { kind: "build"; pos: Position }
+  | { kind: "transferToFacility"; facilityId: string; resource: ResourceKind }
+  | { kind: "buildFacility"; facilityId: string }
+  | { kind: "maintainFacility"; facilityId: string }
   | { kind: "rest" }
   | { kind: "deposit" };
 
@@ -62,6 +69,16 @@ export interface House {
   complete: boolean;
 }
 
+export type Building = House | Facility;
+
+export function isHouse(building: Building): building is House {
+  return building.kind === "house";
+}
+
+export function isFacility(building: Building): building is Facility {
+  return building.kind !== "house";
+}
+
 export interface WorldState {
   tick: number;
   width: number;
@@ -69,9 +86,12 @@ export interface WorldState {
   tiles: Tile[]; // row-major, index = y * width + x
   agents: AgentState[];
   stockpile: { pos: Position; wood: number; food: number };
-  buildings: House[];
+  buildings: Building[];
   deaths: { name: string; tick: number; cause: "starvation" | "cold" }[];
   collectives: Collective[];
   institutions: Institution[];
+  spatialDemands: SpatialDemand[];
+  /** Row-major, index = y * width + x; always width * height entries. */
+  trailCells: TrailCell[];
   history: WorldHistory;
 }

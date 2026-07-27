@@ -23,6 +23,7 @@ import {
 
 import { generateWorldHistory } from "./historyGen.js";
 import { createRng } from "./rng.js";
+import { createTrailCells } from "./traffic.js";
 
 type ImpassableTerrain = Extract<Terrain, "water" | "rock">;
 
@@ -122,6 +123,8 @@ function createAgents(stockpile: Position): AgentState[] {
       hunger: HUNGER_MAX,
       fatigue: FATIGUE_MAX,
       health: HEALTH_MAX,
+      rationStrain: 0,
+      lastRationTick: null,
     };
   });
 }
@@ -153,6 +156,8 @@ export function generateWorld(seed: number): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: createTrailCells(MAP_WIDTH, MAP_HEIGHT),
     history: generateWorldHistory(seed, {
       width: MAP_WIDTH,
       height: MAP_HEIGHT,

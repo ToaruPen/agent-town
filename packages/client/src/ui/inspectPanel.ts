@@ -1,8 +1,20 @@
-import type { AgentState, AgentTask, WorldState } from "@agent-town/shared";
+import {
+  type AgentState,
+  type AgentTask,
+  FACILITY_NAMES,
+  isFacility,
+  type WorldState,
+} from "@agent-town/shared";
 
 import { activityLabel, taskLabel } from "./displayText.js";
 import { buildProviderBadge, type ProviderBadge } from "./providerBadge.js";
 import { buildSocietyViewModel, type SocietyViewModel } from "./societyViewModel.js";
+import {
+  buildFacilityViewModel,
+  buildTrailViewModel,
+  type FacilityInspectPanelViewModel,
+  type TrailInspectPanelViewModel,
+} from "./spatialViewModel.js";
 import { buildNeedsViewModel, type NeedViewModel } from "./survivalViewModel.js";
 
 export const THOUGHT_BUBBLE_DURATION_MS = 6_000;
@@ -24,7 +36,13 @@ export interface InspectTaskViewModel {
   target: string | null;
 }
 
-export interface InspectPanelViewModel {
+export type InspectTarget =
+  | { kind: "agent"; agentId: string }
+  | { kind: "facility"; facilityId: string }
+  | { kind: "trail"; tileIndex: number };
+
+export interface AgentInspectPanelViewModel {
+  kind: "agent";
   name: string;
   providerBadge: ProviderBadge;
   activityKind: AgentState["activity"]["kind"];
@@ -32,32 +50,54 @@ export interface InspectPanelViewModel {
   tasks: InspectTaskViewModel[];
   needs: NeedViewModel[];
   foodSecurity: string;
+  rationStrain: string;
   society: SocietyViewModel;
   lastThought: string | null;
 }
 
+export type InspectPanelViewModel =
+  | AgentInspectPanelViewModel
+  | FacilityInspectPanelViewModel
+  | TrailInspectPanelViewModel;
+
 export interface InspectPanelController {
-  show(agent: AgentState, world: WorldState): void;
+  show(target: InspectTarget, world: WorldState): void;
   close(): void;
+}
+
+interface PreservedPanelState {
+  restoreCloseFocus: boolean;
+  scrollTop: number;
 }
 
 function formatPosition(position: { x: number; y: number }): string {
   return `(${position.x}, ${position.y})`;
 }
 
-function taskTarget(task: AgentTask): string | null {
+function taskTarget(task: AgentTask, world: WorldState): string | null {
   if (task.kind === "moveTo") return formatPosition(task.dest);
   if (task.kind === "gather") return formatPosition(task.target);
   if (task.kind === "forage") return formatPosition(task.target);
   if (task.kind === "build") return formatPosition(task.pos);
+  if (
+    task.kind === "transferToFacility" ||
+    task.kind === "buildFacility" ||
+    task.kind === "maintainFacility"
+  ) {
+    const facility = world.buildings.filter(isFacility).find(({ id }) => id === task.facilityId);
+    return facility === undefined
+      ? "不明"
+      : `${FACILITY_NAMES[facility.kind]} ${formatPosition(facility.pos)}`;
+  }
   return null;
 }
 
-export function buildInspectPanelViewModel(
+export function buildAgentInspectPanelViewModel(
   agent: AgentState,
   world: WorldState,
-): InspectPanelViewModel {
+): AgentInspectPanelViewModel {
   return {
+    kind: "agent",
     name: agent.name,
     providerBadge: buildProviderBadge(agent),
     activityKind: agent.activity.kind,
@@ -65,13 +105,24 @@ export function buildInspectPanelViewModel(
     tasks: agent.tasks.map((task) => ({
       kind: task.kind,
       label: taskLabel(task.kind),
-      target: taskTarget(task),
+      target: taskTarget(task, world),
     })),
     needs: buildNeedsViewModel(agent),
     foodSecurity: `${Math.round(agent.desires.foodSecurity * 100)}%`,
+    rationStrain: `${Math.round(agent.rationStrain * 100)}%`,
     society: buildSocietyViewModel(world),
     lastThought: agent.lastThought,
   };
+}
+
+export function resolveInspectPanelViewModel(
+  target: InspectTarget,
+  world: WorldState,
+): InspectPanelViewModel | null {
+  if (target.kind === "facility") return buildFacilityViewModel(world, target.facilityId);
+  if (target.kind === "trail") return buildTrailViewModel(world, target.tileIndex);
+  const agent = world.agents.find(({ id }) => id === target.agentId);
+  return agent === undefined ? null : buildAgentInspectPanelViewModel(agent, world);
 }
 
 export function createThoughtBubbleSchedule(): ThoughtBubbleSchedule {
@@ -206,72 +257,175 @@ function createInstitutionList(institutions: SocietyViewModel["institutions"]): 
   return list;
 }
 
-function renderPanel(
-  root: HTMLElement,
-  viewModel: InspectPanelViewModel,
-  onClose: () => void,
-): void {
+function createPanelHeader(viewModel: InspectPanelViewModel, onClose: () => void): HTMLElement {
   const header = createElement("header", "inspect-panel__header");
   const name = createElement("h2", "inspect-panel__name", viewModel.name);
   name.id = "inspect-panel-name";
-  const badge = createElement(
-    "span",
-    `inspect-panel__badge inspect-panel__badge--${viewModel.providerBadge.tone}`,
-    viewModel.providerBadge.label,
-  );
   const closeButton = createElement("button", "inspect-panel__close", "×");
   closeButton.type = "button";
   closeButton.setAttribute("aria-label", "観察パネルを閉じる");
   closeButton.addEventListener("click", onClose);
-  header.append(name, badge, closeButton);
+  header.append(name);
+  if (viewModel.kind === "agent") {
+    header.append(
+      createElement(
+        "span",
+        `inspect-panel__badge inspect-panel__badge--${viewModel.providerBadge.tone}`,
+        viewModel.providerBadge.label,
+      ),
+    );
+  }
+  header.append(closeButton);
+  return header;
+}
 
-  const needsHeading = createElement("h3", "inspect-panel__section-title", "状態");
-  const foodSecurityHeading = createElement(
-    "h3",
-    "inspect-panel__section-title",
-    "食料安定への関心",
-  );
-  const foodSecurity = createElement("p", "inspect-panel__food-security", viewModel.foodSecurity);
-  const collectivesHeading = createElement("h3", "inspect-panel__section-title", "集団");
-  const institutionsHeading = createElement("h3", "inspect-panel__section-title", "制度");
-  const activityHeading = createElement("h3", "inspect-panel__section-title", "現在の行動");
-  const activity = createElement("p", "inspect-panel__activity", viewModel.activityLabel);
-  const queueHeading = createElement("h3", "inspect-panel__section-title", "予定");
-  const thoughtHeading = createElement("h3", "inspect-panel__section-title", "直前の思考");
+function section(title: string, ...content: HTMLElement[]): HTMLElement[] {
+  return [createElement("h3", "inspect-panel__section-title", title), ...content];
+}
+
+function textLine(text: string): HTMLElement {
+  return createElement("p", "inspect-panel__activity", text);
+}
+
+function textList(items: string[], emptyText: string): HTMLElement {
+  if (items.length === 0) return createElement("p", "inspect-panel__empty", emptyText);
+  const list = createElement("ul", "inspect-panel__tasks");
+  for (const item of items) list.append(createElement("li", "inspect-panel__task", item));
+  return list;
+}
+
+function renderAgentPanel(
+  root: HTMLElement,
+  viewModel: AgentInspectPanelViewModel,
+  onClose: () => void,
+): void {
   const thought = createElement(
     "blockquote",
     "inspect-panel__thought",
     viewModel.lastThought ?? "思考の記録なし。",
   );
-
   root.replaceChildren(
-    header,
-    needsHeading,
-    createNeedsList(viewModel.needs),
-    foodSecurityHeading,
-    foodSecurity,
-    collectivesHeading,
-    createCollectiveList(viewModel.society.collectives),
-    institutionsHeading,
-    createInstitutionList(viewModel.society.institutions),
-    activityHeading,
-    activity,
-    queueHeading,
-    createTaskList(viewModel.tasks),
-    thoughtHeading,
-    thought,
+    createPanelHeader(viewModel, onClose),
+    ...section("状態", createNeedsList(viewModel.needs)),
+    ...section(
+      "食料安定への関心",
+      createElement("p", "inspect-panel__food-security", viewModel.foodSecurity),
+    ),
+    ...section(
+      "配給疲弊",
+      createElement("p", "inspect-panel__food-security", viewModel.rationStrain),
+    ),
+    ...section("集団", createCollectiveList(viewModel.society.collectives)),
+    ...section("制度", createInstitutionList(viewModel.society.institutions)),
+    ...section("現在の行動", textLine(viewModel.activityLabel)),
+    ...section("予定", createTaskList(viewModel.tasks)),
+    ...section("直前の思考", thought),
   );
 }
 
-export function createInspectPanel(root: HTMLElement, onClose: () => void): InspectPanelController {
-  function show(agent: AgentState, world: WorldState): void {
-    renderPanel(root, buildInspectPanelViewModel(agent, world), onClose);
-    root.hidden = false;
+function renderFacilityPanel(
+  root: HTMLElement,
+  viewModel: FacilityInspectPanelViewModel,
+  onClose: () => void,
+): void {
+  const status = [viewModel.status];
+  if (viewModel.blockReason !== null) status.push(`理由：${viewModel.blockReason}`);
+  root.replaceChildren(
+    createPanelHeader(viewModel, onClose),
+    ...section("成立した制度", textLine(viewModel.foundedBy)),
+    ...section(
+      "支持と反対",
+      textLine(`支持者：${viewModel.supporters.join("、") || "不明"}`),
+      textLine(`反対者：${viewModel.opponents.join("、") || "なし"}`),
+    ),
+    ...section("稼働状態", ...status.map(textLine)),
+    ...section("在庫", textLine(viewModel.inventory), textLine(viewModel.woodInventory)),
+    ...section("建設", textList(viewModel.construction, "建設記録なし")),
+    ...section("敷地を選んだ理由", textList(viewModel.siteReasons, "敷地評価の記録なし")),
+    ...section("本日の効果", textList(viewModel.effects, "本日の効果なし")),
+    ...section("本日の負担", textList(viewModel.costs, "本日の負担なし")),
+    ...section("本日の利用", textLine(viewModel.visits), textLine(viewModel.maintenance)),
+    ...section(
+      "由来",
+      textLine(`原因となった出来事：${viewModel.provenanceEventTitles.join("、") || "不明"}`),
+      textLine(`提案者：${viewModel.proposers.join("、") || "不明"}`),
+    ),
+    ...section(
+      "関連する小道",
+      textLine(`${viewModel.linkedTrailCount}区画`),
+      textList(viewModel.linkedTrails, "関連する小道なし"),
+    ),
+  );
+}
+
+function renderTrailPanel(
+  root: HTMLElement,
+  viewModel: TrailInspectPanelViewModel,
+  onClose: () => void,
+): void {
+  root.replaceChildren(
+    createPanelHeader(viewModel, onClose),
+    ...section("小道段階", textLine(viewModel.level), textLine(viewModel.wear)),
+    ...section("通行", textLine(viewModel.passages), textLine(`主な目的：${viewModel.purpose}`)),
+    ...section("形成へ寄与した施設", textList(viewModel.linkedFacilities, "施設との関連なし")),
+    ...section("移動への効果", textLine(viewModel.movement)),
+    ...section("最後の利用", textLine(viewModel.lastUse)),
+  );
+}
+
+function renderPanel(
+  root: HTMLElement,
+  viewModel: InspectPanelViewModel,
+  onClose: () => void,
+): void {
+  if (viewModel.kind === "agent") {
+    renderAgentPanel(root, viewModel, onClose);
+    return;
   }
+  if (viewModel.kind === "facility") {
+    renderFacilityPanel(root, viewModel, onClose);
+    return;
+  }
+  renderTrailPanel(root, viewModel, onClose);
+}
+
+function preservedPanelState(root: HTMLElement, sameTarget: boolean): PreservedPanelState {
+  return {
+    restoreCloseFocus: sameTarget && root.contains(document.activeElement),
+    scrollTop: sameTarget ? root.scrollTop : 0,
+  };
+}
+
+export function createInspectPanel(root: HTMLElement, onClose: () => void): InspectPanelController {
+  let renderedKey: string | null = null;
+  let renderedTargetKey: string | null = null;
 
   function close(): void {
+    renderedKey = null;
+    renderedTargetKey = null;
     root.hidden = true;
     root.replaceChildren();
+    root.scrollTop = 0;
+  }
+
+  function show(target: InspectTarget, world: WorldState): void {
+    const viewModel = resolveInspectPanelViewModel(target, world);
+    if (viewModel === null) {
+      close();
+      return;
+    }
+    const nextTargetKey = JSON.stringify(target);
+    const nextKey = `${nextTargetKey}:${JSON.stringify(viewModel)}`;
+    if (!root.hidden && nextKey === renderedKey) return;
+    const sameTarget = !root.hidden && nextTargetKey === renderedTargetKey;
+    const preserved = preservedPanelState(root, sameTarget);
+    renderPanel(root, viewModel, onClose);
+    renderedKey = nextKey;
+    renderedTargetKey = nextTargetKey;
+    root.hidden = false;
+    root.scrollTop = preserved.scrollTop;
+    if (preserved.restoreCloseFocus)
+      root.querySelector<HTMLButtonElement>(".inspect-panel__close")?.focus();
   }
 
   return { show, close };

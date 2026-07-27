@@ -54,6 +54,12 @@ export function createUpdateMessage(engine: ReturnType<typeof createEngine>): Se
     return { index, tile };
   });
 
+  const changedTrailCells = engine.drainDirtyTrails().map((index) => {
+    const cell = engine.world.trailCells[index];
+    if (cell === undefined) throw new Error(`dirty trail index out of bounds: ${index}`);
+    return { index, cell };
+  });
+
   return {
     type: "update",
     tick: engine.world.tick,
@@ -63,7 +69,9 @@ export function createUpdateMessage(engine: ReturnType<typeof createEngine>): Se
     deaths: engine.world.deaths,
     collectives: engine.world.collectives,
     institutions: engine.world.institutions,
+    spatialDemands: engine.world.spatialDemands,
     changedTiles,
+    changedTrailCells,
   };
 }
 

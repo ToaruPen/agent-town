@@ -35,6 +35,12 @@ describe("objectDepth", () => {
     expect(objectDepth(4, "agent")).toBeLessThan(objectDepth(5, "resource"));
   });
 
+  it("stacks an institution above the houses around it and below an old-world landmark", () => {
+    expect(objectDepth(4, "house")).toBeLessThan(objectDepth(4, "facility"));
+    expect(objectDepth(4, "facility")).toBeLessThan(objectDepth(4, "landmark"));
+    expect(objectDepth(4, "agent")).toBeLessThan(objectDepth(5, "resource"));
+  });
+
   it("places old-world landmarks above resources but below residents", () => {
     const landmarkDepth = objectDepth(4, "landmark" as Parameters<typeof objectDepth>[1]);
 
@@ -81,6 +87,8 @@ function movingAgent(nextX: number): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 

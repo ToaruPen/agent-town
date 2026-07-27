@@ -8,7 +8,6 @@ import {
   FATIGUE_MAX,
   FATIGUE_REST_THRESHOLD,
   FATIGUE_SLOWDOWN,
-  FOOD_PER_MEAL,
   foodDaysRemaining,
   HEALTH_MAX,
   HOUSE_CAPACITY,
@@ -17,6 +16,7 @@ import {
   HUNGER_MAX,
   IMMIGRANT_NAMES,
   IMMIGRATION_FOOD_DAYS_MIN,
+  isHouse,
   isWinter,
   MAX_POPULATION,
   type PlanSource,
@@ -32,10 +32,13 @@ import {
 } from "@agent-town/shared";
 
 import { findNearestReachable } from "./astar.js";
-import { stepAgent } from "./executor.js";
+import { stepAgent, type TraversalRecorder } from "./executor.js";
+import { chooseFoodStore, runFacilityDay, runFacilityInterval } from "./facilityOperation.js";
 import type { Planner } from "./fakePlanner.js";
 import { updateFoodSecurityDesires } from "./foodAnxiety.js";
-import { advanceSociety, createSocietyMemory } from "./society.js";
+import { advanceSociety, createSocietyMemory, type SocietyMemory } from "./society.js";
+import { advanceSpatialDemands } from "./spatialDemand.js";
+import { decayTrails, recordTraversal } from "./traffic.js";
 
 const HUNGER_DECAY_PER_TICK = HUNGER_DECAY_PER_DAY / TICKS_PER_DAY;
 const FATIGUE_DECAY_PER_TICK = FATIGUE_DECAY_PER_DAY / TICKS_PER_DAY;
@@ -70,7 +73,7 @@ function maybeInterruptForHunger(world: WorldState, agent: AgentState): boolean 
   }
 
   let foodTask: AgentTask | undefined;
-  if (world.stockpile.food >= FOOD_PER_MEAL) {
+  if (chooseFoodStore(world, agent) !== null) {
     foodTask = { kind: "eat" };
   } else {
     const target = findNearestFood(world, agent.pos);
@@ -153,7 +156,13 @@ function burnWinterWood(world: WorldState): void {
   if (isShort) applyColdDamage(world);
 }
 
-function runDailyHooks(world: WorldState, berryCaps: (number | null)[]): void {
+function runDailyHooks(
+  world: WorldState,
+  berryCaps: (number | null)[],
+  dirtyTrailIndexes: Set<number>,
+): void {
+  runFacilityDay(world);
+  for (const index of decayTrails(world)) dirtyTrailIndexes.add(index);
   regrowResources(world, berryCaps);
   burnWinterWood(world);
   maybeImmigrate(world);
@@ -201,7 +210,7 @@ function nextAgentId(world: WorldState): string {
 }
 
 function hasImmigrationCapacity(world: WorldState): boolean {
-  const completedHouses = world.buildings.filter(({ complete }) => complete).length;
+  const completedHouses = world.buildings.filter(isHouse).filter(({ complete }) => complete).length;
   return completedHouses * HOUSE_CAPACITY > world.agents.length;
 }
 
@@ -226,6 +235,8 @@ function maybeImmigrate(world: WorldState): void {
     lastThought: null,
     desires: { foodSecurity: 0 },
     lastHungerInterruptTick: null,
+    rationStrain: 0,
+    lastRationTick: null,
     hunger: HUNGER_MAX,
     fatigue: FATIGUE_MAX,
     health: HEALTH_MAX,
@@ -248,6 +259,7 @@ export interface Engine {
   world: WorldState;
   step(): void;
   drainDirtyTiles(): number[];
+  drainDirtyTrails(): number[];
   applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource, reasoning?: string): void;
   isDayBoundary(): boolean;
 }
@@ -258,21 +270,53 @@ function warnUnknownAgent(agentId: string): void {
   );
 }
 
-function advanceAgent(world: WorldState, agent: AgentState, planner: Planner): void {
-  decayNeeds(agent);
-  applyStarvation(agent);
-  if (removeIfDead(world, agent, "starvation")) return;
+/** A snapshot of the living, so a death partway through can never reshuffle the rest. */
+function stableLivingAgents(world: WorldState): AgentState[] {
+  return world.agents.filter(({ health }) => health > 0);
+}
+
+/** Gauges fall for everyone before anyone acts, so the day treats residents alike. */
+function advanceSurvival(world: WorldState): void {
+  for (const agent of stableLivingAgents(world)) {
+    decayNeeds(agent);
+    applyStarvation(agent);
+    removeIfDead(world, agent, "starvation");
+  }
+}
+
+/** What the settlement wants, decides, and sites — settled before anyone is asked to work. */
+function advanceSocialState(world: WorldState, memory: SocietyMemory, rng: () => number): void {
+  updateFoodSecurityDesires(world);
+  advanceSociety(world, memory);
+  advanceSpatialDemands(world, rng);
+}
+
+function advanceAgent(
+  world: WorldState,
+  agent: AgentState,
+  planner: Planner,
+  record: TraversalRecorder,
+): void {
   if (maybeInterruptForHunger(world, agent)) {
     agent.lastHungerInterruptTick = world.tick;
   }
   if (agent.tasks.length === 0) agent.tasks.push(...planner.plan(world, agent));
   const speed = agent.fatigue < FATIGUE_REST_THRESHOLD ? FATIGUE_SLOWDOWN : 1;
-  stepAgent(world, agent, speed);
+  stepAgent(world, agent, speed, record);
+}
+
+function advanceResidents(world: WorldState, planner: Planner, dirtyTrails: Set<number>): void {
+  for (const agent of stableLivingAgents(world)) {
+    advanceAgent(world, agent, planner, (traversal) => {
+      const index = recordTraversal(world, traversal);
+      if (index !== null) dirtyTrails.add(index);
+    });
+  }
 }
 
 export function createEngine(world: WorldState, planner: Planner, rng: () => number): Engine {
-  void rng;
   const dirtyTileIndexes = new Set<number>();
+  const dirtyTrailIndexes = new Set<number>();
   const berryCaps = captureBerryCaps(world.tiles);
   const societyMemory = createSocietyMemory();
 
@@ -280,13 +324,12 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
     world,
     step(): void {
       const resourcesBefore = snapshotResources(world.tiles);
-      for (const agent of [...world.agents]) {
-        advanceAgent(world, agent, planner);
-      }
+      advanceSurvival(world);
+      advanceSocialState(world, societyMemory, rng);
+      advanceResidents(world, planner, dirtyTrailIndexes);
+      runFacilityInterval(world);
       world.tick += 1;
-      updateFoodSecurityDesires(world);
-      advanceSociety(world, societyMemory);
-      if (isPositiveDayBoundary(world.tick)) runDailyHooks(world, berryCaps);
+      if (isPositiveDayBoundary(world.tick)) runDailyHooks(world, berryCaps, dirtyTrailIndexes);
       markDirtyTiles(world.tiles, resourcesBefore, dirtyTileIndexes);
     },
     drainDirtyTiles(): number[] {
@@ -294,10 +337,19 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
       dirtyTileIndexes.clear();
       return indexes;
     },
+    drainDirtyTrails(): number[] {
+      const indexes = [...dirtyTrailIndexes];
+      dirtyTrailIndexes.clear();
+      return indexes;
+    },
     applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource, reasoning?: string): void {
       const agent = world.agents.find(({ id }) => id === agentId);
       if (agent === undefined) {
         warnUnknownAgent(agentId);
+        return;
+      }
+      if (agent.carrying !== null) {
+        agent.thinking = false;
         return;
       }
       agent.tasks = tasks;

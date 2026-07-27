@@ -47,6 +47,10 @@ function applyUpdate(
   const tiles = message.changedTiles.length === 0 ? state.tiles : [...state.tiles];
   for (const change of message.changedTiles) tiles[change.index] = change.tile;
 
+  const trailCells =
+    message.changedTrailCells.length === 0 ? state.trailCells : [...state.trailCells];
+  for (const change of message.changedTrailCells) trailCells[change.index] = change.cell;
+
   return {
     ...state,
     tick: message.tick,
@@ -56,7 +60,9 @@ function applyUpdate(
     deaths: message.deaths,
     collectives: message.collectives,
     institutions: message.institutions,
+    spatialDemands: message.spatialDemands,
     tiles,
+    trailCells,
   };
 }
 

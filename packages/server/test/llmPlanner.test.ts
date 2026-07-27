@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmPlanner } from "../src/llm/llmPlanner.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
+import { makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(): AgentState {
@@ -30,6 +31,8 @@ function createAgent(): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
   };
 }
 
@@ -50,6 +53,8 @@ function createWorld(agent: AgentState): WorldState {
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(3, 1),
     history: {
       startYear: 0,
       currentYear: 0,

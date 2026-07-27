@@ -2,23 +2,36 @@ import {
   type AgentState,
   CARRY_CAPACITY,
   EAT_TICKS,
+  FACILITY_BUILD_TICKS,
+  FACILITY_MAINTENANCE_PER_DAY,
+  FACILITY_WOOD_COST,
   FATIGUE_MAX,
   FATIGUE_REST_RECOVERY_PER_DAY,
+  type Facility,
+  type FacilityKind,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
+  HUNGER_PER_MEAL,
   MOVE_TICKS_PER_TILE,
+  RATION_FOOD_PER_MEAL,
+  RATION_HUNGER_PER_MEAL,
+  RATION_STRAIN_PER_MEAL,
   type ResourceKind,
   type Terrain,
   TICKS_PER_DAY,
   type Tile,
+  TRAIL_LEVEL_WEAR,
+  TRAIL_PURPOSE_WEAR,
   type WorldState,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { stepAgent } from "../src/sim/executor.js";
+import { moveTicksForTrail, recordTraversal, type Traversal } from "../src/sim/traffic.js";
+import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 interface TileOverride {
@@ -45,6 +58,8 @@ function createAgent(overrides: Partial<AgentState> = {}): AgentState {
     hunger: 100,
     fatigue: 100,
     health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
     ...overrides,
   };
 }
@@ -77,6 +92,8 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(width, height),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -570,5 +587,430 @@ describe("stepAgent", () => {
     restWorld.agents.push(rester);
     stepAgent(restWorld, rester, 0.5);
     expect(rester.fatigue).toBeCloseTo(FATIGUE_REST_RECOVERY_PER_DAY / TICKS_PER_DAY, 10);
+  });
+});
+
+describe("stepAgent traversal recording", () => {
+  function recorder() {
+    const traversals: Traversal[] = [];
+    return { traversals, record: (traversal: Traversal) => traversals.push(traversal) };
+  }
+
+  it("stays silent until a tile step actually completes", () => {
+    const world = createWorld(3, 1);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE - 1; tick += 1) {
+      stepAgent(world, agent, 1, record);
+    }
+    expect(traversals).toEqual([]);
+    expect(agent.pos).toEqual({ x: 0, y: 0 });
+
+    stepAgent(world, agent, 1, record);
+    expect(traversals).toEqual([{ pos: { x: 1, y: 0 }, purpose: "wandering", facilityId: null }]);
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+  });
+
+  it("records no traversal when the path is blocked", () => {
+    const world = createWorld(3, 1, [{ pos: { x: 1, y: 0 }, terrain: "water" }]);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, record);
+    }
+
+    expect(traversals).toEqual([]);
+  });
+
+  it("records no traversal when the resident is already at the destination", () => {
+    const world = createWorld(2, 1);
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 0, y: 0 } }] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    stepAgent(world, agent, 1, record);
+
+    expect(traversals).toEqual([]);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it.each([
+    ["gather", { kind: "gather", target: { x: 2, y: 0 }, resource: "wood" }, "gathering"],
+    ["build", { kind: "build", pos: { x: 2, y: 0 } }, "construction"],
+    ["forage", { kind: "forage", target: { x: 2, y: 0 } }, "survival"],
+  ] as const)("derives the %s purpose from the task the move serves", (_label, task, purpose) => {
+    const world = createWorld(3, 1, [
+      { pos: { x: 2, y: 0 }, terrain: "forest", resource: { kind: "wood", amount: 10 } },
+    ]);
+    world.stockpile.wood = HOUSE_WOOD_COST;
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }, task] });
+    world.agents.push(agent);
+    const { traversals, record } = recorder();
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent, 1, record);
+
+    expect(traversals).toEqual([{ pos: { x: 1, y: 0 }, purpose, facilityId: null }]);
+  });
+
+  it("wears the approach to a house but never the house tile itself", () => {
+    const world = createWorld(3, 1);
+    world.buildings.push({ kind: "house", pos: { x: 2, y: 0 }, progress: 1, complete: true });
+    const agent = createAgent({ fatigue: 0, tasks: [{ kind: "rest" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => {
+        recordTraversal(world, traversal);
+      });
+    }
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+    expect(world.trailCells[1]?.wear).toBe(TRAIL_PURPOSE_WEAR.survival);
+    expect(world.trailCells[1]?.dominantPurpose).toBe("survival");
+    expect(world.trailCells[2]?.wear).toBe(0);
+  });
+
+  it("crosses a worn tile faster than untrodden ground", () => {
+    const world = createWorld(2, 1);
+    const worn = world.trailCells[1];
+    if (worn !== undefined) {
+      worn.wear = TRAIL_LEVEL_WEAR.establishedTrail;
+      worn.level = "establishedTrail";
+    }
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 1, y: 0 } }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < Math.ceil(moveTicksForTrail("establishedTrail")); tick += 1) {
+      stepAgent(world, agent, 1);
+    }
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(Math.ceil(moveTicksForTrail("establishedTrail"))).toBeLessThan(MOVE_TICKS_PER_TILE);
+  });
+
+  it("carries fractional trail progress into the next tile", () => {
+    const world = createWorld(3, 1);
+    for (const cell of world.trailCells.slice(1)) {
+      cell.wear = TRAIL_LEVEL_WEAR.trail;
+      cell.level = "trail";
+    }
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < 5; tick += 1) stepAgent(world, agent, 1);
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+  });
+});
+
+describe("stepAgent facility actions", () => {
+  function createSite(): { world: WorldState; facility: Facility } {
+    const world = createWorld(4, 1);
+    world.stockpile.wood = 20;
+    const facility = makeFacilityFixture("communalGranary", { x: 3, y: 0 });
+    world.buildings.push(facility);
+    world.spatialDemands.push(makeDemandFixture("communalGranary", { x: 3, y: 0 }));
+    return { world, facility };
+  }
+
+  function run(world: WorldState, agent: AgentState, ticks: number): void {
+    for (let tick = 0; tick < ticks; tick += 1) stepAgent(world, agent);
+  }
+
+  it("hauls exactly one carry load from the stockpile into the site", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+    expect(agent.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY });
+    expect(world.stockpile.wood).toBe(20 - CARRY_CAPACITY);
+    expect(agent.tasks).toHaveLength(1);
+
+    run(world, agent, MOVE_TICKS_PER_TILE * 3);
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+    expect(facility.woodDelivered).toBe(CARRY_CAPACITY);
+    expect(agent.carrying).toBeNull();
+    expect(agent.tasks).toEqual([]);
+    expect(world.stockpile.wood + facility.woodDelivered).toBe(20);
+  });
+
+  it("keeps the overflow it could not hand over", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary - 2;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.woodDelivered).toBe(FACILITY_WOOD_COST.communalGranary);
+    expect(agent.carrying).toEqual({ kind: "wood", amount: CARRY_CAPACITY - 2 });
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("drops a transfer whose facility no longer exists", () => {
+    const { world } = createSite();
+    const agent = createAgent({
+      tasks: [{ kind: "transferToFacility", facilityId: "facility-missing", resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(world.stockpile.wood).toBe(20);
+  });
+
+  it("drops a transfer when the resident is carrying the wrong resource", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      carrying: { kind: "food", amount: 3 },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(agent.carrying).toEqual({ kind: "food", amount: 3 });
+    expect(facility.woodDelivered).toBe(0);
+  });
+
+  it("drops a transfer whose facility cannot be reached", () => {
+    const { world, facility } = createSite();
+    world.tiles[2] = { terrain: "water", resource: null };
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(agent.tasks).toEqual([]);
+    expect(facility.woodDelivered).toBe(0);
+  });
+
+  it("raises the frame one tick at a time once all the wood has arrived", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.progress).toBe(1);
+    expect(agent.activity).toEqual({ kind: "building", target: { x: 3, y: 0 } });
+    expect(world.spatialDemands[0]?.status).toBe("building");
+  });
+
+  it("finishes the build task and activates the facility on the last tick", () => {
+    const { world, facility } = createSite();
+    facility.woodDelivered = FACILITY_WOOD_COST.communalGranary;
+    facility.progress = FACILITY_BUILD_TICKS.communalGranary - 1;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility).toMatchObject({ complete: true, operation: "active" });
+    expect(agent.tasks).toEqual([]);
+    expect(world.spatialDemands[0]?.status).toBe("fulfilled");
+  });
+
+  it("drops a build task while the site is still short of wood", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "buildFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+
+    expect(facility.progress).toBe(0);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("keeps a standing facility in repair", () => {
+    const { world, facility } = createSite();
+    facility.complete = true;
+    facility.maintenanceDue = 2;
+    const agent = createAgent({
+      pos: { x: 2, y: 0 },
+      tasks: [{ kind: "maintainFacility", facilityId: facility.id }],
+    });
+    world.agents.push(agent);
+
+    stepAgent(world, agent);
+    expect(facility.maintenanceDue).toBe(1);
+    expect(agent.activity).toEqual({ kind: "maintaining", facilityId: facility.id });
+
+    stepAgent(world, agent);
+    stepAgent(world, agent);
+    expect(facility.maintenanceDue).toBe(0);
+    expect(agent.tasks).toEqual([]);
+  });
+
+  it("wears the ground on the way to a facility as facility service", () => {
+    const { world, facility } = createSite();
+    const agent = createAgent({
+      pos: { x: 0, y: 0 },
+      carrying: { kind: "wood", amount: CARRY_CAPACITY },
+      tasks: [{ kind: "transferToFacility", facilityId: facility.id, resource: "wood" }],
+    });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE * 2; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => {
+        recordTraversal(world, traversal);
+      });
+    }
+
+    expect(world.trailCells[1]?.dominantPurpose).toBe("facilityService");
+    expect(world.trailCells[1]?.causedByFacilityIds).toEqual([facility.id]);
+  });
+});
+
+describe("stepAgent meal routing", () => {
+  /** A finished, working store the resident has to walk to. */
+  function addStore(world: WorldState, kind: FacilityKind, x: number, food: number): Facility {
+    const facility = makeFacilityFixture(kind, { x, y: 0 });
+    facility.complete = true;
+    facility.operation = "active";
+    facility.inventory.food = food;
+    world.buildings.push(facility);
+    return facility;
+  }
+
+  function eatUntilDone(world: WorldState, agent: AgentState): void {
+    for (let tick = 0; tick < 200 && agent.tasks.length > 0; tick += 1) {
+      stepAgent(world, agent, 1);
+    }
+  }
+
+  it("walks to the ration depot while the settlement is short", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 5;
+    const depot = addStore(world, "rationDepot", 5, 10);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    expect(depot.inventory.food).toBe(10 - RATION_FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + RATION_HUNGER_PER_MEAL);
+    expect(agent.rationStrain).toBeCloseTo(RATION_STRAIN_PER_MEAL);
+    expect(world.stockpile.food).toBe(5);
+  });
+
+  it("opens the granary when the stockpile is empty and the reserve may be released", () => {
+    const world = createWorld(8, 1);
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    expect(granary.inventory.food).toBe(100 - FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+    expect(granary.statsToday.visits).toBe(1);
+  });
+
+  it("attributes travel to a selected food facility", () => {
+    const world = createWorld(8, 1);
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    const traversals: Traversal[] = [];
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => traversals.push(traversal));
+    }
+
+    expect(traversals[0]).toMatchObject({
+      purpose: "survival",
+      facilityId: granary.id,
+    });
+  });
+
+  it("eats from the stockpile while the reserve stays shut", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 40;
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ pos: { x: 4, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(world.stockpile.food).toBe(40 - FOOD_PER_MEAL);
+    expect(granary.inventory.food).toBe(100);
+  });
+
+  it("passes over a nearer blocked store for a reachable one", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = 40;
+    const depot = addStore(world, "rationDepot", 5, 40);
+    depot.maintenanceDue = FACILITY_MAINTENANCE_PER_DAY.rationDepot + 1;
+    const agent = createAgent({ pos: { x: 4, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    eatUntilDone(world, agent);
+
+    expect(depot.inventory.food).toBe(40);
+    expect(world.stockpile.food).toBe(40 - FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+  });
+
+  it("replans movement when the selected food store changes", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = FOOD_PER_MEAL;
+    const depot = addStore(world, "rationDepot", 7, RATION_FOOD_PER_MEAL);
+    const agent = createAgent({ pos: { x: 3, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent, 1);
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    depot.inventory.food = 0;
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(world.stockpile.food).toBe(0);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+  });
+
+  it("drops the meal when no store holds one", () => {
+    const world = createWorld(4, 1);
+    world.stockpile.food = FOOD_PER_MEAL - 1;
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    stepAgent(world, agent, 1);
+
+    expect(agent.tasks).toEqual([]);
+    expect(agent.hunger).toBe(10);
   });
 });

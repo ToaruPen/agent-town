@@ -8,7 +8,15 @@ import {
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { dayOfTick, foodDaysRemaining, isWinter, seasonOfTick } from "../src/time.js";
+import {
+  accessibleFoodTotal,
+  dayOfTick,
+  foodDaysRemaining,
+  isWinter,
+  seasonOfTick,
+  storedFoodTotal,
+} from "../src/time.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function worldWithFood(food: number, population: number): WorldState {
@@ -33,12 +41,16 @@ function worldWithFood(food: number, population: number): WorldState {
       hunger: 100,
       fatigue: 100,
       health: 100,
+      rationStrain: 0,
+      lastRationTick: null,
     })),
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food },
     buildings: [],
     deaths: [],
     collectives: [],
     institutions: [],
+    spatialDemands: [],
+    trailCells: makeTrailCellsFixture(1, 1),
     history: {
       startYear: 0,
       currentYear: 0,
@@ -67,6 +79,42 @@ describe("calendar helpers", () => {
     expect(seasonOfTick(4 * DAYS_PER_SEASON * TICKS_PER_DAY)).toBe("spring");
     expect(isWinter(3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1)).toBe(false);
     expect(isWinter(3 * DAYS_PER_SEASON * TICKS_PER_DAY)).toBe(true);
+  });
+});
+
+describe("food totals across stores", () => {
+  it("counts shut and incomplete facilities as stored but not as accessible", () => {
+    const world = worldWithFood(5, 2);
+    const granary = makeFacilityFixture("communalGranary", 20);
+    const market = makeFacilityFixture("grainMarket", 10);
+    market.operation = "blocked";
+    market.blockedReason = "noTradeRoute";
+    world.buildings.push(granary, market);
+
+    expect(storedFoodTotal(world)).toBe(35);
+    expect(accessibleFoodTotal(world)).toBe(25);
+    expect(foodDaysRemaining(world)).toBeCloseTo(
+      25 / (world.agents.length * FOOD_PER_MEAL * (HUNGER_DECAY_PER_DAY / HUNGER_PER_MEAL)),
+    );
+  });
+
+  it("excludes a facility that is still a building plot", () => {
+    const world = worldWithFood(5, 2);
+    const plot = makeFacilityFixture("communalGranary", 12);
+    plot.complete = false;
+    plot.operation = "inactive";
+    world.buildings.push(plot);
+
+    expect(storedFoodTotal(world)).toBe(17);
+    expect(accessibleFoodTotal(world)).toBe(5);
+  });
+
+  it("ignores houses, which never hold food", () => {
+    const world = worldWithFood(5, 2);
+    world.buildings.push({ kind: "house", pos: { x: 0, y: 0 }, progress: 1, complete: true });
+
+    expect(storedFoodTotal(world)).toBe(5);
+    expect(accessibleFoodTotal(world)).toBe(5);
   });
 });
 
