@@ -2,6 +2,7 @@ import {
   CLOCK_BROADCAST_MS,
   DEFAULT_SPEED,
   type DirectiveOption,
+  NATION_CITY_TIER_MIN_POPULATIONS,
   NATION_TICKS_PER_SEASON,
   NATION_TICKS_PER_YEAR,
   type NationWorldState,
@@ -20,6 +21,7 @@ describe("nation contracts", () => {
     expect(SPEED_MULTIPLIERS).toEqual([0, 1, 2, 4, 8]);
     expect(DEFAULT_SPEED).toBe(1);
     expect(CLOCK_BROADCAST_MS).toBe(1_000);
+    expect(NATION_CITY_TIER_MIN_POPULATIONS).toEqual([0, 2500, 5000, 7500]);
   });
 
   it("exports complete nation state, directive, and cell-change contracts", () => {

@@ -9,6 +9,16 @@ import { describe, expect, it } from "vitest";
 
 import { generateWorldHistory } from "../src/sim/historyGen.js";
 
+/**
+ * `packages/client/test/nationBanner.test.ts` depends on this exact private template colour set and
+ * must be re-measured when this guard fails. Only four of the eight clear the client's chroma floor
+ * of 18: gold 47.1, ember 37.9, moss 30.5, and river 19.5; sable 7.8, salt 8.6, thorn 13.9, and ivory
+ * 15.7 fall below it. The worst pairwise CIE dE76 among all eight is 12.6 for sable/river.
+ */
+const EXPECTED_POLITY_TEMPLATE_COLORS = [
+  0x6f7f88, 0xc49a4b, 0x708c5a, 0x5d8fa3, 0xc6bfa2, 0xa65f45, 0x8b6b72, 0x879a92,
+];
+
 function isBilateral(event: HistoryEvent): boolean {
   return event.kind === "trade" || event.kind === "war";
 }
@@ -85,6 +95,16 @@ function playerFacingHistoryStrings(history: ReturnType<typeof generateWorldHist
 }
 
 describe("generateWorldHistory", () => {
+  it("keeps the private polity template colour set synchronized with its client dependent", () => {
+    const generatedColors = new Set(
+      Array.from({ length: 16 }, (_, seed) => generateWorldHistory(seed).polities).flatMap(
+        (polities) => polities.map(({ color }) => color),
+      ),
+    );
+
+    expect(generatedColors).toEqual(new Set(EXPECTED_POLITY_TEMPLATE_COLORS));
+  });
+
   it("attaches the same seeded world map to the completed history", () => {
     const first = generateWorldHistory(42);
     const second = generateWorldHistory(42);

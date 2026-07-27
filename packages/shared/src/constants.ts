@@ -324,6 +324,8 @@ export const NATION_POPULATION_PER_HISTORY_POINT = 100;
 export const NATION_CAPITAL_POPULATION_WEIGHT = 2;
 /** Relative population weight assigned to a non-capital city during the initial city split. */
 export const NATION_CITY_POPULATION_WEIGHT = 1;
+/** Absolute population thresholds for the world map's four city size tiers. */
+export const NATION_CITY_TIER_MIN_POPULATIONS = [0, 2500, 5000, 7500];
 /** Per-cell food production contributed by each owned terrain kind. */
 export const NATION_TERRAIN_FOOD_PRODUCTION = {
   sea: 0,
