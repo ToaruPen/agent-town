@@ -56,6 +56,12 @@ These were open in the design documents. They are decided here so no task re-ope
 
 **Prosperity components are normalised 0..1 ratios.** N1's Task 4 pins this and asserts it. The client renders each component's contribution as `weight × component × 1000`, importing the weights from `@agent-town/shared`, and displays `prosperity.total` verbatim. It never sums contributions into a total of its own — a view-model test asserts that no code path does.
 
+## Why the browser gates in this plan are not ceremony
+
+C1-2 shipped a first commit that passed every test in its brief, and then found while reserving anchors that the two nearest house plots sat diagonally against the city store — directly on top of the props `renderMapLayer` draws at `stockpileX ± TILE_SIZE/4`. That was true of **every** synthesized city, so the dev page had never once shown a correct central square. Six tests about determinism, terrain mix, building counts and trail visibility all passed over it, because none of them asked what the thing looked like.
+
+So when a task in this plan says a judgement belongs in a browser, that is a real gate and not a formality. State the question in the report the way C1-2 did — it could not tell from data whether a town with six deliberate gaps reads as room for growth or as holes in the town, and that is exactly the sort of thing to hand over rather than guess at.
+
 ## Known gaps
 
 Both were found by the worker who built C1-1, by mutation-testing its own assertions rather than by review.
@@ -213,7 +219,9 @@ Read `traversal.md` §3 (L2) and the sprite-mapping follow-up in `docs/superpowe
 
 - `clearFarmland` becomes fields with a crop stage from the nation season; `encourageStores` a granary; `growCity` and `developmentLevel` more houses and more street.
 - Trade routes touching the city become a road leaving on the correct bearing.
-- `developTimber`, `openMine` and `holdFestival` have no sprite representation in the vendored packs. Whichever answer the sprite-mapping follow-up reaches is what this task implements — a composition from the 396 already-vendored PNGs, or an honest gap recorded in the plan. Do not add asset files.
+- `developTimber`, `openMine` and `holdFestival` are all drawable from the 396 already-vendored PNGs — see `docs/superpowers/design/2026-07-27-directive-sprites.md` for the exact tiles, the six candidates it dropped on measured evidence, and why the festival is procedural rather than a sprite. Do not add asset files.
+- Anchors are already reserved. `directiveAnchorPositions(scene)` returns one `Position` per `DirectiveKind`, derived from `scene.stockpile.pos`, on the ring at chebyshev exactly 2 from the store, held clear of houses, streets and standing resources and levelled to bare plains. Read the anchors off the returned state; never re-derive the patch layout. Because the record is keyed by `DirectiveKind`, a seventh kind becomes a compile error rather than a kind with no home. Six is the ceiling by construction: `isAlreadyActive` gates one directive per kind per city.
+- **A geometric limit that constrains this task.** A radius-2 ring cannot hold six pairwise non-adjacent tiles — the maximum is four. Excluding the four avenue tiles leaves twelve in four corner runs of three, and the runs turn at the corners, so even a run's endpoints are diagonally adjacent. C1-2 spent the available spacing on the three kinds that carry loose props — timber, festival, and the mine's optional spoil chunk — which are pairwise exactly 3 apart, because those are the groups that would read as one heap at 16 px. The two touching pairs, `openMine`/`encourageStores` and `clearFarmland`/`holdFestival`, are prop-beside-building. **If the mine head and the granary collide visually, that is why, and the fix is a second ring at radius 3** — a supervisor decision, not something to improvise here.
 - Gate: issuing `clearFarmland` in the browser produces visible fields in the capital by the next season report.
 
 ### C1-9 — Change made visible
