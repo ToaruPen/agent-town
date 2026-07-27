@@ -15,10 +15,8 @@ export interface Tile {
   readonly resourceOrigin?: ResourceKind;
 }
 
-export interface Position {
-  x: number;
-  y: number;
-}
+// biome-ignore format: matches the frozen contract block at plans/2026-07-22-m1-living-aquarium.md:181 verbatim.
+export interface Position { x: number; y: number }
 
 export type AgentActivity =
   | { kind: "idle" }
