@@ -127,6 +127,39 @@ function optionLabel(option: DirectiveOption, cityNames: ReadonlyMap<string, str
   return `${base}（${cityNames.get(option.targetCityId) ?? option.targetCityId}）`;
 }
 
+function shortfallField(reason: DirectiveBlockedReason): keyof NationStocks | null {
+  if (reason === "insufficientFood") return "food";
+  if (reason === "insufficientMaterials") return "materials";
+  if (reason === "insufficientWealth") return "wealth";
+  return null;
+}
+
+/**
+ * The reason to render, or null when the data in hand refutes it.
+ *
+ * A cost shortfall is the one blocked reason the client can check rather than repeat. The server's rule is
+ * exactly `cost > stocks` (`sim/nation/directives.ts` `insufficientStockReason`) and `cost` is a constant
+ * per kind, so a card whose fresh stocks cover its cost has no shortfall to explain. That combination is
+ * unreachable while the list and the nation come from the same snapshot, and reachable after a reconnect,
+ * where the list is carried and the stocks are fresh: it would print `保有 200 / 必要 20` with a shortfall
+ * of −180, arithmetic that cannot be true of anything. Dropping the reason lets the player try, and the
+ * server re-validates and refuses with a reason if it still disagrees.
+ *
+ * The holding is floored here for the same reason the shortfall text floors it, so the guard fires exactly
+ * when the three numbers on the card would fail to reconcile. Every other reason is repeated untouched —
+ * nothing on hand contradicts them, and inferring them again would be re-deriving the simulation.
+ */
+function liveBlockedReason(
+  option: DirectiveOption,
+  stocks: NationStocks,
+): DirectiveBlockedReason | null {
+  const reason = option.blockedReason;
+  if (reason === null) return null;
+  const field = shortfallField(reason);
+  if (field === null) return reason;
+  return option.cost[field] > Math.floor(stocks[field]) ? reason : null;
+}
+
 function isChancellorChoice(option: DirectiveOption, orders: NationOrders | null): boolean {
   const choice = orders?.chancellorChoice ?? null;
   if (choice === null) return false;
@@ -154,10 +187,11 @@ function buildCard(
   cityNames: ReadonlyMap<string, string>,
   speed: SpeedMultiplier,
 ): DirectiveCardViewModel {
+  const blocked = liveBlockedReason(option, nation.stocks);
   const blockedText =
-    option.blockedReason === null
+    blocked === null
       ? null
-      : blockedReasonText(option.blockedReason, {
+      : blockedReasonText(blocked, {
           kind: option.kind,
           cost: option.cost,
           stocks: nation.stocks,
@@ -176,8 +210,8 @@ function buildCard(
     affinityLabel: affinityLabel(option.affinity),
     affinityNote: affinityNote(option.affinity, option.kind, polity),
     isChancellorChoice: isChancellorChoice(option, orders),
-    canSubmit: option.blockedReason === null,
-    blockedReason: option.blockedReason,
+    canSubmit: blocked === null,
+    blockedReason: blocked,
     blockedText,
   };
   return { ...card, accessibleName: accessibleName(card) };

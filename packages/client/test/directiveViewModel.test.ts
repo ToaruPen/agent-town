@@ -251,6 +251,81 @@ describe("a candidate list with no orders behind it", () => {
   it("shows no refusal, since any refusal it held answered an action from before the gap", () => {
     expect(listOnly().refusal).toBeNull();
   });
+
+  /** A terrain block is not contradicted by anything on hand, so it is repeated rather than second-guessed. */
+  it("keeps a blocked reason the held data does not contradict", () => {
+    const card = listOnly().cards.find((candidate) => candidate.kind === "openMine");
+
+    expect(card?.canSubmit).toBe(false);
+    expect(card?.blockedText).toBe("丘陵・山岳を領有していません");
+  });
+});
+
+/**
+ * The one blocked reason the client can check instead of repeat. `cost` is a constant per kind and the
+ * server's rule is exactly `cost > stocks`, so a shortfall against stocks that cover the cost describes no
+ * possible state. It only arises when the list and the nation come from different moments — a reconnect —
+ * and printing it would put arithmetic on screen that cannot be true in either direction.
+ */
+describe("a carried shortfall against fresh stocks", () => {
+  const staleShortfall = (reason: "insufficientFood" | "insufficientWealth") =>
+    ordersFixture().options.map((option) =>
+      option.kind === "holdFestival" ? { ...option, blockedReason: reason } : option,
+    );
+
+  const festivalCard = (
+    options: ReturnType<typeof staleShortfall>,
+    stocks: { food: number; materials: number; wealth: number },
+  ) =>
+    buildDirectiveListViewModel(
+      options,
+      null,
+      nationFixture({ stocks }),
+      polity(),
+      CITY_NAMES,
+      1,
+    ).cards.find((candidate) => candidate.kind === "holdFestival");
+
+  it("drops a reason the stocks refute rather than printing a negative shortfall", () => {
+    const card = festivalCard(staleShortfall("insufficientFood"), {
+      food: 200,
+      materials: 590.5,
+      wealth: 1960,
+    });
+
+    expect(card?.blockedReason).toBeNull();
+    expect(card?.blockedText).toBeNull();
+    expect(card?.canSubmit).toBe(true);
+  });
+
+  /** The guard must not fire on a shortfall that is real, or it would offer an option the server refuses. */
+  it("keeps a shortfall the stocks confirm, with the three numbers still reconciling", () => {
+    const card = festivalCard(staleShortfall("insufficientFood"), {
+      food: 12.9,
+      materials: 590.5,
+      wealth: 1960,
+    });
+
+    expect(card?.canSubmit).toBe(false);
+    expect(card?.blockedText).toBe("食料が 8 足りません（保有 12 / 必要 20）");
+  });
+
+  /** Checked per resource, not by whether the nation is poor overall: only the named stock decides. */
+  it("checks the resource the reason names and no other", () => {
+    const rich = { food: 200, materials: 590.5, wealth: 10 };
+
+    expect(festivalCard(staleShortfall("insufficientFood"), rich)?.canSubmit).toBe(true);
+    expect(festivalCard(staleShortfall("insufficientWealth"), rich)?.blockedText).toBe(
+      "富が 30 足りません（保有 10 / 必要 40）",
+    );
+  });
+
+  /** Exactly affordable is not a shortfall — floored so the boundary matches what the card would print. */
+  it("treats a holding that exactly meets the cost as no shortfall", () => {
+    const exact = { food: 20, materials: 590.5, wealth: 1960 };
+
+    expect(festivalCard(staleShortfall("insufficientFood"), exact)?.canSubmit).toBe(true);
+  });
 });
 
 describe("a refusal", () => {
