@@ -46,6 +46,35 @@ function wear(cells: TrailCell[], index: number, level: Exclude<TrailLevel, "non
   cell.wear = 1;
 }
 
+function makeGridWorld(width: number, height: number): WorldState {
+  return makeWorld({
+    width,
+    height,
+    tiles: Array.from({ length: width * height }, () => ({
+      terrain: "plains" as const,
+      resource: null,
+    })),
+    trailCells: makeTrailCellsFixture(width, height),
+  });
+}
+
+function trailAt(layer: Container, x: number, y: number): Graphics {
+  const trail = layer.children.find(
+    (child) => child.position.x === x * 16 && child.position.y === y * 16,
+  );
+  if (!(trail instanceof Graphics)) throw new Error(`missing trail at ${x},${y}`);
+  return trail;
+}
+
+function fillRectangles(graphics: Graphics): number[][] {
+  return graphics.context.instructions.flatMap((instruction) => {
+    if (instruction.action !== "fill") return [];
+    return instruction.data.path.instructions.flatMap((pathInstruction) =>
+      pathInstruction.action === "rect" ? [pathInstruction.data.slice(0, 4)] : [],
+    );
+  });
+}
+
 describe("trailVisual", () => {
   it("darkens, thickens, and firms up as a path is worn in", () => {
     expect(trailVisual("trace")).toEqual({ color: TRAIL_COLORS.trace, alpha: 0.45, width: 4 });
@@ -128,5 +157,67 @@ describe("renderTrailLayer", () => {
     expect(normalInstruction.data.style.alpha).toBe(0.45);
     expect(overlayInstruction.data.style.alpha).toBeCloseTo(0.725);
     expect(cell.wear).toBe(12);
+  });
+
+  it("bridges the middle of a vertical run to both north and south", () => {
+    const world = makeGridWorld(3, 3);
+    wear(world.trailCells, 1, "trail");
+    wear(world.trailCells, 4, "trail");
+    wear(world.trailCells, 7, "trail");
+    const layer = new Container();
+
+    renderTrailLayer(layer, world);
+
+    const rectangles = fillRectangles(trailAt(layer, 1, 1));
+    expect(rectangles).toContainEqual([4.5, 0, 7, 8]);
+    expect(rectangles).toContainEqual([4.5, 8, 7, 8]);
+  });
+
+  it("bridges a crossing in all four directions", () => {
+    const world = makeGridWorld(3, 3);
+    for (const index of [1, 3, 4, 5, 7]) wear(world.trailCells, index, "establishedTrail");
+    const layer = new Container();
+
+    renderTrailLayer(layer, world);
+
+    expect(fillRectangles(trailAt(layer, 1, 1))).toEqual(
+      expect.arrayContaining([
+        [3, 0, 10, 8],
+        [8, 3, 8, 10],
+        [3, 8, 10, 8],
+        [0, 3, 8, 10],
+      ]),
+    );
+  });
+
+  it("draws one centered band and no bridge for a lone worn tile", () => {
+    const world = makeGridWorld(3, 3);
+    wear(world.trailCells, 4, "trace");
+    const layer = new Container();
+
+    renderTrailLayer(layer, world);
+
+    const trail = trailAt(layer, 1, 1);
+    expect(trail.context.instructions).toHaveLength(1);
+    const fill = trail.context.instructions[0];
+    if (fill?.action !== "fill") throw new Error("missing trail fill");
+    const band = fill.data.path.instructions[0];
+    expect(band?.action).toBe("roundRect");
+    expect(band?.data.slice(0, 4)).toEqual([6, 6, 4, 4]);
+  });
+
+  it("does not bridge toward worn but unwalkable ground", () => {
+    const world = makeGridWorld(3, 3);
+    wear(world.trailCells, 4, "trail");
+    wear(world.trailCells, 5, "trail");
+    const east = world.tiles[5];
+    if (east === undefined) throw new Error("missing east tile");
+    east.terrain = "rock";
+    const layer = new Container();
+
+    renderTrailLayer(layer, world);
+
+    expect(layer.children).toHaveLength(1);
+    expect(fillRectangles(trailAt(layer, 1, 1))).toHaveLength(0);
   });
 });

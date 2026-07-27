@@ -57,19 +57,45 @@ function trafficVisual(
   return { ...visual, alpha: visual.alpha + (1 - visual.alpha) * intensity };
 }
 
-/** Draws the walked strip down the tile; a full-height bar keeps a column continuous. */
-function drawSegment(graphic: Graphics, visual: TrailVisual): void {
+/** A small radius keeps joined runs straight while softening isolated path corners. */
+function drawBand(graphic: Graphics, visual: TrailVisual): void {
+  const offset = (TILE_SIZE - visual.width) / 2;
   graphic
-    .roundRect((TILE_SIZE - visual.width) / 2, 0, visual.width, TILE_SIZE, visual.width / 2)
+    .roundRect(offset, offset, visual.width, visual.width, Math.min(2, visual.width / 4))
     .fill({ color: visual.color, alpha: visual.alpha });
 }
 
-/** Bridges to the next tile along the row, so a walked row is not a line of dots. */
-function drawJoin(graphic: Graphics, visual: TrailVisual, neighbour: TrailVisual): void {
+interface NeighbourOffset {
+  x: -1 | 0 | 1;
+  y: -1 | 0 | 1;
+}
+
+const CARDINAL_OFFSETS: readonly NeighbourOffset[] = [
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+  { x: -1, y: 0 },
+];
+
+function bridgeRectangle(offset: NeighbourOffset, width: number): [number, number, number, number] {
+  const centered = (TILE_SIZE - width) / 2;
+  if (offset.x < 0) return [0, centered, TILE_SIZE / 2, width];
+  if (offset.x > 0) return [TILE_SIZE / 2, centered, TILE_SIZE / 2, width];
+  if (offset.y < 0) return [centered, 0, width, TILE_SIZE / 2];
+  return [centered, TILE_SIZE / 2, width, TILE_SIZE / 2];
+}
+
+function drawBridge(
+  graphic: Graphics,
+  visual: TrailVisual,
+  neighbour: TrailVisual,
+  offset: NeighbourOffset,
+): void {
   const width = Math.min(visual.width, neighbour.width);
-  graphic
-    .roundRect(TILE_SIZE / 2, (TILE_SIZE - width) / 2, TILE_SIZE / 2, width, width / 2)
-    .fill({ color: visual.color, alpha: visual.alpha });
+  graphic.rect(...bridgeRectangle(offset, width)).fill({
+    color: visual.color,
+    alpha: visual.alpha,
+  });
 }
 
 function trailGraphic(
@@ -81,12 +107,18 @@ function trailGraphic(
   const cell = world.trailCells[pos.y * world.width + pos.x];
   const visual = trafficVisual(level, cell?.wear ?? 0, showTrafficOverlay);
   const graphic = new Graphics();
-  drawSegment(graphic, visual);
-  const rightPos = { x: pos.x + 1, y: pos.y };
-  const rightLevel = wornLevel(world, rightPos);
-  if (rightLevel !== null) {
-    const rightCell = world.trailCells[rightPos.y * world.width + rightPos.x];
-    drawJoin(graphic, visual, trafficVisual(rightLevel, rightCell?.wear ?? 0, showTrafficOverlay));
+  drawBand(graphic, visual);
+  for (const offset of CARDINAL_OFFSETS) {
+    const neighbourPos = { x: pos.x + offset.x, y: pos.y + offset.y };
+    const neighbourLevel = wornLevel(world, neighbourPos);
+    if (neighbourLevel === null) continue;
+    const neighbourCell = world.trailCells[neighbourPos.y * world.width + neighbourPos.x];
+    drawBridge(
+      graphic,
+      visual,
+      trafficVisual(neighbourLevel, neighbourCell?.wear ?? 0, showTrafficOverlay),
+      offset,
+    );
   }
   graphic.position.set(pos.x * TILE_SIZE, pos.y * TILE_SIZE);
   graphic.label = TRAIL_OBJECT_LABEL;
