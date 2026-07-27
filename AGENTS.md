@@ -9,6 +9,15 @@ The resident-scale colony simulation is frozen: it stays in the tree with its te
 - packages/server — authoritative simulation (src/sim, deterministic, pure) + WebSocket adapter (src/net).
 - packages/client — renderer. Two surfaces: the world map is HTML Canvas 2D, the local city view is PixiJS. Renders server state; owns no game logic.
 
+## Verification
+Each of these cost real time before it was written down.
+- `pnpm -r exec tsc` short-circuits on workspace order. `shared` runs first; if it fails, `server` and `client` are never invoked — so a failure listing only `shared` errors means the other two are *unknown*, not clean.
+- pnpm hoists binaries to the repo root. `packages/<pkg>/node_modules/.bin/tsc` does not exist; use `pnpm --filter @agent-town/<pkg> exec tsc`.
+- A measurement that reports zero deserves one look at whether the command ran. A missing binary exits 127, and an `|| echo 0` around an error count turns "the command failed" into "zero errors".
+- Run the gate from the worktree you are working in. `.worktrees/` siblings are full checkouts, so a run from the wrong root collects other people's tests.
+- Never run a build, a test, an install, or a git operation inside a worktree another agent is working in. `tsc` and `vitest` compile whatever is on disk at that instant, so reading a live worktree with a build is not a read — it can produce an error from a tree no commit ever contained. To verify someone else's branch, check the tip out elsewhere.
+- A failure report is evidence about a working tree, not about a commit. Before changing code to fix a reported error, compare its line numbers against the committed file.
+
 ## Rules
 - TDD: failing test → implement → green → commit (Conventional Commits).
 - `just check` and `just test` must pass before every commit.
