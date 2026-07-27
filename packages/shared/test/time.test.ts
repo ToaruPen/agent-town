@@ -105,7 +105,7 @@ describe("nation calendar helpers", () => {
 });
 
 describe("food totals across stores", () => {
-  it("counts shut and incomplete facilities as stored but not as accessible", () => {
+  it("counts a shut facility as stored but not as accessible", () => {
     const world = worldWithFood(5, 2);
     const granary = makeFacilityFixture("communalGranary", 20);
     const market = makeFacilityFixture("grainMarket", 10);
@@ -141,7 +141,7 @@ describe("food totals across stores", () => {
 });
 
 describe("foodDaysRemaining", () => {
-  it("divides stored food by population daily need derived from meal balance", () => {
+  it("divides accessible food by population daily need derived from meal balance", () => {
     const population = 2;
     const food = 25;
     const dailyNeed = population * FOOD_PER_MEAL * (HUNGER_DECAY_PER_DAY / HUNGER_PER_MEAL);

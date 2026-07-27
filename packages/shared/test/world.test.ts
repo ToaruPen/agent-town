@@ -3,10 +3,10 @@ import type { FacilityKind } from "../src/spatial.js";
 import { type Building, type Field, isFacility, isField, isHouse } from "../src/world.js";
 
 describe("building predicates", () => {
-  it("does not treat an unknown building kind as a facility", () => {
-    const stranger = { kind: "field" } as unknown as Building;
+  it("does not treat a field as a facility", () => {
+    const field = { kind: "field" } as unknown as Building;
 
-    expect(isFacility(stranger)).toBe(false);
+    expect(isFacility(field)).toBe(false);
   });
 
   it("still recognises every real facility kind", () => {
