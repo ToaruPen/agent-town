@@ -1,23 +1,10 @@
-import { NATION_CITY_DEVELOPMENT_CAP, type NationCityState } from "@agent-town/shared";
+import {
+  NATION_CITY_DEVELOPMENT_CAP,
+  NATION_CITY_TIER_MIN_POPULATIONS,
+  type NationCityState,
+} from "@agent-town/shared";
 
 export type CityTier = 1 | 2 | 3 | 4;
-
-/**
- * The population each tier opens at, ascending.
- *
- * These are absolute on purpose: a city must not appear to grow because a rival's city shrank, which
- * is the argument the spec makes for prosperity normalisation (§4.4) and `visual.md` §2.3 carries over
- * to glyph size. The bands span the range the simulation actually produces — a nation holds
- * `NATION_POPULATION_PER_HISTORY_POINT` × 80–120 people, split by
- * `NATION_CAPITAL_POPULATION_WEIGHT` 2 against `NATION_CITY_POPULATION_WEIGHT` 1 over one to four
- * cities, so a city sits between roughly 2,000 and 10,000 at bootstrap and climbs from there.
- *
- * **Provisional, and the one thing in this slice that wants moving.** `visual.md` §2.3 says these
- * belong in `packages/shared/src/constants.ts`; a client worker may not edit that file, so they live
- * here until the supervisor lands them as a shared constant. Nothing but this array changes when they
- * move — the thresholds are absolute either way, which is what the tests pin.
- */
-export const CITY_TIER_MIN_POPULATIONS = [0, 2500, 5000, 7500] as const;
 
 /** The 6 px chronicle cell's radii, from `visual.md` §2.7. The 12 px surface has its own column. */
 export const CHRONICLE_CITY_TIER_RADII_PX = [2, 2.5, 3, 3.5] as const;
@@ -46,7 +33,7 @@ export interface CityGlyphOptions {
 
 export function cityPopulationTier(population: number): CityTier {
   let tier: CityTier = 1;
-  for (const [index, minimum] of CITY_TIER_MIN_POPULATIONS.entries()) {
+  for (const [index, minimum] of NATION_CITY_TIER_MIN_POPULATIONS.entries()) {
     if (population >= minimum) tier = (index + 1) as CityTier;
   }
   return tier;

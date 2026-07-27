@@ -1,9 +1,12 @@
-import { NATION_CITY_DEVELOPMENT_CAP, type NationCityState } from "@agent-town/shared";
+import {
+  NATION_CITY_DEVELOPMENT_CAP,
+  NATION_CITY_TIER_MIN_POPULATIONS,
+  type NationCityState,
+} from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import {
   CHRONICLE_CITY_TIER_RADII_PX,
-  CITY_TIER_MIN_POPULATIONS,
   chronicleCityGlyph,
   cityPopulationTier,
 } from "../src/ui/worldCityViewModel.js";
@@ -18,14 +21,14 @@ describe("cityPopulationTier", () => {
    * same argument the spec makes for prosperity normalisation (§4.4), applied to glyph size.
    */
   it("puts each threshold's own population in the tier it opens", () => {
-    expect(CITY_TIER_MIN_POPULATIONS).toHaveLength(4);
-    for (const [index, minimum] of CITY_TIER_MIN_POPULATIONS.entries()) {
+    expect(NATION_CITY_TIER_MIN_POPULATIONS).toHaveLength(4);
+    for (const [index, minimum] of NATION_CITY_TIER_MIN_POPULATIONS.entries()) {
       expect(cityPopulationTier(minimum)).toBe(index + 1);
     }
   });
 
   it("keeps a population one short of a threshold in the tier below", () => {
-    for (const minimum of CITY_TIER_MIN_POPULATIONS.slice(1)) {
+    for (const minimum of NATION_CITY_TIER_MIN_POPULATIONS.slice(1)) {
       expect(cityPopulationTier(minimum - 1)).toBeLessThan(cityPopulationTier(minimum));
     }
   });
@@ -62,7 +65,8 @@ describe("chronicleCityGlyph", () => {
   });
 
   it("takes its radius from the chronicle's own tier table", () => {
-    for (const [index, minimum] of CITY_TIER_MIN_POPULATIONS.entries()) {
+    expect(CHRONICLE_CITY_TIER_RADII_PX).toHaveLength(NATION_CITY_TIER_MIN_POPULATIONS.length);
+    for (const [index, minimum] of NATION_CITY_TIER_MIN_POPULATIONS.entries()) {
       const glyph = chronicleCityGlyph(cityState(minimum), { isCapital: false });
       expect(glyph.radiusPx).toBe(CHRONICLE_CITY_TIER_RADII_PX[index]);
     }
