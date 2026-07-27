@@ -8,6 +8,8 @@ import {
   FATIGUE_MAX,
   FATIGUE_REST_RECOVERY_PER_DAY,
   type Facility,
+  FIELD_TILL_WORK,
+  type Field,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
@@ -16,6 +18,7 @@ import {
   type House,
   HUNGER_MAX,
   HUNGER_PER_MEAL,
+  isField,
   isHouse,
   type MovementPurpose,
   type Position,
@@ -60,7 +63,9 @@ function intentTask(tasks: AgentTask[]): AgentTask | undefined {
 
 function movementPurpose(tasks: AgentTask[]): MovementPurpose {
   const task = intentTask(tasks);
-  if (task?.kind === "build" || task?.kind === "buildFacility") return "construction";
+  if (task?.kind === "build" || task?.kind === "till" || task?.kind === "buildFacility") {
+    return "construction";
+  }
   if (isFacilityTask(task)) return "facilityService";
   if (task?.kind === "gather") return "gathering";
   if (task?.kind === "eat" || task?.kind === "forage" || task?.kind === "rest") {
@@ -314,6 +319,10 @@ function houseAt(world: WorldState, pos: Position): House | undefined {
   return world.buildings.filter(isHouse).find((house) => positionsEqual(house.pos, pos));
 }
 
+function fieldAt(world: WorldState, pos: Position): Field | undefined {
+  return world.buildings.filter(isField).find((field) => positionsEqual(field.pos, pos));
+}
+
 function buildApproachPositions(
   world: WorldState,
   target: Position,
@@ -396,6 +405,66 @@ function stepBuild(
   house.progress = Math.min(HOUSE_BUILD_TICKS, house.progress + 1);
   house.complete = house.progress === HOUSE_BUILD_TICKS;
   if (house.complete) finishHeadTask(agent);
+}
+
+function isValidNewFieldSite(world: WorldState, target: Position): boolean {
+  const tile = tileAt(world, target);
+  if (!isWalkable(world, target) || tile?.resource !== null) return false;
+  if (positionsEqual(target, world.stockpile.pos)) return false;
+  return buildingAt(world, target) === undefined;
+}
+
+function beginOrResumeField(world: WorldState, pos: Position): Field {
+  const existing = fieldAt(world, pos);
+  if (existing !== undefined) return existing;
+  const field = {
+    kind: "field",
+    pos,
+    progress: 0,
+    complete: false,
+    stage: "fallow",
+  } as const;
+  world.buildings.push(field);
+  return field;
+}
+
+function stepTill(
+  world: WorldState,
+  agent: AgentState,
+  task: Extract<AgentTask, { kind: "till" }>,
+  step: StepContext,
+): void {
+  const existing = fieldAt(world, task.pos);
+  if (existing?.complete === true) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (
+    !isWalkable(world, task.pos) ||
+    (existing === undefined && !isValidNewFieldSite(world, task.pos))
+  ) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!isAdjacentOrOn(agent.pos, task.pos)) {
+    const approach = findNearestReachable(
+      world,
+      agent.pos,
+      buildApproachPositions(world, task.pos, existing !== undefined),
+    );
+    if (approach === null) {
+      finishHeadTask(agent);
+      return;
+    }
+    stepToward(world, agent, approach, (pos) => positionsEqual(pos, approach), step);
+    return;
+  }
+
+  const field = beginOrResumeField(world, task.pos);
+  agent.activity = { kind: "building", target: task.pos };
+  field.progress = Math.min(FIELD_TILL_WORK, field.progress + 1);
+  field.complete = field.progress === FIELD_TILL_WORK;
+  if (field.complete) finishHeadTask(agent);
 }
 
 function restTarget(world: WorldState, agent: AgentState): Position | null {
@@ -572,6 +641,9 @@ export function stepAgent(
       break;
     case "build":
       stepBuild(world, agent, task, step);
+      break;
+    case "till":
+      stepTill(world, agent, task, step);
       break;
     case "rest":
       stepRest(world, agent, step);

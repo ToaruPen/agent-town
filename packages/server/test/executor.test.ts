@@ -9,13 +9,16 @@ import {
   FATIGUE_REST_RECOVERY_PER_DAY,
   type Facility,
   type FacilityKind,
+  FIELD_TILL_WORK,
   FOOD_PER_MEAL,
   FORAGE_TICKS,
   GATHER_TICKS,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
   HUNGER_PER_MEAL,
+  isField,
   MOVE_TICKS_PER_TILE,
+  type Position,
   RATION_FOOD_PER_MEAL,
   RATION_HUNGER_PER_MEAL,
   RATION_STRAIN_PER_MEAL,
@@ -104,6 +107,12 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
       worldMap: makeWorldMapFixture(),
     },
   };
+}
+
+function worldWithAgentAt(pos: Position): WorldState {
+  const world = createWorld(pos.x + 1, pos.y + 1);
+  world.agents.push(createAgent({ pos }));
+  return world;
 }
 
 describe("stepAgent", () => {
@@ -488,6 +497,19 @@ describe("stepAgent", () => {
 
     expect(agent.tasks).toEqual([]);
     expect(world.buildings).toHaveLength(1);
+  });
+
+  it("raises a field from bare ground and completes it", () => {
+    const world = worldWithAgentAt({ x: 3, y: 3 });
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    agent.tasks = [{ kind: "till", pos: { x: 3, y: 3 } }];
+
+    for (let tick = 0; tick < FIELD_TILL_WORK + 5; tick += 1) stepAgent(world, agent);
+
+    const field = world.buildings.filter(isField)[0];
+    expect(field?.complete).toBe(true);
+    expect(field?.stage).toBe("fallow");
   });
 
   it("rests at the nearest reachable complete house and restores gross fatigue per tick", () => {

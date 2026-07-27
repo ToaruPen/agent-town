@@ -22,6 +22,7 @@ const TASK_LABELS: Record<AgentTask["kind"], string> = {
   maintainFacility: "施設維持",
   moveTo: "移動",
   rest: "休息",
+  till: "開墾",
   transferToFacility: "施設へ搬入",
 };
 
