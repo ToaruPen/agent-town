@@ -321,8 +321,11 @@ export function shadowGraphic(widthRatio: number): Graphics;
 
 **Contract:**
 
-The server broadcasts every tick, ten times a second, and a resident crosses a tile in three
-ticks on open ground and fewer on a worn trail. An existing `app.ticker` callback expires
+The server broadcasts every tick, ten times a second. Crossing a tile costs three units of
+progress on open ground and fewer on a worn trail, but `MOVE_TICKS_PER_TILE` is required
+progress rather than elapsed ticks: a resident below `FATIGUE_REST_THRESHOLD` advances by
+`FATIGUE_SLOWDOWN` per tick and so needs six ticks for the same open-ground tile. The client
+must not assume a fixed per-tile duration. An existing `app.ticker` callback expires
 speech bubbles and renders dirty world layers, the active info bubble, and screen layers every
 frame. However, `renderAgentLayer` runs only when a server update sets `agentsDirty`; it then
 destroys and rebuilds every agent container at the authoritative tile position, so a resident
