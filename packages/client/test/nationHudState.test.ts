@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildNationClockViewModel } from "../src/ui/nationClockViewModel.js";
 import {
+  applyDisconnected,
   applyOrders,
   applyUpdate,
   applyWelcome,
@@ -392,5 +393,41 @@ describe("a welcome after a reconnect", () => {
   it("has no candidate list to carry when none had arrived", () => {
     expect(applyWelcome(welcomed(), worldFixture()).options).toEqual([]);
     expect(applyWelcome(welcomed(), worldFixture()).orders).toBeNull();
+  });
+});
+
+/**
+ * The send channel, which the desk's controls read. `wsClient` discards every send for the second between a
+ * drop and the replacement socket, so this is what stops a control looking live while nothing can leave.
+ */
+describe("the send channel's state", () => {
+  it("has nothing to send on before the first welcome", () => {
+    expect(initialNationHudState().connected).toBe(false);
+  });
+
+  it("is open once a welcome arrives, which is itself proof of a socket", () => {
+    expect(welcomed().connected).toBe(true);
+  });
+
+  it("closes on a drop", () => {
+    expect(applyDisconnected(welcomed()).connected).toBe(false);
+  });
+
+  /**
+   * A dropped socket is not a reason to blank the HUD: the last payload is still the most recent thing the
+   * server said, and clearing it would lose more than it clarified. Only the send channel changes.
+   */
+  it("keeps the desk and the world on screen through a drop", () => {
+    const dropped = applyDisconnected(applyOrders(welcomed(), ordersFixture()));
+
+    expect(dropped.orders).not.toBeNull();
+    expect(dropped.options).toHaveLength(6);
+    expect(dropped.nations).toHaveLength(1);
+  });
+
+  it("reopens on the welcome the reconnect delivers", () => {
+    const reconnected = applyWelcome(applyDisconnected(welcomed()), worldFixture());
+
+    expect(reconnected.connected).toBe(true);
   });
 });

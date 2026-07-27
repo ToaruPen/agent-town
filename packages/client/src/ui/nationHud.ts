@@ -15,6 +15,7 @@ import {
   type NationDashboardViewModel,
 } from "./nationDashboardViewModel.js";
 import {
+  applyDisconnected,
   applyOrders,
   applyUpdate,
   applyWelcome,
@@ -26,6 +27,8 @@ import {
 import { createNationSelect, type NationSelectController } from "./nationSelect.js";
 import { createProsperityRanking, type ProsperityRankingController } from "./prosperityRanking.js";
 import { buildProsperityRankingViewModel } from "./prosperityViewModel.js";
+
+const SEND_REFUSED_ANNOUNCEMENT = "接続が切れています。送信できませんでした。";
 
 export interface NationHudRoots {
   clock: HTMLElement;
@@ -40,10 +43,21 @@ export interface NationHudRoots {
 }
 
 export interface NationHudController {
+  /**
+   * The HUD's outbound channel, which is the one the keys must use. A refused send is announced in the live
+   * region here, because a key has no control to grey out: without this, clicking during the reconnect gap
+   * would be visibly refused while pressing `A` or `2` was swallowed in silence.
+   */
+  send: SendClientMessage;
   applyWelcome(world: NationWorldState, now: number): void;
   applyUpdate(world: NationWorldState, now: number): void;
   /** The whole order desk: the candidate list, what commits next, the mode, and any refusal. */
   applyOrders(orders: NationOrders): void;
+  /**
+   * The socket dropped. Repaints so the desk's controls stop offering to send — for the next second every
+   * send is discarded, and a control that looks live is the one lie the desk cannot afford.
+   */
+  applyDisconnected(): void;
   toggleDirectives(): void;
   /** True when a panel was open and has now been closed, so `Escape` can stop there. */
   closeTopPanel(): boolean;
@@ -97,6 +111,7 @@ export function directiveView(state: NationHudState): DirectiveListViewModel | n
     own.polity,
     cityNames(state),
     state.speed,
+    state.connected,
   );
 }
 
@@ -115,27 +130,37 @@ export function createNationHud(
   let clockKey: string | null = null;
   let announcedSpeed: number | null = null;
 
-  const directives = createDirectivePanel(roots.directives, send);
+  const announce = (message: string): void => {
+    roots.status.textContent = message;
+  };
+
+  // Every outbound message goes through here, so there is exactly one place that turns a discarded send
+  // into something the player can perceive.
+  const post: SendClientMessage = (message) => {
+    if (send(message)) return true;
+    announce(SEND_REFUSED_ANNOUNCEMENT);
+    return false;
+  };
+
+  const directives = createDirectivePanel(roots.directives, post);
   const panels: Panels = {
-    clock: createNationClockBar(roots.clock, send),
+    clock: createNationClockBar(roots.clock, post),
     dashboard: createNationDashboard(roots.dashboard, {
-      send,
+      send: post,
       openDirectives: () => {
         if (!directives.isOpen()) directives.toggle();
       },
+      readCanSend: () => state.connected,
     }),
     ranking: createProsperityRanking(roots.ranking),
     directives,
-    select: createNationSelect(roots.select, send),
-  };
-
-  const announce = (message: string): void => {
-    roots.status.textContent = message;
+    select: createNationSelect(roots.select, post),
   };
 
   const renderPanels = (): void => {
     panels.select.render(selectableNations(state), state.history);
     panels.dashboard.render(dashboardView(state), state.generation);
+    panels.dashboard.renderCanSend(state.connected);
     panels.directives.render(directiveView(state), state.generation);
     panels.clock.renderAutoPilot(state.orders?.autoPilot ?? null);
     if (state.history !== null) {
@@ -164,6 +189,8 @@ export function createNationHud(
   };
 
   return {
+    send: post,
+
     applyWelcome(world: NationWorldState, now: number): void {
       const reconnected = state.generation > 0;
       state = applyWelcome(state, world);
@@ -196,6 +223,11 @@ export function createNationHud(
       }
       const message = ordersAnnouncement(previous, orders, activeIds);
       if (message !== null) announce(message);
+    },
+
+    applyDisconnected(): void {
+      state = applyDisconnected(state);
+      renderPanels();
     },
 
     toggleDirectives(): void {

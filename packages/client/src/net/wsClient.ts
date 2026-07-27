@@ -14,8 +14,11 @@ export interface WebSocketLike {
   send(data: string): void;
 }
 
-/** Outbound channel for the HUD. Routes to whichever socket is current, so it survives a reconnect. */
-export type SendClientMessage = (message: ClientMessage) => void;
+/**
+ * Outbound channel for the HUD. Routes to whichever socket is current, so it survives a reconnect, and
+ * returns whether the message actually went out — during the reconnect gap there is no socket to send on.
+ */
+export type SendClientMessage = (message: ClientMessage) => boolean;
 
 type WebSocketFactory = (url: string) => WebSocketLike;
 type OrdersMessage = Extract<ServerMessage, { type: "orders" }>;
@@ -121,6 +124,11 @@ export function connect(
       handlers.onUpdate(state);
     };
     socket.onclose = () => {
+      // Dropped before the notice, because a closed socket must stop being the send target immediately.
+      // `createBrowserSocket`'s queue only buffers before the *first* open, so this adapter's `pending` is
+      // already null and `send` would reach a CLOSED socket — which browsers discard without throwing.
+      // Leaving it in place made every click and key for the next second vanish with no error anywhere.
+      if (current === socket) current = null;
       handlers.onDisconnected?.();
       setTimeout(open, RECONNECT_DELAY_MS);
     };
@@ -128,7 +136,14 @@ export function connect(
 
   open();
 
+  /**
+   * False when there was no socket to send on. The caller is expected to say so rather than assume the
+   * message landed: a dropped send produces no server answer, and on the order desk an unanswered submit
+   * is indistinguishable from one the server is still thinking about.
+   */
   return (message) => {
-    current?.send(encodeMessage(message));
+    if (current === null) return false;
+    current.send(encodeMessage(message));
+    return true;
   };
 }

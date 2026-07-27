@@ -20,24 +20,33 @@ const CARD_KEY_ATTRIBUTE = "data-directive-key";
  * tab order and take the explanation with it, which is the one thing §3.4 exists to prevent. The click
  * handler therefore has to refuse by itself — a blocked card is reachable, readable, and inert.
  */
-function submitButton(card: DirectiveCardViewModel, send: SendClientMessage): HTMLButtonElement {
+function submitButton(
+  card: DirectiveCardViewModel,
+  canSend: boolean,
+  send: SendClientMessage,
+): HTMLButtonElement {
+  const submittable = card.canSubmit && canSend;
   const button = element(
     "button",
     "directive-panel__submit",
-    card.canSubmit ? "発令する" : "発令不可",
+    submittable ? "発令する" : "発令不可",
   );
   button.type = "button";
   button.setAttribute(CARD_KEY_ATTRIBUTE, card.key);
   button.setAttribute("aria-label", card.accessibleName);
-  if (!card.canSubmit) button.setAttribute("aria-disabled", "true");
+  if (!submittable) button.setAttribute("aria-disabled", "true");
   button.addEventListener("click", () => {
-    if (!card.canSubmit) return;
+    if (!submittable) return;
     send(issueDirectiveCommand(card.kind, card.targetCityId));
   });
   return button;
 }
 
-function cardItem(card: DirectiveCardViewModel, send: SendClientMessage): HTMLElement {
+function cardItem(
+  card: DirectiveCardViewModel,
+  canSend: boolean,
+  send: SendClientMessage,
+): HTMLElement {
   const item = element("li", "directive-panel__option");
   if (!card.canSubmit) item.classList.add("directive-panel__option--blocked");
 
@@ -57,7 +66,7 @@ function cardItem(card: DirectiveCardViewModel, send: SendClientMessage): HTMLEl
   if (card.blockedText !== null) {
     item.append(element("p", "directive-panel__blocked", card.blockedText));
   }
-  item.append(submitButton(card, send));
+  item.append(submitButton(card, canSend, send));
   return item;
 }
 
@@ -87,8 +96,15 @@ function panelBody(view: DirectiveListViewModel, send: SendClientMessage): HTMLE
     refusal.setAttribute("role", "alert");
     body.push(refusal);
   }
+  if (view.sendNotice !== null) {
+    // Its own banner, not the refusal's: this one is the client admitting it cannot ask, which is a
+    // different thing from the server having answered no.
+    const notice = element("p", "directive-panel__offline", view.sendNotice);
+    notice.setAttribute("role", "alert");
+    body.push(notice);
+  }
   const list = element("ul", "directive-panel__options");
-  list.append(...view.cards.map((card) => cardItem(card, send)));
+  list.append(...view.cards.map((card) => cardItem(card, view.canSend, send)));
   body.push(list);
   return body;
 }

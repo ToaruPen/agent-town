@@ -10,12 +10,23 @@ import { element } from "./worldChronicle.js";
 
 export interface NationDashboardController {
   render(view: NationDashboardViewModel | null, generation: number): void;
+  /**
+   * Connectivity is not part of the view model, so losing the socket does not change the dedupe key and
+   * `render` returns early. Without this the 取消 button would keep reading as live for a whole season.
+   */
+  renderCanSend(canSend: boolean): void;
 }
 
 export interface NationDashboardActions {
   send: SendClientMessage;
   /** Opens the candidate list. The dashboard names the decision; the panel is where it is made. */
   openDirectives: () => void;
+  /**
+   * Whether there is a socket to send on, read at click time rather than passed in, so a reconnect does
+   * not have to rebuild the dashboard to make 取消 live again. The cancel control has to obey this for the
+   * same reason 発令 does: during the gap the send is discarded and no answer ever comes back.
+   */
+  readCanSend: () => boolean;
 }
 
 function metricRow(metric: NationMetricRow): HTMLElement {
@@ -55,6 +66,17 @@ function directiveSection(view: NationDashboardViewModel): HTMLElement {
   return section;
 }
 
+const CANCEL_SELECTOR = ".nation-dashboard__cancel";
+
+/**
+ * `aria-disabled`, not `disabled`, for the same reason the candidate list uses it: a queued order the
+ * player is trying to withdraw must stay readable and reachable by keyboard while it cannot be sent.
+ */
+function markCanSend(cancel: Element, canSend: boolean): void {
+  if (canSend) cancel.removeAttribute("aria-disabled");
+  else cancel.setAttribute("aria-disabled", "true");
+}
+
 /**
  * The 次の決算 slot: the one place that answers what commits at the next boundary.
  *
@@ -84,7 +106,9 @@ function commitSlotSection(
     const cancel = element("button", "nation-dashboard__cancel", "取消");
     cancel.type = "button";
     cancel.setAttribute("aria-label", `発令を取り消す（${slot.headline}）`);
+    markCanSend(cancel, actions.readCanSend());
     cancel.addEventListener("click", () => {
+      if (!actions.readCanSend()) return;
       actions.send(cancelDirectiveCommand(cancelId));
     });
     controls.append(cancel);
@@ -140,6 +164,11 @@ export function createNationDashboard(
         return;
       }
       root.replaceChildren(...dashboardBody(view, actions));
+    },
+
+    renderCanSend(canSend: boolean): void {
+      const cancel = root.querySelector(CANCEL_SELECTOR);
+      if (cancel !== null) markCanSend(cancel, canSend);
     },
   };
 }

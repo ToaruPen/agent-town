@@ -24,7 +24,7 @@ const polity = () =>
   });
 
 function build(orders: NationOrders = ordersFixture(), nation = nationFixture()) {
-  return buildDirectiveListViewModel(orders.options, orders, nation, polity(), CITY_NAMES, 1);
+  return buildDirectiveListViewModel(orders.options, orders, nation, polity(), CITY_NAMES, 1, true);
 }
 
 function cardFor(
@@ -113,6 +113,7 @@ describe("buildDirectiveListViewModel", () => {
       polity(),
       CITY_NAMES,
       8,
+      true,
     );
 
     expect(at1.cards.find((card) => card.kind === "clearFarmland")?.durationDetail).toBe(
@@ -131,6 +132,7 @@ describe("buildDirectiveListViewModel", () => {
       polity(),
       CITY_NAMES,
       0,
+      true,
     );
 
     expect(paused.cards[0]?.durationDetail).toBe("2季（一時停止中は進みません）");
@@ -224,6 +226,7 @@ describe("a candidate list with no orders behind it", () => {
       polity(),
       CITY_NAMES,
       1,
+      true,
     );
 
   it("still renders every option, so the desk is not dead until the next season", () => {
@@ -284,6 +287,7 @@ describe("a carried shortfall against fresh stocks", () => {
       polity(),
       CITY_NAMES,
       1,
+      true,
     ).cards.find((candidate) => candidate.kind === "holdFestival");
 
   it("drops a reason the stocks refute rather than printing a negative shortfall", () => {
@@ -360,6 +364,49 @@ describe("a refusal", () => {
   it("explains a cancel that arrived too late", () => {
     expect(build(ordersFixture({ rejected: "unknownNation" })).refusal).toBe(
       "発令できませんでした：その発令はもうありません。すでに実行または取消済みです",
+    );
+  });
+});
+
+/**
+ * The reconnect gap, which is a different thing from the server saying no. `wsClient` discards every send
+ * for the second between a drop and the replacement socket, so a control that still offered to submit would
+ * be the transport lying where the desk is careful not to.
+ */
+describe("the send channel", () => {
+  const offline = () =>
+    buildDirectiveListViewModel(
+      ordersFixture().options,
+      ordersFixture(),
+      nationFixture(),
+      polity(),
+      CITY_NAMES,
+      1,
+      false,
+    );
+
+  it("says nothing can be sent, and why, without calling it a refusal", () => {
+    expect(offline().canSend).toBe(false);
+    expect(offline().sendNotice).toBe("接続が切れています。再接続するまで発令できません。");
+    expect(offline().refusal).toBeNull();
+  });
+
+  it("is silent while the socket is up", () => {
+    expect(build().canSend).toBe(true);
+    expect(build().sendNotice).toBeNull();
+  });
+
+  /**
+   * `canSubmit` keeps meaning "the server would accept this option" even while offline. Collapsing the two
+   * would make a dropped socket read as the server having refused all six, and would lose the distinction
+   * the moment the connection came back.
+   */
+  it("leaves each option's own availability untouched", () => {
+    const cards = offline().cards;
+
+    expect(cards.filter((card) => card.canSubmit)).toHaveLength(5);
+    expect(cards.find((card) => card.kind === "openMine")?.blockedText).toBe(
+      "丘陵・山岳を領有していません",
     );
   });
 });

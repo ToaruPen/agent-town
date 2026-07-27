@@ -46,7 +46,7 @@ function mountNationHud(roots: NationHudRoots): void {
   // It is non-null well before the player can click anything, and dropping a send that somehow beats
   // the socket is correct anyway: the server's state is what the HUD renders.
   let send: SendClientMessage | null = null;
-  const post: SendClientMessage = (message) => send?.(message);
+  const post: SendClientMessage = (message) => send?.(message) ?? false;
 
   const hud = createNationHud(roots, post);
   const boot = createBootNotice();
@@ -65,9 +65,13 @@ function mountNationHud(roots: NationHudRoots): void {
       // Deliberately not "paused": a HUD keeps its last payload on screen, so a dropped socket looks
       // exactly like a stopped clock until something says which one it is.
       boot.show("接続が切れました。再接続しています…");
+      // And the desk's controls stop offering to send, because for the next second nothing can.
+      hud.applyDisconnected();
     },
   });
-  bindNationKeys(post, () => hud.state(), {
+  // `hud.send`, not `post`: the keys go through the HUD's channel so a send the transport refused is
+  // announced. Bound to `post` they would be swallowed silently, with no control on screen to say why.
+  bindNationKeys(hud.send, () => hud.state(), {
     toggleDirectives: () => {
       hud.toggleDirectives();
     },

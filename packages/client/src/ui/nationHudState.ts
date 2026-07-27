@@ -42,6 +42,12 @@ export interface NationHudState {
    * cannot name a decision the server has not stated for the season that is actually running.
    */
   orders: NationOrders | null;
+  /**
+   * Whether there is a socket to send on. False until the first `welcome` and again for the second between
+   * a drop and the reconnect, during which every send is discarded — so the desk's controls must stop
+   * offering to send rather than look live and do nothing.
+   */
+  connected: boolean;
   /** Which speed button is lit. Seeded by `welcome` so the control is honest before the first update. */
   speed: SpeedMultiplier;
   lastNonZeroSpeed: SpeedMultiplier;
@@ -65,6 +71,7 @@ export function initialNationHudState(): NationHudState {
     clock: null,
     options: [],
     orders: null,
+    connected: false,
     speed: 0,
     lastNonZeroSpeed: DEFAULT_RESUME_SPEED,
     generation: 0,
@@ -99,6 +106,7 @@ export function applyWelcome(state: NationHudState, world: NationWorldState): Na
     clock: null,
     options: state.options,
     orders: null,
+    connected: true,
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
     generation: state.generation + 1,
@@ -141,6 +149,14 @@ export function applyUpdate(
  */
 export function applyOrders(state: NationHudState, orders: NationOrders): NationHudState {
   return { ...state, playerNationId: orders.nationId, options: orders.options, orders };
+}
+
+/**
+ * The socket dropped. Only the send channel is touched: the last payload stays on screen, because it is
+ * still the most recent thing the server said and blanking it would lose more than it clarified.
+ */
+export function applyDisconnected(state: NationHudState): NationHudState {
+  return { ...state, connected: false };
 }
 
 export function issueDirectiveCommand(

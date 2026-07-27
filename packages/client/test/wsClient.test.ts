@@ -246,6 +246,77 @@ describe("connect's outbound channel", () => {
     expect(sockets[0]?.sent).toEqual([]);
     expect(sockets[1]?.sent).toEqual(['{"type":"setSpeed","speed":0}']);
   });
+
+  /**
+   * The second between a drop and the reconnect. `current` used to keep pointing at the closed socket, and
+   * `createBrowserSocket`'s queue only buffers before the *first* open, so the message went to a CLOSED
+   * socket — which browsers discard without throwing. Every click and key for that second vanished with no
+   * error anywhere, while the controls stayed enabled.
+   *
+   * Refused rather than queued for the replacement: a directive submitted before a gap of unknown length is
+   * an intent formed against a world that has since moved, and replaying it would make the transport assert
+   * what the desk is forbidden from asserting. The caller is told no, and says so.
+   */
+  it("refuses a send during the reconnect gap instead of dropping it silently", () => {
+    vi.useFakeTimers();
+    const sockets = [new MockWebSocket(), new MockWebSocket()];
+    let opened = 0;
+
+    const send = connect(
+      "ws://example.test",
+      { onWelcome: vi.fn(), onUpdate: vi.fn(), onOrders: vi.fn() },
+      () => {
+        const socket = sockets[opened];
+        opened += 1;
+        if (socket === undefined) throw new Error("opened more sockets than the test provides");
+        return socket;
+      },
+    );
+
+    expect(send({ type: "setSpeed", speed: 2 })).toBe(true);
+
+    sockets[0]?.onclose?.();
+
+    // Still inside the gap: no replacement socket exists yet.
+    expect(send({ type: "issueDirective", kind: "holdFestival", targetCityId: null })).toBe(false);
+    expect(opened).toBe(1);
+
+    vi.runOnlyPendingTimers();
+
+    expect(send({ type: "setSpeed", speed: 4 })).toBe(true);
+    vi.useRealTimers();
+
+    // The refused message reached neither socket, and was not replayed onto the replacement.
+    expect(sockets[0]?.sent).toEqual(['{"type":"setSpeed","speed":2}']);
+    expect(sockets[1]?.sent).toEqual(['{"type":"setSpeed","speed":4}']);
+  });
+
+  /** The notice fires on the same edge that stops the sending, so the two can never disagree. */
+  it("reports the disconnect to the caller before the gap begins", () => {
+    vi.useFakeTimers();
+    const socket = new MockWebSocket();
+    const onDisconnected = vi.fn();
+    let sentDuringNotice: boolean | null = null;
+
+    const send = connect(
+      "ws://example.test",
+      {
+        onWelcome: vi.fn(),
+        onUpdate: vi.fn(),
+        onOrders: vi.fn(),
+        onDisconnected: () => {
+          onDisconnected();
+          sentDuringNotice = send({ type: "setSpeed", speed: 1 });
+        },
+      },
+      () => socket,
+    );
+    socket.onclose?.();
+    vi.useRealTimers();
+
+    expect(onDisconnected).toHaveBeenCalledOnce();
+    expect(sentDuringNotice).toBe(false);
+  });
 });
 
 describe("getWebSocketUrl", () => {

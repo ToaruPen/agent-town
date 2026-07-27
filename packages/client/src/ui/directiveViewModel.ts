@@ -58,7 +58,17 @@ export interface DirectiveListViewModel {
   autoPilotDescription: string;
   /** The server's refusal of the last action, or null. Never synthesised locally. */
   refusal: string | null;
+  /**
+   * Whether a submit can leave the client at all. Deliberately separate from each card's `canSubmit`: that
+   * one says the *server* would accept the option, this one says there is a socket to ask on. Collapsing
+   * them would make a reconnect gap look like the server refusing every option.
+   */
+  canSend: boolean;
+  /** Why nothing can be sent, or null. A client-side fact, so it never claims to be a server judgement. */
+  sendNotice: string | null;
 }
+
+const DISCONNECTED_NOTICE = "接続が切れています。再接続するまで発令できません。";
 
 const COST_FIELDS: readonly (readonly [keyof NationStocks, string])[] = [
   ["food", "食料"],
@@ -286,6 +296,7 @@ export function buildDirectiveListViewModel(
   polity: Polity,
   cityNames: ReadonlyMap<string, string>,
   speed: SpeedMultiplier,
+  connected: boolean,
 ): DirectiveListViewModel {
   const autoPilot = orders?.autoPilot ?? null;
   const rejected = orders?.rejected ?? null;
@@ -295,5 +306,7 @@ export function buildDirectiveListViewModel(
     autoPilotLabel: autoPilotLabel(autoPilot),
     autoPilotDescription: autoPilotDescription(autoPilot),
     refusal: rejected === null ? null : refusalText(rejected),
+    canSend: connected,
+    sendNotice: connected ? null : DISCONNECTED_NOTICE,
   };
 }
