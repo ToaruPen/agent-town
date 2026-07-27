@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Real-time strategy game where LLM agents and the player each rule a nation and compete for prosperity. The player travels between a world map, where the game is played, and a local map of their own cities. Spec: docs/superpowers/specs/ (Japanese); current direction is `2026-07-27-nation-rulers-realtime-design.md`. Current milestone plan: docs/superpowers/plans/2026-07-27-n1-living-nations.md. Delegation model and package ownership: docs/superpowers/handoff/2026-07-27-delegation.md.
+Real-time strategy game where LLM agents and the player each rule a nation and compete for prosperity. The player travels between a world map, where the game is played, and a local map of their own cities. Spec: docs/superpowers/specs/ (Japanese); current direction is `2026-07-27-nation-rulers-realtime-design.md`. Current milestone plans: docs/superpowers/plans/2026-07-27-n1-living-nations.md (simulation) and 2026-07-27-c1-nation-client.md (client). Client design investigations: docs/superpowers/design/. Delegation model and package ownership: docs/superpowers/handoff/2026-07-27-delegation.md.
 
 The resident-scale colony simulation is frozen: it stays in the tree with its tests green, but the live loop no longer runs it. That covers server sim/engine, executor, astar, fakePlanner, worldGen, society, foodAnxiety, spatialDemand, siteSelection, construction, facilityOperation, traffic, farming; shared/spatial.ts; and the client resident/terrain layers. World-history and world-map generation stay live as the game's world generator.
 
 ## Layout
 - packages/shared — domain types, wire protocol, game constants. No runtime deps.
 - packages/server — authoritative simulation (src/sim, deterministic, pure) + WebSocket adapter (src/net).
-- packages/client — PixiJS renderer. Renders server state; owns no game logic.
+- packages/client — renderer. Two surfaces: the world map is HTML Canvas 2D, the local city view is PixiJS. Renders server state; owns no game logic.
 
 ## Rules
 - TDD: failing test → implement → green → commit (Conventional Commits).

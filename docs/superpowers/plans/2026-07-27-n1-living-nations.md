@@ -41,6 +41,8 @@ Explicitly out of scope:
 
 Do not rename these, make fields optional, or add fields while executing this plan. If a task appears to need a change, stop and raise it with the supervisor.
 
+**One known divergence, deliberate.** `ActiveDirective.totalSeasons` and the `orders` message were added to these blocks after Tasks 1–3 were dispatched, so `packages/shared/src/nation.ts` and `protocol.ts` do not match them yet. Task 4 brings `nation.ts` into line and Task 5 brings `protocol.ts`. Until then, a byte-for-byte check against these blocks will differ by exactly those two items and nothing else.
+
 ### `packages/shared/src/nation.ts` (new)
 
 ```ts
@@ -92,6 +94,7 @@ export interface ActiveDirective {
   targetCityId: string | null;
   issuedAtTick: number;
   seasonsRemaining: number;
+  totalSeasons: number; // so progress is self-describing without the candidate list
 }
 
 export interface NationCityState {
@@ -176,8 +179,10 @@ export interface WorldCellChange {
 
 ```ts
 import type {
+  DirectiveBlockedReason,
   DirectiveId,
   DirectiveKind,
+  DirectiveOption,
   NationId,
   NationState,
   NationWorldState,
@@ -196,6 +201,16 @@ export type ServerMessage =
       season: Season;
       nations: NationState[];
       changedCells: WorldCellChange[];
+    }
+  | {
+      type: "orders";
+      tick: number;
+      nationId: NationId; // always the receiving client's own nation
+      autoPilot: boolean;
+      options: DirectiveOption[];
+      queued: { id: DirectiveId; kind: DirectiveKind; targetCityId: string | null } | null;
+      chancellorChoice: { kind: DirectiveKind; targetCityId: string | null } | null;
+      rejected: DirectiveBlockedReason | "notYourNation" | "unknownNation" | null;
     };
 
 export type ClientMessage =
@@ -208,6 +223,16 @@ export type ClientMessage =
 ```
 
 `welcome` carries the full initial state exactly once. `clock` is a light heartbeat, emitted on a wall-clock interval so its rate does not change with game speed, and carries no nation state. Nation state changes only at season boundaries, so `season` is the only message that carries `nations`. `changedCells` stays empty in N1 and exists so N3 does not break the wire format.
+
+`orders` is the client's own order desk, and it exists because the earlier wire could not deliver the game's only verb. `DirectiveOption` was defined and never transmitted: `NationState.activeDirectives` says what is *running*, never what is *offered*, so the directive panel that spec §7.2 requires — candidates, costs, durations, cultural fit, blocked reasons — had no source. `orders` carries that list, and because nation state changes only at boundaries the list is a stable snapshot the player can deliberate over for the whole season, including indefinitely at speed 0.
+
+It is also the only acknowledgement that survives a pause. `clock` carries no nation state and `season` never fires at speed 0, so without `orders` a paused player issuing a directive would see nothing, and a rejected order would be indistinguishable from an accepted one. `orders` is therefore emitted on an accepted `selectNation`, on **every** `issueDirective`, `cancelDirective` and `setAutoPilot` whatever the outcome, and once after each `season`. Nothing else. `setSpeed` needs no entry: `clock` already echoes `speed` at roughly 1 Hz at every speed including 0.
+
+The server mints the `DirectiveId` when it accepts the order, not at the boundary where the directive becomes active. That makes `cancelDirective` work uniformly on queued and active directives — a queued order with no id yet would be uncancellable — and lets the client tell its own directives from the chancellor's by remembering the ids it queued, with no contract change.
+
+`chancellorChoice` is what the chancellor would pick right now. It is exact rather than a guess: the chancellor is pure and nation state does not change mid-season. It is what lets the HUD always answer "what commits at the next boundary", which is the question a real-time game with a 30-second decision interval has to keep answered. In N4 the LLM ruler must receive the same value in its prompt context, or the player holds an information edge over the agents.
+
+Rival redaction is **not** solved in N1 and this is deliberate. `season` ships `NationState[]` in full, so a player with devtools open can read rival stocks, active directives and reports. The frozen `NationState` has no public-only variant, and inventing one now would ripple through every task. The client renders only the public set for rivals — name, colour, `controller`, `prosperity` and its components, `population`, `territoryCellCount`, `cities[]`, and the `Polity` prose the chronicle already shows — and server-side redaction of the `season` payload belongs to N3, where diplomacy makes hidden information matter.
 
 This replaces the resident-scale wire format wholesale. The current `welcome` payload (`WorldState` with `tiles`, `agents`, `stockpile`, `buildings`, `deaths`, `collectives`, `institutions`, `spatialDemands`, `trailCells`, `history`) and the current `update` payload (`agents`, `stockpile`, `buildings`, `deaths`, `collectives`, `institutions`, `spatialDemands`, `changedTiles`, `changedTrailCells`) are no longer sent. `WorldState` itself stays in `world.ts` because the frozen resident modules and their tests still use it.
 
@@ -262,7 +287,7 @@ work needs separate worktrees under `.worktrees/`.
 | 3 | Codex | `sim/nation/directives.ts` + `chancellor.ts`: candidates, preconditions, costs, affinity, effects, deterministic choice | `n1-03-directives-chancellor` | Precondition/cost/taboo/affinity tests, culture-divergence test, `just check && just test`, local commit |
 | 4 | Codex | `sim/nation/season.ts` + `prosperity.ts`: fixed pipeline, ledger, score | `n1-04-season-prosperity` | Pipeline-order, ledger-completeness, order-invariance, score tests, `just check && just test`, local commit |
 | 5 | Codex | `sim/nation/engine.ts` + protocol reshape + `net/wsServer.ts` wiring + `SEED` env | `n1-05-realtime-protocol` | Speed-invariance, message-shape, directive-validation, headless 20-year smoke tests, `just check && just test`, local commit |
-| 6 | Claude | Client: nation dashboard, ranking table, directive panel, season report, speed control, live territory paint | `n1-06-client-nation-ui` | View-model tests, controller tests, build + browser check, `just check && just test`, local commit |
+| 6 | Claude | Client — moved to its own plan, `2026-07-27-c1-nation-client.md` | see C1 | C1's own gates |
 | 7 | Codex | Balance pass: headless 20-year run, tune constants only | `n1-07-balance` | Smoke-run assertions, `just check && just test`, local commit |
 
 ### Task 1 — Contracts and constants
@@ -371,6 +396,8 @@ Nothing in `directives.ts` mutates a `NationState`.
 - Every mutation of a `SeasonMetric` appends a `SeasonLedgerEntry` with its reason. Summing the entries for a metric must equal the observed change in that metric — assert this in tests.
 - Famine: food stock reaching zero with unmet demand reduces population and stability by constant rates and logs `famine` entries.
 - `prosperity.ts` exports `computeProsperity(nation): ProsperityScore`, normalising each component against its fixed reference constant and clamping to 0..1000.
+- Add `totalSeasons: number` to `ActiveDirective` in `packages/shared/src/nation.ts` so it matches the frozen block, set it from the option's `seasons` wherever a directive becomes active, and update any Task 3 test fixture that builds an `ActiveDirective` literal. This is a supervisor-authorised amendment made after Task 3 was dispatched — the reason is under the frozen protocol: a HUD cannot show a directive's progress from `seasonsRemaining` alone, and the total lives on `DirectiveOption`, which the client never receives for rival nations.
+- **The five components are the normalised 0..1 ratio against their reference constant, not raw metrics.** The contract documents only `total`, which leaves the components ambiguous, and the client is forbidden from reconstructing the normalisation itself — so pin it here and assert it in the tests. `total` is the weighted sum times 1000. The client renders each component's contribution as `weight × component × 1000` and displays `total` verbatim; it never sums contributions into a total of its own.
 - Tests: pipeline order observable through the ledger; ledger sums match state deltas; reordering the input array does not change any nation's result; removing a rival nation does not change another nation's score; a full famine cycle behaves as specified.
 - Replace bootstrap's placeholder starting values for `stability` and `culture`. Task 2 had no owned constant for either and left `stability` as the history population points clamped to 0..100, which saturates near 100 for most nations, and `culture` as the raw sum of cultural-value weights. Both need a named constant and a derivation that leaves headroom in **both** directions from the start, so the stability and culture components of the prosperity score can actually move. `developmentLevel` starting at `0` is correct and stays.
 - Tests: no bootstrapped nation starts with `stability` at either bound; two nations with different histories start with different stability and different culture.
@@ -381,18 +408,22 @@ Nothing in `directives.ts` mutates a `NationState`.
 - `wsServer.ts` drives the loop, applies `SPEED_MULTIPLIERS` to pacing only, broadcasts `clock` on a `CLOCK_BROADCAST_MS` wall-clock interval — never on a tick count, which would scale the heartbeat with speed — and `season` at boundaries, and sends `welcome` on connect.
 - Client messages are validated server-side: an unknown nation, an unaffordable or blocked directive, a directive for another nation, or an out-of-range speed is rejected and never mutates state.
 - Player directives queue and take effect at the next season boundary. When a nation is on auto-pilot (or is an agent nation), the chancellor's choice is applied at the boundary instead.
+- Emit `orders` exactly on the triggers listed under the frozen protocol: an accepted `selectNation`, every `issueDirective` / `cancelDirective` / `setAutoPilot` regardless of outcome, and once after each `season`. Mint the `DirectiveId` at accept time, not at the boundary. A rejected order returns `rejected` non-null with `queued` unchanged, and mutates no state.
+- `ActiveDirective.totalSeasons` is set from the option's `seasons` when the directive becomes active, and never changes as `seasonsRemaining` counts down.
+- World generation calls `generateWorldHistory(seed)` with no resident surface, so `history.landmarks` is empty in N1 — `createLandmarks` returns `[]` when its map argument is undefined (`historyGen.ts:581`), and landmark positions are expressed in the 64×48 resident frame anyway. This is correct, not a bug: nothing in N1 renders landmarks. Do not generate a resident surface to populate them.
 - `index.ts` accepts a `SEED` env var (positive integer) and keeps the time-based default when unset. Determinism tests use `SEED`.
 - The old resident-sim wiring is removed from `wsServer.ts`. Its modules and tests stay untouched in the tree.
 - Update the protocol tests to the new shapes; do not delete them.
 - Tests: welcome shape; `clock` carries no nation state; `season` fires exactly on boundaries; identical state at tick N under speeds 1, 4 and a pause/resume cycle; every invalid client message rejected; a headless run of `NATION_TICKS_PER_YEAR * 20` ticks completes with no thrown error, no negative stock and no spawned process.
 
-### Task 6 — Client
+### Task 6 — Client (moved)
 
-- Reuse the existing world-map canvas and chronicle/国柄 renderers. Do not fork them.
-- Add, as pure tested view models plus a thin DOM adapter, in Japanese: nation selection at start, own-nation dashboard (備蓄・人口・安定度・進行中の施策), ranking table (順位・国名・繁栄度・内訳), directive panel (候補・コスト・所要季数・国柄適合・不可理由), season report panel (前季の増減と理由), speed control (一時停止 / x1 / x2 / x4 / x8) with year and season readout, and auto-pilot toggle.
-- The client computes no score and no directive availability; it renders what the server sends.
-- Resident and local-terrain layers (`agentLayer`, `deathLayer`, `hudLayer`, `tickerLayer`, `structureLayer`, `trailLayer`, `terrainDecor`, `shadow`, `motion`, `mapLayer`, `sprites`, plus the survival/society view models) are no longer mounted from `main.ts` but remain in the tree with their tests green.
-- Tests: view models for ranking, directive list, and season report; the controller sends the right client message for each control; blocked directives render their reason and cannot be submitted.
+Client work has its own plan and its own owner: `docs/superpowers/plans/2026-07-27-c1-nation-client.md`. It grew past a single task once the owner asked for the world ↔ local traversal, and it belongs to the client worker under the ownership split. N1 is demonstrable in a browser when C1-1 through C1-5 have landed.
+
+Two consequences for the simulation worker, because they are easy to break from this side:
+
+- The Pixi `Application` in `packages/client/src/main.ts` must stay alive when the resident stack is unmounted. It becomes the local city view's renderer, and it is the only Pixi consumer left, so re-creating it later would mean a second WebGL context for no reason.
+- The resident and local-terrain layers (`agentLayer`, `deathLayer`, `hudLayer`, `tickerLayer`, `structureLayer`, `trailLayer`, `terrainDecor`, `shadow`, `motion`, `mapLayer`, `sprites`, and the survival/society view models) stay in the tree with their tests green. The local city view drives several of them unchanged.
 
 ### Task 7 — Balance
 
