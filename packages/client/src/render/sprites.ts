@@ -1,5 +1,9 @@
 import type { AgentState, Terrain, Tile } from "@agent-town/shared";
 
+import { TERRAIN_TINTS } from "./colors.js";
+
+export const TILE_SIZE = 16;
+
 export type WorldObjectKind =
   | "resource"
   | "stockpile"
@@ -121,12 +125,18 @@ export const SPRITE_ASSETS = {
       // Tiny Town tile 40: ochre dirt ground with scattered pebbles.
       "/assets/tiny-town/Tiles/tile_0040.png",
     ],
+    undergrowth: [
+      // Tiny Town tile 29: a cluster of mushrooms.
+      "/assets/tiny-town/Tiles/tile_0029.png",
+      // Tiny Town tile 17: a young green sprout.
+      "/assets/tiny-town/Tiles/tile_0017.png",
+    ],
   },
   resource: {
     // Tiny Town tile 16: lower green tree canopy with a visible trunk.
     tree: "/assets/tiny-town/Tiles/tile_0016.png",
-    // Tiny Town tile 2: grass dotted with two bright orange flowers.
-    food: "/assets/tiny-town/Tiles/tile_0002.png",
+    // Tiny Town tile 17: a young green sprout.
+    food: "/assets/tiny-town/Tiles/tile_0017.png",
   },
   // Tiny Town tile 94: golden supply chest.
   stockpile: "/assets/tiny-town/Tiles/tile_0094.png",
@@ -147,6 +157,7 @@ export const SPRITE_ASSETS = {
 export const SPRITE_PATHS = [
   ...SPRITE_ASSETS.terrain.grass,
   ...SPRITE_ASSETS.terrain.rock,
+  ...SPRITE_ASSETS.terrain.undergrowth,
   SPRITE_ASSETS.resource.tree,
   SPRITE_ASSETS.resource.food,
   SPRITE_ASSETS.stockpile,
@@ -174,5 +185,17 @@ export function resourceSpritePath(tile: Tile): string | null {
 export function terrainSpritePath(terrain: Terrain, tileIndex: number): string | null {
   if (terrain === "water") return null;
   const variants = terrain === "rock" ? SPRITE_ASSETS.terrain.rock : SPRITE_ASSETS.terrain.grass;
+  return variants[tileIndex % variants.length] ?? variants[0];
+}
+
+/** Multiply applied to a terrain tile, so one grass sprite can serve plains and forest. */
+export function terrainTint(terrain: Terrain): number {
+  return TERRAIN_TINTS[terrain];
+}
+
+/** Undergrowth for a forest tile whose wood is gone, so the clearing still reads as forest. */
+export function undergrowthSpritePath(tile: Tile, tileIndex: number): string | null {
+  if (tile.terrain !== "forest" || (tile.resource?.amount ?? 0) > 0) return null;
+  const variants = SPRITE_ASSETS.terrain.undergrowth;
   return variants[tileIndex % variants.length] ?? variants[0];
 }

@@ -11,6 +11,8 @@ import {
   resourceSpritePath,
   SPRITE_ASSETS,
   terrainSpritePath,
+  terrainTint,
+  undergrowthSpritePath,
 } from "../src/render/sprites.js";
 
 describe("agentTileOffset", () => {
@@ -141,5 +143,33 @@ describe("terrainSpritePath", () => {
     expect(terrainSpritePath("forest", 1)).toBe(SPRITE_ASSETS.terrain.grass[1]);
     expect(terrainSpritePath("rock", 0)).toBe(SPRITE_ASSETS.terrain.rock[0]);
     expect(terrainSpritePath("water", 0)).toBeNull();
+  });
+});
+
+describe("terrainTint", () => {
+  it("leaves plains unchanged, cools forests, and shifts rock toward slate", () => {
+    const plains = terrainTint("plains");
+    const forest = terrainTint("forest");
+    const rock = terrainTint("rock");
+
+    expect(plains).toBe(0xffffff);
+    expect((forest >> 8) & 0xff).toBeLessThan((plains >> 8) & 0xff);
+    expect(rock & 0xff).toBeGreaterThan((rock >> 16) & 0xff);
+  });
+});
+
+describe("undergrowthSpritePath", () => {
+  it("adds stable undergrowth only to depleted forest", () => {
+    const depletedForest: Tile = { terrain: "forest", resource: null };
+    const growingForest: Tile = {
+      terrain: "forest",
+      resource: { kind: "wood", amount: 1 },
+    };
+    const depletedPlains: Tile = { terrain: "plains", resource: null };
+
+    expect(undergrowthSpritePath(growingForest, 3)).toBeNull();
+    expect(undergrowthSpritePath(depletedPlains, 3)).toBeNull();
+    expect(undergrowthSpritePath(depletedForest, 3)).not.toBeNull();
+    expect(undergrowthSpritePath(depletedForest, 3)).toBe(undergrowthSpritePath(depletedForest, 3));
   });
 });

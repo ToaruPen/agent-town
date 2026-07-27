@@ -1,16 +1,20 @@
 import type { WorldState } from "@agent-town/shared";
 import { type Container, Graphics, Sprite } from "pixi.js";
 
-import { WATER_COLOR } from "./colors.js";
 import {
   objectDepth,
   resourceSpritePath,
   SPRITE_ASSETS,
+  TILE_SIZE,
   terrainSpritePath,
+  terrainTint,
+  undergrowthSpritePath,
   type WorldObjectKind,
 } from "./sprites.js";
+import { drawRockCluster, drawWater } from "./terrainDecor.js";
 
-export const TILE_SIZE = 16;
+export { TILE_SIZE } from "./sprites.js";
+
 const MAP_OBJECT_LABEL = "map-object";
 
 function createTileSprite(path: string, x: number, y: number): Sprite {
@@ -50,13 +54,17 @@ export function renderMapLayer(
 
   const water = new Graphics();
   groundLayer.addChild(water);
+  drawWater(water, state);
   for (const [index, tile] of state.tiles.entries()) {
     const x = (index % state.width) * TILE_SIZE;
     const y = Math.floor(index / state.width) * TILE_SIZE;
 
     const terrainPath = terrainSpritePath(tile.terrain, index);
-    if (terrainPath === null) water.rect(x, y, TILE_SIZE, TILE_SIZE).fill(WATER_COLOR);
-    else groundLayer.addChild(createTileSprite(terrainPath, x, y));
+    if (terrainPath !== null) {
+      const terrainSprite = createTileSprite(terrainPath, x, y);
+      terrainSprite.tint = terrainTint(tile.terrain);
+      groundLayer.addChild(terrainSprite);
+    }
 
     const resourcePath = resourceSpritePath(tile);
     if (resourcePath !== null) {
@@ -67,7 +75,20 @@ export function renderMapLayer(
         "resource",
       );
     }
+    const undergrowthPath = undergrowthSpritePath(tile, index);
+    if (undergrowthPath !== null) {
+      addMapObject(
+        objectLayer,
+        createTileSprite(undergrowthPath, x, y),
+        Math.floor(index / state.width),
+        "resource",
+      );
+    }
   }
+
+  const rocks = new Graphics();
+  drawRockCluster(rocks, state);
+  groundLayer.addChild(rocks);
 
   addMapObject(
     objectLayer,
