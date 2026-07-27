@@ -2,9 +2,15 @@ import type { AgentState } from "@agent-town/shared";
 import { Container, Graphics, Rectangle, Sprite, Text } from "pixi.js";
 
 import type { ThoughtBubble } from "../ui/inspectPanel.js";
-import { AGENT_LABEL_COLOR, CARRY_INDICATOR_COLOR } from "./colors.js";
+import { AGENT_LABEL_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
-import { agentDepth, agentFacingScale, agentSpritePath, layoutAgentsOnTiles } from "./sprites.js";
+import {
+  agentDepth,
+  agentFacingScale,
+  agentSpritePath,
+  layoutAgentsOnTiles,
+  SPRITE_ASSETS,
+} from "./sprites.js";
 
 const AGENT_HALF_SIZE = TILE_SIZE / 2;
 const LLM_RING_GAP = 2;
@@ -12,7 +18,7 @@ const LLM_RING_WIDTH = 2;
 const LLM_RING_COLOR = 0xffd700;
 const LABEL_FONT_SIZE = 7;
 const THINKING_INDICATOR_OFFSET = LABEL_FONT_SIZE + 2;
-const CARRY_INDICATOR_SIZE = 4;
+const CARRY_SPRITE_SIZE = TILE_SIZE / 2;
 const BUBBLE_FONT_SIZE = 8;
 const BUBBLE_LINE_HEIGHT = 10;
 const BUBBLE_MAX_TEXT_WIDTH = 104;
@@ -84,7 +90,6 @@ function createAgentContainer(agent: AgentState, offset: { x: number; y: number 
 function drawAgent(
   layer: Container,
   agent: AgentState,
-  index: number,
   offset: { x: number; y: number },
   bubble: ThoughtBubble | undefined,
   interactions: AgentLayerInteractions,
@@ -99,7 +104,7 @@ function drawAgent(
     container.addChild(ring);
   }
 
-  const sprite = Sprite.from(agentSpritePath(index));
+  const sprite = Sprite.from(agentSpritePath(agent.id));
   sprite.anchor.set(0.5);
   sprite.width = TILE_SIZE;
   sprite.height = TILE_SIZE;
@@ -127,15 +132,14 @@ function drawAgent(
   }
 
   if (agent.carrying !== null) {
-    const indicator = new Graphics()
-      .rect(
-        AGENT_HALF_SIZE - CARRY_INDICATOR_SIZE,
-        AGENT_HALF_SIZE - CARRY_INDICATOR_SIZE,
-        CARRY_INDICATOR_SIZE,
-        CARRY_INDICATOR_SIZE,
-      )
-      .fill(CARRY_INDICATOR_COLOR);
-    container.addChild(indicator);
+    const carrySprite = Sprite.from(SPRITE_ASSETS.carry[agent.carrying.kind]);
+    carrySprite.position.set(
+      AGENT_HALF_SIZE - CARRY_SPRITE_SIZE / 2,
+      AGENT_HALF_SIZE - CARRY_SPRITE_SIZE / 2,
+    );
+    carrySprite.width = CARRY_SPRITE_SIZE;
+    carrySprite.height = CARRY_SPRITE_SIZE;
+    container.addChild(carrySprite);
   }
 
   if (bubble !== undefined) {
@@ -156,7 +160,7 @@ export function renderAgentLayer(
     layer.removeChild(child);
     child.destroy({ children: true });
   }
-  layoutAgentsOnTiles(agents).forEach(({ agent, offset }, index) => {
-    drawAgent(layer, agent, index, offset, bubbles.get(agent.id), interactions);
+  layoutAgentsOnTiles(agents).forEach(({ agent, offset }) => {
+    drawAgent(layer, agent, offset, bubbles.get(agent.id), interactions);
   });
 }

@@ -1,6 +1,8 @@
 import type { AgentState, Tile } from "@agent-town/shared";
+import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
+import { renderAgentLayer } from "../src/render/agentLayer.js";
 import {
   agentDepth,
   agentFacingScale,
@@ -10,6 +12,7 @@ import {
   objectDepth,
   resourceSpritePath,
   SPRITE_ASSETS,
+  SPRITE_PATHS,
   terrainSpritePath,
   terrainTint,
   undergrowthSpritePath,
@@ -102,11 +105,51 @@ describe("agentFacingScale", () => {
 });
 
 describe("agentSpritePath", () => {
-  it("assigns the first three agents distinct character sprites", () => {
-    const firstThree = [0, 1, 2].map(agentSpritePath);
+  it("always gives the same resident id the same face", () => {
+    expect(agentSpritePath("resident-42")).toBe(agentSpritePath("resident-42"));
+  });
 
-    expect(new Set(firstThree).size).toBe(3);
-    expect(agentSpritePath(3)).toBe(firstThree[0]);
+  it("does not reshuffle surviving faces when a resident is removed", () => {
+    const ids = ["resident-a", "resident-b", "resident-c"];
+    const before = new Map(ids.map((id) => [id, agentSpritePath(id)]));
+    const survivors = ids.filter((id) => id !== "resident-b");
+
+    expect(survivors.map((id) => agentSpritePath(id))).toEqual(
+      survivors.map((id) => before.get(id)),
+    );
+  });
+
+  it("reaches every settlement face across generated resident ids", () => {
+    const paths = new Set(
+      Array.from({ length: 400 }, (_, index) => agentSpritePath(`resident-${index}`)),
+    );
+
+    expect(paths).toEqual(new Set(SPRITE_ASSETS.agents));
+  });
+});
+
+describe("resident carry sprites", () => {
+  it("preloads the log and grain tiles chosen for carried resources", () => {
+    expect(SPRITE_ASSETS).toHaveProperty("carry.wood", "/assets/tiny-town/Tiles/tile_0106.png");
+    expect(SPRITE_ASSETS).toHaveProperty("carry.food", "/assets/tiny-town/Tiles/tile_0093.png");
+    expect(SPRITE_PATHS).toContain("/assets/tiny-town/Tiles/tile_0106.png");
+    expect(SPRITE_PATHS).toContain("/assets/tiny-town/Tiles/tile_0093.png");
+  });
+
+  it("renders a carried resource as a sprite beside the resident", () => {
+    const layer = new Container();
+    const agent = {
+      ...movingAgent(5),
+      carrying: { kind: "wood" as const, amount: 1 },
+    };
+
+    renderAgentLayer(layer, [agent], new Map(), {
+      selectedAgentId: null,
+      hoveredAgentId: null,
+    });
+
+    expect(layer.children).toHaveLength(1);
+    expect(layer.children[0]?.children.filter((child) => child instanceof Sprite)).toHaveLength(2);
   });
 });
 

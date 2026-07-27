@@ -188,15 +188,31 @@ export const SPRITE_ASSETS = {
     // Tiny Town tile 106: a cut log.
     log: "/assets/tiny-town/Tiles/tile_0106.png",
   },
+  carry: {
+    // Tiny Town tile 106: a cut log.
+    wood: "/assets/tiny-town/Tiles/tile_0106.png",
+    // Tiny Town tile 93: a bundle of grain.
+    food: "/assets/tiny-town/Tiles/tile_0093.png",
+  },
   // Tiny Dungeon tile 65: gray inscribed tombstone.
   tombstone: "/assets/tiny-dungeon/Tiles/tile_0065.png",
   agents: [
-    // Tiny Dungeon tile 84: purple-robed wizard.
+    // Tiny Dungeon tile 84: purple-hatted wizard.
     "/assets/tiny-dungeon/Tiles/tile_0084.png",
-    // Tiny Dungeon tile 85: brown-haired adventurer in a blue tunic.
+    // Tiny Dungeon tile 85: brown-haired settler in a pale-blue tunic.
     "/assets/tiny-dungeon/Tiles/tile_0085.png",
-    // Tiny Dungeon tile 87: gray-haired bearded knight.
-    "/assets/tiny-dungeon/Tiles/tile_0087.png",
+    // Tiny Dungeon tile 86: bald, bearded settler in a blue tunic.
+    "/assets/tiny-dungeon/Tiles/tile_0086.png",
+    // Tiny Dungeon tile 88: brown-haired settler in a tan apron.
+    "/assets/tiny-dungeon/Tiles/tile_0088.png",
+    // Tiny Dungeon tile 98: long-haired settler in purple.
+    "/assets/tiny-dungeon/Tiles/tile_0098.png",
+    // Tiny Dungeon tile 99: gray-haired settler in brown.
+    "/assets/tiny-dungeon/Tiles/tile_0099.png",
+    // Tiny Dungeon tile 100: bearded farmer with a green headband.
+    "/assets/tiny-dungeon/Tiles/tile_0100.png",
+    // Tiny Dungeon tile 112: short-haired settler in a brown tunic.
+    "/assets/tiny-dungeon/Tiles/tile_0112.png",
   ],
 } as const;
 
@@ -220,6 +236,8 @@ export const SPRITE_PATHS = [
   SPRITE_ASSETS.buildings.rationDepot.emblem,
   SPRITE_ASSETS.stockpile.basket,
   SPRITE_ASSETS.stockpile.log,
+  SPRITE_ASSETS.carry.wood,
+  SPRITE_ASSETS.carry.food,
   SPRITE_ASSETS.tombstone,
   ...SPRITE_ASSETS.agents,
 ] as const;
@@ -230,8 +248,16 @@ export function agentFacingScale(agent: AgentState): -1 | 1 {
   return next !== undefined && next.x < agent.pos.x ? -1 : 1;
 }
 
-export function agentSpritePath(agentIndex: number): string {
-  return SPRITE_ASSETS.agents[agentIndex % SPRITE_ASSETS.agents.length] ?? SPRITE_ASSETS.agents[0];
+/** Stable per resident, so a death cannot reshuffle the faces of the living. */
+export function agentSpritePath(agentId: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < agentId.length; index += 1) {
+    hash ^= agentId.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (
+    SPRITE_ASSETS.agents[(hash >>> 0) % SPRITE_ASSETS.agents.length] ?? SPRITE_ASSETS.agents[0]
+  );
 }
 
 export function buildingSprites(building: Building): BuildingSprites {
