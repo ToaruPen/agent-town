@@ -1,4 +1,4 @@
-import type { Building, FacilityKind } from "@agent-town/shared";
+import { type Building, FACILITY_BUILD_TICKS, type FacilityKind } from "@agent-town/shared";
 import { Container, Graphics } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
@@ -6,6 +6,7 @@ import { FACILITY_COLORS } from "../src/render/colors.js";
 import {
   CONSTRUCTION_ALPHA,
   FACILITY_OBJECT_LABEL,
+  facilityProgressRatio,
   facilityVisual,
   HOUSE_OBJECT_LABEL,
   renderStructureLayer,
@@ -74,6 +75,24 @@ describe("renderStructureLayer", () => {
       CONSTRUCTION_ALPHA,
       CONSTRUCTION_ALPHA,
     ]);
+    const facility = layer.children.find(({ label }) => label === FACILITY_OBJECT_LABEL);
+    expect(facility?.children.some(({ label }) => label === "facility-progress")).toBe(true);
+  });
+
+  it("clamps facility construction progress and hides it after completion", () => {
+    const required = FACILITY_BUILD_TICKS.communalGranary;
+    expect(facilityProgressRatio("communalGranary", 0)).toBe(0);
+    expect(facilityProgressRatio("communalGranary", required / 2)).toBe(0.5);
+    expect(facilityProgressRatio("communalGranary", required + 1)).toBe(1);
+
+    const layer = new Container();
+    const facility = makeFacilityFixture("communalGranary", { x: 1, y: 0 });
+    facility.complete = true;
+    facility.progress = required;
+    renderStructureLayer(layer, [facility]);
+
+    const rendered = layer.children.find(({ label }) => label === FACILITY_OBJECT_LABEL);
+    expect(rendered?.children.some(({ label }) => label === "facility-progress")).toBe(false);
   });
 
   it("clears only structures it drew when the settlement is redrawn", () => {

@@ -691,6 +691,20 @@ describe("stepAgent traversal recording", () => {
     expect(agent.pos).toEqual({ x: 1, y: 0 });
     expect(Math.ceil(moveTicksForTrail("establishedTrail"))).toBeLessThan(MOVE_TICKS_PER_TILE);
   });
+
+  it("carries fractional trail progress into the next tile", () => {
+    const world = createWorld(3, 1);
+    for (const cell of world.trailCells.slice(1)) {
+      cell.wear = TRAIL_LEVEL_WEAR.trail;
+      cell.level = "trail";
+    }
+    const agent = createAgent({ tasks: [{ kind: "moveTo", dest: { x: 2, y: 0 } }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < 5; tick += 1) stepAgent(world, agent, 1);
+
+    expect(agent.pos).toEqual({ x: 2, y: 0 });
+  });
 });
 
 describe("stepAgent facility actions", () => {
@@ -925,6 +939,23 @@ describe("stepAgent meal routing", () => {
     expect(granary.statsToday.visits).toBe(1);
   });
 
+  it("attributes travel to a selected food facility", () => {
+    const world = createWorld(8, 1);
+    const granary = addStore(world, "communalGranary", 5, 100);
+    const agent = createAgent({ hunger: 10, tasks: [{ kind: "eat" }] });
+    const traversals: Traversal[] = [];
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) {
+      stepAgent(world, agent, 1, (traversal) => traversals.push(traversal));
+    }
+
+    expect(traversals[0]).toMatchObject({
+      purpose: "survival",
+      facilityId: granary.id,
+    });
+  });
+
   it("eats from the stockpile while the reserve stays shut", () => {
     const world = createWorld(8, 1);
     world.stockpile.food = 40;
@@ -951,6 +982,23 @@ describe("stepAgent meal routing", () => {
 
     expect(depot.inventory.food).toBe(40);
     expect(world.stockpile.food).toBe(40 - FOOD_PER_MEAL);
+    expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
+  });
+
+  it("replans movement when the selected food store changes", () => {
+    const world = createWorld(8, 1);
+    world.stockpile.food = FOOD_PER_MEAL;
+    const depot = addStore(world, "rationDepot", 7, RATION_FOOD_PER_MEAL);
+    const agent = createAgent({ pos: { x: 3, y: 0 }, hunger: 10, tasks: [{ kind: "eat" }] });
+    world.agents.push(agent);
+
+    for (let tick = 0; tick < MOVE_TICKS_PER_TILE; tick += 1) stepAgent(world, agent, 1);
+    expect(agent.pos).toEqual({ x: 4, y: 0 });
+    depot.inventory.food = 0;
+    eatUntilDone(world, agent);
+
+    expect(agent.pos).toEqual({ x: 1, y: 0 });
+    expect(world.stockpile.food).toBe(0);
     expect(agent.hunger).toBe(10 + HUNGER_PER_MEAL);
   });
 

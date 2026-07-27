@@ -7,6 +7,7 @@ import {
 } from "@agent-town/shared";
 
 import { findNearestReachable, findPath } from "../sim/astar.js";
+import { foodStorePos, selectFoodStore } from "../sim/facilityOperation.js";
 
 type ArrivalRule = "adjacent" | "exact";
 
@@ -76,10 +77,24 @@ function gatherLocation(
   return destination === null ? null : { arrival: "adjacent", destination, target };
 }
 
-function taskLocation(world: WorldState, cursor: Position, task: AgentTask): TaskLocation | null {
+function eatLocation(world: WorldState, agent: AgentState, cursor: Position): TaskLocation | null {
+  const store = selectFoodStore(world, { ...agent, pos: cursor });
+  if (store === null) return null;
+  const target = foodStorePos(store);
+  return store.kind === "stockpile"
+    ? directLocation(target, "adjacent")
+    : buildLocation(world, cursor, target);
+}
+
+function taskLocation(
+  world: WorldState,
+  agent: AgentState,
+  cursor: Position,
+  task: AgentTask,
+): TaskLocation | null {
   if (task.kind === "gather") return gatherLocation(world, cursor, task.target);
   if (task.kind === "forage") return directLocation(task.target, "exact");
-  if (task.kind === "eat") return directLocation(world.stockpile.pos, "adjacent");
+  if (task.kind === "eat") return eatLocation(world, agent, cursor);
   if (task.kind === "build") return buildLocation(world, cursor, task.pos);
   if (task.kind === "rest") {
     const target = restTarget(world, cursor);
@@ -112,12 +127,13 @@ function appendAuthoredMove(
 
 function appendPositionalTask(
   world: WorldState,
+  agent: AgentState,
   cursor: Position,
   task: AgentTask,
   normalized: AgentTask[],
   index: number,
 ): CursorResult {
-  const location = taskLocation(world, cursor, task);
+  const location = taskLocation(world, agent, cursor, task);
   if (location === null) return unreachableError(index, task.kind);
   if (hasArrived(cursor, location)) {
     normalized.push(task);
@@ -149,7 +165,7 @@ export function normalizePlan(
       normalized.push(task);
       continue;
     }
-    const result = appendPositionalTask(world, cursor, task, normalized, index);
+    const result = appendPositionalTask(world, agent, cursor, task, normalized, index);
     if (!result.ok) return result;
     cursor = result.cursor;
   }

@@ -1,6 +1,7 @@
 import {
   type AgentState,
   type AgentTask,
+  accessibleFoodTotal,
   CARRY_CAPACITY,
   FOOD_PER_MEAL,
   HOUSE_WOOD_COST,
@@ -14,6 +15,7 @@ import {
 } from "@agent-town/shared";
 
 import { findNearestReachable } from "../sim/astar.js";
+import { foodStorePos, mealFoodForStore, selectFoodStore } from "../sim/facilityOperation.js";
 
 export type PlanParseResult =
   | { ok: true; tasks: AgentTask[]; reasoning: string }
@@ -213,11 +215,20 @@ function snapshotResources(world: WorldState): ValidationBudget["resources"] {
   return resources;
 }
 
-function validateEat(budget: ValidationBudget): { ok: true } | { ok: false; error: string } {
-  if (budget.food < FOOD_PER_MEAL) {
-    return { ok: false, error: `eat requires ${FOOD_PER_MEAL} stockpile food` };
+function validateEat(
+  world: WorldState,
+  agent: AgentState,
+  budget: ValidationBudget,
+): { ok: true } | { ok: false; error: string } {
+  const store = selectFoodStore(world, {
+    ...agent,
+    pos: budget.cursor ?? agent.pos,
+  });
+  const requiredFood = store === null ? FOOD_PER_MEAL : mealFoodForStore(world, store);
+  if (budget.food < requiredFood) {
+    return { ok: false, error: `eat requires ${requiredFood} accessible food` };
   }
-  budget.food -= FOOD_PER_MEAL;
+  budget.food -= requiredFood;
   return { ok: true };
 }
 
@@ -322,12 +333,13 @@ function validateBuild(
 
 function validateAutonomousTask(
   world: WorldState,
+  agent: AgentState,
   task: AgentTask,
   budget: ValidationBudget,
   preserveCursor: boolean,
 ): TaskValidationResult | null {
   let result: TaskValidationResult;
-  if (task.kind === "eat") result = validateEat(budget);
+  if (task.kind === "eat") result = validateEat(world, agent, budget);
   else if (task.kind === "build") result = validateBuild(world, task.pos, budget);
   else if (task.kind === "rest") result = { ok: true };
   else return null;
@@ -370,6 +382,7 @@ function validateRestArrival(world: WorldState, cursor: Position): TaskValidatio
 
 function validateNormalizedArrival(
   world: WorldState,
+  agent: AgentState,
   task: AgentTask,
   budget: ValidationBudget,
 ): TaskValidationResult {
@@ -387,12 +400,15 @@ function validateNormalizedArrival(
       task.target,
       "gather requires an explicit position beside its target",
     );
-  if (task.kind === "eat")
+  if (task.kind === "eat") {
+    const store = selectFoodStore(world, { ...agent, pos: budget.cursor });
+    if (store === null) return { ok: false, error: "eat destination is unreachable" };
     return validateAdjacentArrival(
       budget.cursor,
-      world.stockpile.pos,
-      "eat requires an explicit position beside the stockpile",
+      foodStorePos(store),
+      "eat requires an explicit position beside its store",
     );
+  }
   if (task.kind === "build")
     return validateAdjacentArrival(
       budget.cursor,
@@ -405,6 +421,7 @@ function validateNormalizedArrival(
 
 function validateTask(
   world: WorldState,
+  agent: AgentState,
   task: AgentTask,
   budget: ValidationBudget,
   preserveCursor: boolean,
@@ -419,7 +436,7 @@ function validateTask(
   if (task.kind === "forage") return validateForage(world, task.target, budget);
   if (task.kind === "gather") return validateGather(world, task, budget);
   return (
-    validateAutonomousTask(world, task, budget, preserveCursor) ?? {
+    validateAutonomousTask(world, agent, task, budget, preserveCursor) ?? {
       ok: false,
       error: `task kind ${task.kind} is not executable`,
     }
@@ -461,7 +478,7 @@ function createValidationBudget(world: WorldState, agent: AgentState): Validatio
   return {
     carrying: agent.carrying,
     cursor: agent.pos,
-    food: world.stockpile.food,
+    food: accessibleFoodTotal(world),
     wood: world.stockpile.wood,
     newHouseSites: new Set(),
     resources: snapshotResources(world),
@@ -477,12 +494,12 @@ function validateTasks(
 ): TaskValidationResult {
   for (const [index, task] of tasks.entries()) {
     if (normalized) {
-      const arrival = validateNormalizedArrival(world, task, budget);
+      const arrival = validateNormalizedArrival(world, agent, task, budget);
       if (!arrival.ok) {
         return { ok: false, error: `agent ${agent.id} task[${index}]: ${arrival.error}` };
       }
     }
-    const result = validateTask(world, task, budget, normalized);
+    const result = validateTask(world, agent, task, budget, normalized);
     if (!result.ok)
       return { ok: false, error: `agent ${agent.id} task[${index}]: ${result.error}` };
   }

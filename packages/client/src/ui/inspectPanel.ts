@@ -1,4 +1,10 @@
-import type { AgentState, AgentTask, WorldState } from "@agent-town/shared";
+import {
+  type AgentState,
+  type AgentTask,
+  FACILITY_NAMES,
+  isFacility,
+  type WorldState,
+} from "@agent-town/shared";
 
 import { activityLabel, taskLabel } from "./displayText.js";
 import { buildProviderBadge, type ProviderBadge } from "./providerBadge.js";
@@ -59,15 +65,30 @@ export interface InspectPanelController {
   close(): void;
 }
 
+interface PreservedPanelState {
+  restoreCloseFocus: boolean;
+  scrollTop: number;
+}
+
 function formatPosition(position: { x: number; y: number }): string {
   return `(${position.x}, ${position.y})`;
 }
 
-function taskTarget(task: AgentTask): string | null {
+function taskTarget(task: AgentTask, world: WorldState): string | null {
   if (task.kind === "moveTo") return formatPosition(task.dest);
   if (task.kind === "gather") return formatPosition(task.target);
   if (task.kind === "forage") return formatPosition(task.target);
   if (task.kind === "build") return formatPosition(task.pos);
+  if (
+    task.kind === "transferToFacility" ||
+    task.kind === "buildFacility" ||
+    task.kind === "maintainFacility"
+  ) {
+    const facility = world.buildings.filter(isFacility).find(({ id }) => id === task.facilityId);
+    return facility === undefined
+      ? "不明"
+      : `${FACILITY_NAMES[facility.kind]} ${formatPosition(facility.pos)}`;
+  }
   return null;
 }
 
@@ -84,7 +105,7 @@ export function buildAgentInspectPanelViewModel(
     tasks: agent.tasks.map((task) => ({
       kind: task.kind,
       label: taskLabel(task.kind),
-      target: taskTarget(task),
+      target: taskTarget(task, world),
     })),
     needs: buildNeedsViewModel(agent),
     foodSecurity: `${Math.round(agent.desires.foodSecurity * 100)}%`,
@@ -318,7 +339,7 @@ function renderFacilityPanel(
       textLine(`反対者：${viewModel.opponents.join("、") || "なし"}`),
     ),
     ...section("稼働状態", ...status.map(textLine)),
-    ...section("在庫", textLine(viewModel.inventory)),
+    ...section("在庫", textLine(viewModel.inventory), textLine(viewModel.woodInventory)),
     ...section("建設", textList(viewModel.construction, "建設記録なし")),
     ...section("敷地を選んだ理由", textList(viewModel.siteReasons, "敷地評価の記録なし")),
     ...section("本日の効果", textList(viewModel.effects, "本日の効果なし")),
@@ -329,7 +350,11 @@ function renderFacilityPanel(
       textLine(`原因となった出来事：${viewModel.provenanceEventTitles.join("、") || "不明"}`),
       textLine(`提案者：${viewModel.proposers.join("、") || "不明"}`),
     ),
-    ...section("関連する小道", textLine(`${viewModel.linkedTrailCount}区画`)),
+    ...section(
+      "関連する小道",
+      textLine(`${viewModel.linkedTrailCount}区画`),
+      textList(viewModel.linkedTrails, "関連する小道なし"),
+    ),
   );
 }
 
@@ -364,10 +389,23 @@ function renderPanel(
   renderTrailPanel(root, viewModel, onClose);
 }
 
+function preservedPanelState(root: HTMLElement, sameTarget: boolean): PreservedPanelState {
+  return {
+    restoreCloseFocus: sameTarget && root.contains(document.activeElement),
+    scrollTop: sameTarget ? root.scrollTop : 0,
+  };
+}
+
 export function createInspectPanel(root: HTMLElement, onClose: () => void): InspectPanelController {
+  let renderedKey: string | null = null;
+  let renderedTargetKey: string | null = null;
+
   function close(): void {
+    renderedKey = null;
+    renderedTargetKey = null;
     root.hidden = true;
     root.replaceChildren();
+    root.scrollTop = 0;
   }
 
   function show(target: InspectTarget, world: WorldState): void {
@@ -376,8 +414,18 @@ export function createInspectPanel(root: HTMLElement, onClose: () => void): Insp
       close();
       return;
     }
+    const nextTargetKey = JSON.stringify(target);
+    const nextKey = `${nextTargetKey}:${JSON.stringify(viewModel)}`;
+    if (!root.hidden && nextKey === renderedKey) return;
+    const sameTarget = !root.hidden && nextTargetKey === renderedTargetKey;
+    const preserved = preservedPanelState(root, sameTarget);
     renderPanel(root, viewModel, onClose);
+    renderedKey = nextKey;
+    renderedTargetKey = nextTargetKey;
     root.hidden = false;
+    root.scrollTop = preserved.scrollTop;
+    if (preserved.restoreCloseFocus)
+      root.querySelector<HTMLButtonElement>(".inspect-panel__close")?.focus();
   }
 
   return { show, close };

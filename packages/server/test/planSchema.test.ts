@@ -7,6 +7,7 @@ import {
   HOUSE_WOOD_COST,
   MAX_PLAN_REASONING_CHARS,
   MAX_PLAN_TASKS,
+  RATION_FOOD_PER_MEAL,
   type Tile,
   type WorldState,
 } from "@agent-town/shared";
@@ -17,7 +18,7 @@ import {
   parsePlanResponse,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(): AgentState {
@@ -243,6 +244,30 @@ describe("validatePlanExecutability", () => {
       validatePlanExecutability(world, agent, [{ kind: "eat" }, { kind: "eat" }, { kind: "eat" }])
         .ok,
     ).toBe(false);
+  });
+
+  it("funds eat from an active facility when the stockpile is empty", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const granary = makeFacilityFixture("communalGranary", agent.pos);
+    granary.complete = true;
+    granary.operation = "active";
+    granary.inventory.food = FOOD_PER_MEAL;
+    world.buildings.push(granary);
+
+    expect(validatePlanExecutability(world, agent, [{ kind: "eat" }])).toEqual({ ok: true });
+  });
+
+  it("accepts a shortage ration meal funded with the ration-sized amount", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const depot = makeFacilityFixture("rationDepot", agent.pos);
+    depot.complete = true;
+    depot.operation = "active";
+    depot.inventory.food = RATION_FOOD_PER_MEAL;
+    world.buildings.push(depot);
+
+    expect(validatePlanExecutability(world, agent, [{ kind: "eat" }])).toEqual({ ok: true });
   });
 
   it("funds a later eat from carried food deposited earlier in the plan", () => {

@@ -7,7 +7,6 @@ import {
   type TrailCell,
 } from "../src/index.js";
 
-/** A sited demand still waiting on planks, so a test only has to state how it differs. */
 export function makeDemandFixture(kind: FacilityKind): SpatialDemand {
   return {
     id: `demand-institution-${kind}`,
@@ -30,7 +29,6 @@ export function makeDemandFixture(kind: FacilityKind): SpatialDemand {
   };
 }
 
-/** A finished, working facility, so a test only has to state how it differs. */
 export function makeFacilityFixture(kind: FacilityKind, food: number): Facility {
   return {
     kind,

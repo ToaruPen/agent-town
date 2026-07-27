@@ -26,7 +26,6 @@ export function makeTrailCellsFixture(width: number, height: number): TrailCell[
   }));
 }
 
-/** A finished institution site, so a render test only has to state how it differs. */
 export function makeFacilityFixture(kind: FacilityKind, pos: Position): Facility {
   return {
     kind,

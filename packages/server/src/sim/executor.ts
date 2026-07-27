@@ -75,17 +75,18 @@ function movementFacilityId(tasks: AgentTask[]): string | null {
 }
 
 /** The one place a resident's position changes, so every completed step leaves wear. */
-function commitStep(agent: AgentState, next: Position, step: StepContext): void {
+function commitStep(
+  agent: AgentState,
+  next: Position,
+  step: StepContext,
+  facilityId = movementFacilityId(agent.tasks),
+): void {
   agent.pos = next;
   step.record({
     pos: next,
     purpose: movementPurpose(agent.tasks),
-    facilityId: movementFacilityId(agent.tasks),
+    facilityId,
   });
-}
-
-function hasCompletedStep(world: WorldState, activity: MovingActivity, next: Position): boolean {
-  return activity.ticksIntoStep >= moveTicksForTrail(trailLevelAt(world, next));
 }
 
 interface GatherTarget {
@@ -143,16 +144,17 @@ function stepMoveTo(
     return;
   }
 
+  const requiredTicks = moveTicksForTrail(trailLevelAt(world, next));
   activity.ticksIntoStep += step.speed;
-  if (!hasCompletedStep(world, activity, next)) return;
+  if (activity.ticksIntoStep < requiredTicks) return;
 
+  activity.ticksIntoStep = Math.max(0, activity.ticksIntoStep - requiredTicks);
   activity.path.shift();
   commitStep(agent, next, step);
   if (activity.path.length === 0) {
     finishHeadTask(agent);
     return;
   }
-  activity.ticksIntoStep = 0;
 }
 
 function validGatherTile(
@@ -212,7 +214,9 @@ function stepToward(
   dest: Position,
   hasArrived: (pos: Position) => boolean,
   step: StepContext,
+  facilityId: string | null = movementFacilityId(agent.tasks),
 ): void {
+  resetStaleMovement(agent, dest);
   if (agent.activity.kind !== "moving") {
     const path = findPath(world, agent.pos, dest);
     if (path === null || path.length === 0) {
@@ -228,16 +232,23 @@ function stepToward(
     return;
   }
 
+  const requiredTicks = moveTicksForTrail(trailLevelAt(world, next));
   agent.activity.ticksIntoStep += step.speed;
-  if (!hasCompletedStep(world, agent.activity, next)) return;
+  if (agent.activity.ticksIntoStep < requiredTicks) return;
 
+  agent.activity.ticksIntoStep = Math.max(0, agent.activity.ticksIntoStep - requiredTicks);
   agent.activity.path.shift();
-  commitStep(agent, next, step);
+  commitStep(agent, next, step, facilityId);
   if (hasArrived(agent.pos)) {
     agent.activity = { kind: "idle" };
     return;
   }
-  agent.activity.ticksIntoStep = 0;
+}
+
+function resetStaleMovement(agent: AgentState, destination: Position): void {
+  if (agent.activity.kind !== "moving") return;
+  const pathEnd = agent.activity.path.at(-1) ?? agent.pos;
+  if (!positionsEqual(pathEnd, destination)) agent.activity = { kind: "idle" };
 }
 
 function stepEat(world: WorldState, agent: AgentState, step: StepContext): void {
@@ -249,7 +260,8 @@ function stepEat(world: WorldState, agent: AgentState, step: StepContext): void 
 
   const counter = foodStorePos(store);
   if (!isAdjacentOrOn(agent.pos, counter)) {
-    stepToward(world, agent, counter, (pos) => isAdjacentOrOn(pos, counter), step);
+    const facilityId = store.kind === "facility" ? store.facility.id : null;
+    stepToward(world, agent, counter, (pos) => isAdjacentOrOn(pos, counter), step, facilityId);
     return;
   }
 

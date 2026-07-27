@@ -105,14 +105,31 @@ describe("buildAgentInspectPanelViewModel", () => {
         { kind: "gather", resource: "wood", target: { x: 6, y: 7 } },
         { kind: "forage", target: { x: 8, y: 9 } },
         { kind: "build", pos: { x: 10, y: 11 } },
+        {
+          kind: "transferToFacility",
+          facilityId: "facility-granary",
+          resource: "food",
+        },
+        { kind: "buildFacility", facilityId: "facility-granary" },
+        { kind: "maintainFacility", facilityId: "facility-granary" },
         { kind: "deposit" },
       ],
     });
-    const world = makeWorld([
-      selectedAgent,
-      makeAgent({ id: "birch", name: "シラカバ" }),
-      makeAgent({ id: "cedar", name: "スギ" }),
-    ]);
+    const world = makeWorld(
+      [
+        selectedAgent,
+        makeAgent({ id: "birch", name: "シラカバ" }),
+        makeAgent({ id: "cedar", name: "スギ" }),
+      ],
+      {
+        buildings: [
+          {
+            ...makeFacilityFixture("communalGranary", { x: 0, y: 0 }),
+            id: "facility-granary",
+          },
+        ],
+      },
+    );
 
     expect(buildAgentInspectPanelViewModel(selectedAgent, world)).toEqual({
       kind: "agent",
@@ -125,6 +142,21 @@ describe("buildAgentInspectPanelViewModel", () => {
         { kind: "gather", label: "採集", target: "(6, 7)" },
         { kind: "forage", label: "採食", target: "(8, 9)" },
         { kind: "build", label: "建設", target: "(10, 11)" },
+        {
+          kind: "transferToFacility",
+          label: "施設へ搬入",
+          target: "共同穀倉 (0, 0)",
+        },
+        {
+          kind: "buildFacility",
+          label: "施設建設",
+          target: "共同穀倉 (0, 0)",
+        },
+        {
+          kind: "maintainFacility",
+          label: "施設維持",
+          target: "共同穀倉 (0, 0)",
+        },
         { kind: "deposit", label: "搬入", target: null },
       ],
       needs: [
@@ -233,11 +265,11 @@ describe("generic inspect panel view models", () => {
       level: "none",
       wear: 0,
     };
-    expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 3 }, world)).toEqual(
-      expect.objectContaining({ kind: "trail", name: "草地", level: "草地" }),
-    );
+    expect(resolveInspectPanelViewModel({ kind: "trail", tileIndex: 3 }, world)).toBeNull();
   });
 });
+
+let activeFakeElement: FakeElement | null = null;
 
 class FakeElement {
   readonly attributes = new Map<string, string>();
@@ -248,6 +280,8 @@ class FakeElement {
   max = 0;
   type = "";
   value = 0;
+  replacementCount = 0;
+  scrollTop = 0;
   private ownText = "";
   private readonly listeners = new Map<string, () => void>();
 
@@ -272,6 +306,12 @@ class FakeElement {
     this.listeners.get("click")?.();
   }
 
+  contains(target: FakeElement | null): boolean {
+    return (
+      target !== null && (target === this || this.children.some((child) => child.contains(target)))
+    );
+  }
+
   findByAttribute(name: string, value: string): FakeElement | null {
     if (this.attributes.get(name) === value) return this;
     for (const child of this.children) {
@@ -281,7 +321,22 @@ class FakeElement {
     return null;
   }
 
+  focus(): void {
+    activeFakeElement = this;
+  }
+
+  querySelector(selector: string): FakeElement | null {
+    if (selector === ".inspect-panel__close" && this.className === "inspect-panel__close")
+      return this;
+    for (const child of this.children) {
+      const found = child.querySelector(selector);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
   replaceChildren(...children: FakeElement[]): void {
+    this.replacementCount += 1;
     this.ownText = "";
     this.children.length = 0;
     this.children.push(...children);
@@ -293,9 +348,13 @@ class FakeElement {
 }
 
 function installFakeDocument(): void {
+  activeFakeElement = null;
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: {
+      get activeElement() {
+        return activeFakeElement;
+      },
       createElement: () => new FakeElement(),
     } as unknown as Document,
   });
@@ -371,19 +430,83 @@ describe("createInspectPanel", () => {
     expect(closed).toBe(1);
   });
 
-  it("closes for a missing object but keeps a decayed trail selected as grass", () => {
+  it("closes for missing objects and trails that have decayed away", () => {
     installFakeDocument();
     const world = makeWorld([makeAgent()]);
     const root = new FakeElement();
     const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
 
     controller.show({ kind: "trail", tileIndex: 0 }, world);
-    expect(root.hidden).toBe(false);
-    expect(root.textContent).toContain("草地");
+    expect(root.hidden).toBe(true);
+    expect(root.textContent).toBe("");
 
     controller.show({ kind: "facility", facilityId: "missing" }, world);
     expect(root.hidden).toBe(true);
     expect(root.textContent).toBe("");
+  });
+
+  it("keeps an unchanged panel DOM intact across authoritative updates", () => {
+    installFakeDocument();
+    const world = makeWorld([makeAgent()]);
+    const root = new FakeElement();
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
+
+    controller.show({ kind: "agent", agentId: "ash" }, world);
+    const firstHeader = root.children[0];
+    controller.show({ kind: "agent", agentId: "ash" }, { ...world });
+
+    expect(root.replacementCount).toBe(1);
+    expect(root.children[0]).toBe(firstHeader);
+  });
+
+  it("preserves close-button focus and scroll when displayed values change", () => {
+    installFakeDocument();
+    const agent = makeAgent();
+    const world = makeWorld([agent]);
+    const root = new FakeElement();
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
+
+    controller.show({ kind: "agent", agentId: agent.id }, world);
+    const oldClose = root.querySelector(".inspect-panel__close");
+    oldClose?.focus();
+    root.scrollTop = 24;
+    controller.show(
+      { kind: "agent", agentId: agent.id },
+      { ...world, agents: [{ ...agent, hunger: 99 }] },
+    );
+
+    const newClose = root.querySelector(".inspect-panel__close");
+    expect(newClose).not.toBe(oldClose);
+    expect(activeFakeElement).toBe(newClose);
+    expect(root.scrollTop).toBe(24);
+  });
+
+  it("resets scroll when switching to a different inspect target", () => {
+    installFakeDocument();
+    const agents = [makeAgent(), makeAgent({ id: "birch", name: "カバ" })];
+    const world = makeWorld(agents);
+    const root = new FakeElement();
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
+
+    controller.show({ kind: "agent", agentId: "ash" }, world);
+    root.scrollTop = 24;
+    controller.show({ kind: "agent", agentId: "birch" }, world);
+
+    expect(root.scrollTop).toBe(0);
+  });
+
+  it("resets scroll after closing and reopening the inspect panel", () => {
+    installFakeDocument();
+    const world = makeWorld([makeAgent()]);
+    const root = new FakeElement();
+    const controller = createInspectPanel(root as unknown as HTMLElement, () => undefined);
+
+    controller.show({ kind: "agent", agentId: "ash" }, world);
+    root.scrollTop = 24;
+    controller.close();
+    controller.show({ kind: "agent", agentId: "ash" }, world);
+
+    expect(root.scrollTop).toBe(0);
   });
 });
 

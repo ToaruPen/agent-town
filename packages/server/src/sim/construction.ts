@@ -14,6 +14,8 @@ import {
   type WorldState,
 } from "@agent-town/shared";
 
+import { refreshFacilityAvailability } from "./facilityOperation.js";
+
 export function findFacility(world: WorldState, facilityId: string): Facility | null {
   return world.buildings.filter(isFacility).find(({ id }) => id === facilityId) ?? null;
 }
@@ -129,6 +131,7 @@ function needsTradingWood(facility: Facility): boolean {
 function serviceTask(world: WorldState, facility: Facility): AgentTask | null {
   if (!facility.complete) return null;
   if (facility.maintenanceDue > 0) return { kind: "maintainFacility", facilityId: facility.id };
+  if (facility.operation !== "active") return null;
   if (needsTradingWood(facility) && world.stockpile.wood > 0) {
     return transferTask(facility, "wood");
   }
@@ -142,6 +145,7 @@ function serviceTask(world: WorldState, facility: Facility): AgentTask | null {
  */
 export function planFacilityTasks(world: WorldState, agent: AgentState): AgentTask[] | null {
   void agent;
+  refreshFacilityAvailability(world);
   const sites = world.buildings.filter(isFacility);
   for (const facility of sites) {
     const task = constructionTask(world, facility);

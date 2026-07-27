@@ -815,6 +815,32 @@ describe("createEngine", () => {
     expect(agent.lastThought).toBe("Gather nearby wood.");
   });
 
+  it("does not replace an in-flight task while the resident carries its load", () => {
+    const rng = createRng(42);
+    const engine = createEngine(generateWorld(42), new FakePlanner(rng), rng);
+    const agent = engine.world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    const transfer = {
+      kind: "transferToFacility",
+      facilityId: "facility-granary",
+      resource: "wood",
+    } as const;
+    agent.tasks = [transfer];
+    agent.carrying = { kind: "wood", amount: 5 };
+    agent.thinking = true;
+
+    engine.applyPlan(
+      agent.id,
+      [{ kind: "gather", resource: "food", target: { x: 0, y: 0 } }],
+      "llm",
+      "食料を集める。",
+    );
+
+    expect(agent.tasks).toEqual([transfer]);
+    expect(agent.carrying).toEqual({ kind: "wood", amount: 5 });
+    expect(agent.thinking).toBe(false);
+  });
+
   it("clears the last thought when applying a plan without reasoning", () => {
     const rng = createRng(42);
     const engine = createEngine(generateWorld(42), new FakePlanner(rng), rng);

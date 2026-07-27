@@ -103,6 +103,7 @@ describe("buildPlanPrompt", () => {
     expect(prompt).toContain("stockpile position: (3,3)");
     expect(prompt).toContain(`wood: 7 / target ${STOCKPILE_TARGET_WOOD}`);
     expect(prompt).toContain(`food: 4 / target ${STOCKPILE_TARGET_FOOD}`);
+    expect(prompt).toContain("reachable stockpile or facility");
   });
 
   it("includes calendar, survival forecasts, needs, and completed housing capacity", () => {

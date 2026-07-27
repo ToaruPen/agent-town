@@ -338,7 +338,6 @@ describe("FakePlanner facility priorities", () => {
     ]);
   });
 
-  /** A second, finished institution site so the two planner passes can be told apart. */
   function addStandingMarket(world: WorldState): Facility {
     const market = makeFacilityFixture("grainMarket", { x: 2, y: 0 });
     market.complete = true;
@@ -405,6 +404,25 @@ describe("FakePlanner facility priorities", () => {
     world.stockpile.wood = HOUSE_WOOD_COST * 10;
     const market = addStandingMarket(world);
     market.maintenanceDue = 0;
+    world.history.settlementOrigin = {
+      homelandPolityId: "polity-1",
+      departureEventId: "event-1",
+      reason: "famine",
+      inheritedValues: [],
+    };
+    world.history.worldMap.cities.push({
+      id: "city-1",
+      name: "Homeland",
+      pos: { x: 0, y: 0 },
+      polityId: "polity-1",
+      isCapital: true,
+      foundedByEventId: "event-1",
+    });
+    world.history.worldMap.tradeRoutes.push({
+      id: "route-1",
+      cityIds: ["city-1", "city-2"],
+      establishedByEventId: "event-1",
+    });
 
     expect(new FakePlanner(() => 0).plan(world, agent)).toEqual([
       { kind: "transferToFacility", facilityId: market.id, resource: "wood" },

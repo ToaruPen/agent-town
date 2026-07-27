@@ -152,7 +152,7 @@ function isOfferable(world: WorldState, agent: AgentState, facility: Facility): 
   return servesRation(world, facility, agent);
 }
 
-function mealFood(world: WorldState, store: FoodStore): number {
+export function mealFoodForStore(world: WorldState, store: FoodStore): number {
   return isRationing(world, store) ? RATION_FOOD_PER_MEAL : FOOD_PER_MEAL;
 }
 
@@ -165,7 +165,7 @@ function candidateStores(world: WorldState, agent: AgentState): FoodStore[] {
   for (const facility of facilities(world)) {
     if (isOfferable(world, agent, facility)) stores.push({ kind: "facility", facility });
   }
-  return stores.filter((store) => storeFood(world, store) >= mealFood(world, store));
+  return stores.filter((store) => storeFood(world, store) >= mealFoodForStore(world, store));
 }
 
 function positionKey({ x, y }: Position): string {
@@ -179,13 +179,17 @@ function reachableStores(world: WorldState, agent: AgentState, stores: FoodStore
   return stores.filter((store) => reached.has(positionKey(foodStorePos(store))));
 }
 
-export function chooseFoodStore(world: WorldState, agent: AgentState): FoodStore | null {
-  refreshFacilityAvailability(world);
+export function selectFoodStore(world: WorldState, agent: AgentState): FoodStore | null {
   const reachable = reachableStores(world, agent, candidateStores(world, agent));
   const ranked = reachable.toSorted(
     (left, right) => storeRank(world, left) - storeRank(world, right),
   );
   return ranked[0] ?? null;
+}
+
+export function chooseFoodStore(world: WorldState, agent: AgentState): FoodStore | null {
+  refreshFacilityAvailability(world);
+  return selectFoodStore(world, agent);
 }
 
 function recordFacilityMeal(
@@ -208,7 +212,7 @@ export function applyMealFromStore(
   store: FoodStore,
 ): boolean {
   const rationing = isRationing(world, store);
-  const food = rationing ? RATION_FOOD_PER_MEAL : FOOD_PER_MEAL;
+  const food = mealFoodForStore(world, store);
   if (storeFood(world, store) < food) return false;
 
   if (store.kind === "stockpile") world.stockpile.food -= food;

@@ -97,7 +97,6 @@ function createWorld(options: WorldOptions = {}): WorldState {
   };
 }
 
-/** A facility that already stands and works, so a test only states how it differs. */
 function addFacility(world: WorldState, kind: FacilityKind, pos: Position, food: number): Facility {
   const facility = makeFacilityFixture(kind, pos);
   facility.complete = true;

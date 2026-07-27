@@ -452,10 +452,10 @@ function activateKeyboardSelection(): void {
     return;
   }
   if (
-    target.kind === "agent" &&
-    keyboardActivationAction(activeInfoTarget, target) === "open-agent"
+    isInspectTarget(target) &&
+    keyboardActivationAction(activeInfoTarget, target) === "open-inspect"
   ) {
-    openInspectPanel({ kind: "agent", agentId: target.agentId });
+    openInspectPanel(target);
     closeInfoBubble();
     return;
   }

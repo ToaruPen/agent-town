@@ -179,6 +179,7 @@ describe("spatial view models", () => {
         name: "共同穀倉",
         status: "稼働中",
         inventory: "食料34 / 120",
+        woodInventory: "木材2",
         foundedBy: "共同備蓄",
         supporters: ["トネリコ", "シラカバ"],
         opponents: ["スギ"],
@@ -199,6 +200,7 @@ describe("spatial view models", () => {
         provenanceEventTitles: ["大凶作"],
         proposers: ["トネリコ"],
         linkedTrailCount: 1,
+        linkedTrails: ["(0, 1) 小道・摩耗9.5"],
       }),
     );
     expect(JSON.stringify(buildFacilityViewModel(world, granary.id))).not.toContain("agent-");
@@ -316,6 +318,7 @@ describe("spatial milestone schedule", () => {
       dominantPurpose: "facilityService",
       causedByFacilityIds: [completedFacility.id],
     };
+    trailed.trailCells[2] = { ...trailed.trailCells[3] };
 
     let schedule = createSpatialMilestoneSchedule(initial);
     schedule = updateSpatialMilestoneSchedule(schedule, initial, seeking);
@@ -334,6 +337,7 @@ describe("spatial milestone schedule", () => {
       "小道形成：共同穀倉への往来が地面に刻まれた",
     ]);
     expect(unchanged.events.map(({ id }) => id)).toEqual(schedule.events.map(({ id }) => id));
+    expect(schedule.observedTrailTileIndices).toEqual(new Set([2, 3]));
   });
 
   it("announces blocked demand and operation states without noisy daily events", () => {

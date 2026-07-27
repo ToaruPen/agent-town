@@ -5,7 +5,7 @@ import { type InfoBubbleTarget, resolveInfoBubbleTarget } from "./infoBubble.js"
 import type { DeathEvent } from "./survivalViewModel.js";
 
 type ArrowKey = "ArrowDown" | "ArrowLeft" | "ArrowRight" | "ArrowUp";
-export type KeyboardActivationAction = "open-agent" | "show-bubble";
+export type KeyboardActivationAction = "open-inspect" | "show-bubble";
 
 const ARROW_DELTAS: Record<ArrowKey, Position> = {
   ArrowDown: { x: 0, y: 1 },
@@ -52,9 +52,14 @@ export function keyboardActivationAction(
   activeTarget: InfoBubbleTarget | null,
   nextTarget: InfoBubbleTarget,
 ): KeyboardActivationAction {
-  return activeTarget?.kind === "agent" &&
-    nextTarget.kind === "agent" &&
-    activeTarget.agentId === nextTarget.agentId
-    ? "open-agent"
-    : "show-bubble";
+  const activeKey = activeTarget === null ? null : inspectTargetKey(activeTarget);
+  const nextKey = inspectTargetKey(nextTarget);
+  return nextKey !== null && activeKey === nextKey ? "open-inspect" : "show-bubble";
+}
+
+function inspectTargetKey(target: InfoBubbleTarget): string | null {
+  if (target.kind === "agent") return `agent:${target.agentId}`;
+  if (target.kind === "facility") return `facility:${target.facilityId}`;
+  if (target.kind === "trail") return `trail:${target.tileIndex}`;
+  return null;
 }

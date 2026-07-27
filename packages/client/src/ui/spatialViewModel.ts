@@ -49,6 +49,7 @@ const BLOCKED_REASON_LABELS = {
 } as const satisfies Readonly<Record<FacilityBlockedReason, string>>;
 
 const UNKNOWN_LABEL = "不明";
+const RELATED_TRAIL_LIMIT = 3;
 
 export interface FacilityInspectPanelViewModel {
   kind: "facility";
@@ -56,6 +57,7 @@ export interface FacilityInspectPanelViewModel {
   status: string;
   blockReason: string | null;
   inventory: string;
+  woodInventory: string;
   foundedBy: string;
   supporters: string[];
   opponents: string[];
@@ -68,6 +70,7 @@ export interface FacilityInspectPanelViewModel {
   provenanceEventTitles: string[];
   proposers: string[];
   linkedTrailCount: number;
+  linkedTrails: string[];
 }
 
 export interface TrailInspectPanelViewModel {
@@ -172,10 +175,24 @@ function provenanceEventTitles(facility: Facility, world: WorldState): string[] 
   return facility.provenance.causedByEventIds.map((id) => titles.get(id) ?? UNKNOWN_LABEL);
 }
 
-function linkedTrailCount(facilityId: string, world: WorldState): number {
-  return world.trailCells.filter(
-    (cell) => cell.level !== "none" && cell.causedByFacilityIds.includes(facilityId),
-  ).length;
+function linkedTrailSummary(
+  facilityId: string,
+  world: WorldState,
+): { count: number; trails: string[] } {
+  const linked = world.trailCells.flatMap((cell, index) =>
+    cell.level === "none" || !cell.causedByFacilityIds.includes(facilityId)
+      ? []
+      : [{ cell, index }],
+  );
+  const trails = linked
+    .toSorted((left, right) => right.cell.wear - left.cell.wear || left.index - right.index)
+    .slice(0, RELATED_TRAIL_LIMIT)
+    .map(({ cell, index }) => {
+      const x = index % world.width;
+      const y = Math.floor(index / world.width);
+      return `(${x}, ${y}) ${TRAIL_LEVEL_LABELS[cell.level]}・摩耗${formatRate(cell.wear)}`;
+    });
+  return { count: linked.length, trails };
 }
 
 function constructionProgress(
@@ -199,6 +216,7 @@ export function buildFacilityViewModel(
   const institution = institutionFor(facility, world);
   const demand = world.spatialDemands.find(({ id }) => id === facility.demandId);
   const names = agentNames(world);
+  const relatedTrails = linkedTrailSummary(facility.id, world);
   return {
     kind: "facility",
     name: FACILITY_NAMES[facility.kind],
@@ -206,6 +224,7 @@ export function buildFacilityViewModel(
     blockReason:
       facility.blockedReason === null ? null : BLOCKED_REASON_LABELS[facility.blockedReason],
     inventory: `食料${formatCount(facility.inventory.food)} / ${FACILITY_FOOD_CAPACITY[facility.kind]}`,
+    woodInventory: `木材${formatCount(facility.inventory.wood)}`,
     foundedBy: institution === undefined ? UNKNOWN_LABEL : INSTITUTION_NAMES[institution.kind],
     supporters: resolveNames(institution?.supporterIds ?? [], names),
     opponents: resolveNames(institution?.opposedIds ?? [], names),
@@ -220,7 +239,8 @@ export function buildFacilityViewModel(
         : "維持作業済み",
     provenanceEventTitles: provenanceEventTitles(facility, world),
     proposers: resolveNames(facility.provenance.proposedByAgentIds, names),
-    linkedTrailCount: linkedTrailCount(facility.id, world),
+    linkedTrailCount: relatedTrails.count,
+    linkedTrails: relatedTrails.trails,
   };
 }
 
@@ -243,7 +263,7 @@ export function buildTrailViewModel(
   tileIndex: number,
 ): TrailInspectPanelViewModel | null {
   const cell = world.trailCells[tileIndex];
-  if (cell === undefined) return null;
+  if (cell === undefined || cell.level === "none") return null;
   const level = TRAIL_LEVEL_LABELS[cell.level];
   return {
     kind: "trail",
@@ -414,17 +434,23 @@ function addTrailMilestones(
   observed: Set<number>,
   events: SpatialMilestone[],
 ): void {
+  const alreadyAnnounced = observed.size > 0;
+  let firstNewCell: TrailCell | undefined;
+  let firstNewIndex: number | undefined;
   for (const index of visibleTrailIndices(state)) {
     if (observed.has(index)) continue;
     observed.add(index);
-    const cell = state.trailCells[index];
-    if (cell === undefined) continue;
-    addMilestone(events, state.tick, {
-      id: `trail:${index}`,
-      kind: "trail",
-      text: `小道形成：${trailCauseName(cell, state)}への往来が地面に刻まれた`,
-    });
+    if (firstNewCell === undefined) {
+      firstNewCell = state.trailCells[index];
+      firstNewIndex = index;
+    }
   }
+  if (alreadyAnnounced || firstNewCell === undefined || firstNewIndex === undefined) return;
+  addMilestone(events, state.tick, {
+    id: `trail:${firstNewIndex}`,
+    kind: "trail",
+    text: `小道形成：${trailCauseName(firstNewCell, state)}への往来が地面に刻まれた`,
+  });
 }
 
 export function updateSpatialMilestoneSchedule(

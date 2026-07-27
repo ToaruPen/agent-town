@@ -98,11 +98,16 @@ describe("resolveKeyboardTarget", () => {
     expect(resolveKeyboardTarget(world, [], new Map(), cursor)?.kind).toBe("terrain");
   });
 
-  it("opens the full panel only when the active agent is activated again", () => {
+  it("opens the full panel when the same inspectable target is activated again", () => {
     const agent = { kind: "agent", agentId: "ash" } as const;
+    const facility = { kind: "facility", facilityId: "granary" } as const;
+    const trail = { kind: "trail", tileIndex: 1 } as const;
 
     expect(keyboardActivationAction(null, agent)).toBe("show-bubble");
-    expect(keyboardActivationAction(agent, agent)).toBe("open-agent");
+    expect(keyboardActivationAction(agent, agent)).toBe("open-inspect");
+    expect(keyboardActivationAction(facility, facility)).toBe("open-inspect");
+    expect(keyboardActivationAction(trail, trail)).toBe("open-inspect");
     expect(keyboardActivationAction({ kind: "terrain", tileIndex: 0 }, agent)).toBe("show-bubble");
+    expect(keyboardActivationAction(facility, trail)).toBe("show-bubble");
   });
 });

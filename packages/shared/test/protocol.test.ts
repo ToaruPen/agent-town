@@ -128,6 +128,13 @@ describe("wire protocol", () => {
     expect(
       decoded.type === "welcome" ? decoded.state.history.worldMap.settlementFrontierPos : null,
     ).toEqual({ x: 1, y: 1 });
+    for (const field of ["spatialDemands", "trailCells"] as const) {
+      const incomplete = JSON.parse(encodeMessage(message));
+      delete incomplete.state[field];
+      expect(() => decodeServerMessage(JSON.stringify(incomplete))).toThrow(
+        "invalid server message",
+      );
+    }
   });
 
   it("round-trips an update server message with social state", () => {

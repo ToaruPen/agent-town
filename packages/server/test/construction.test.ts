@@ -1,4 +1,5 @@
 import {
+  type AgentState,
   CARRY_CAPACITY,
   FACILITY_BUILD_TICKS,
   FACILITY_FOOD_CAPACITY,
@@ -14,6 +15,7 @@ import {
   deliverFacilityTransfer,
   facilityWoodRemaining,
   findFacility,
+  planFacilityTasks,
   withdrawFacilityTransfer,
 } from "../src/sim/construction.js";
 import { createTrailCells } from "../src/sim/traffic.js";
@@ -23,10 +25,11 @@ import { makeWorldMapFixture } from "./worldMapFixture.js";
 interface SiteOptions {
   stockpileWood?: number;
   stockpileFood?: number;
+  facilityKind?: Facility["kind"];
 }
 
 function createSite(options: SiteOptions = {}): { world: WorldState; facility: Facility } {
-  const facility = makeFacilityFixture();
+  const facility = makeFacilityFixture(options.facilityKind);
   const world: WorldState = {
     tick: 0,
     width: 4,
@@ -42,7 +45,7 @@ function createSite(options: SiteOptions = {}): { world: WorldState; facility: F
     deaths: [],
     collectives: [],
     institutions: [],
-    spatialDemands: [makeDemandFixture()],
+    spatialDemands: [makeDemandFixture(options.facilityKind)],
     trailCells: createTrailCells(4, 1),
     history: {
       startYear: 0,
@@ -55,6 +58,28 @@ function createSite(options: SiteOptions = {}): { world: WorldState; facility: F
     },
   };
   return { world, facility };
+}
+
+function createAgent(): AgentState {
+  return {
+    id: "agent-1",
+    name: "トネリコ",
+    pos: { x: 1, y: 0 },
+    carrying: null,
+    activity: { kind: "idle" },
+    tasks: [],
+    planSource: "fake",
+    llmProvider: null,
+    thinking: false,
+    lastThought: null,
+    desires: { foodSecurity: 0 },
+    lastHungerInterruptTick: null,
+    hunger: 100,
+    fatigue: 100,
+    health: 100,
+    rationStrain: 0,
+    lastRationTick: null,
+  };
 }
 
 /** Every plank in the system, so a transfer can be proven to neither lose nor mint wood. */
@@ -224,5 +249,36 @@ describe("applyFacilityMaintenance", () => {
     expect(applyFacilityMaintenance(facility, 5)).toBe(0);
     expect(facility.maintenanceDue).toBe(0);
     expect(facility.statsToday.maintenanceWork).toBe(0);
+  });
+});
+
+describe("planFacilityTasks", () => {
+  it("does not move food into a blocked facility", () => {
+    const { world, facility } = createSite({ stockpileFood: 100 });
+    facility.complete = true;
+    facility.operation = "blocked";
+    facility.blockedReason = "noTradeRoute";
+
+    expect(planFacilityTasks(world, createAgent())).toBeNull();
+  });
+
+  it("refreshes a newly completed market before choosing a stocking task", () => {
+    const { world, facility } = createSite({
+      stockpileFood: 100,
+      facilityKind: "grainMarket",
+    });
+    facility.woodDelivered = FACILITY_WOOD_COST.grainMarket;
+    const agent = createAgent();
+    world.agents = [agent];
+
+    applyFacilityBuild(world, facility, FACILITY_BUILD_TICKS.grainMarket);
+
+    expect(facility.operation).toBe("active");
+    expect(planFacilityTasks(world, agent)).toBeNull();
+    expect(facility).toMatchObject({
+      operation: "blocked",
+      blockedReason: "noTradeRoute",
+      inventory: { food: 0 },
+    });
   });
 });

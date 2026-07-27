@@ -1,5 +1,6 @@
 import {
   type Building,
+  FACILITY_BUILD_TICKS,
   type Facility,
   type FacilityKind,
   type House,
@@ -15,6 +16,7 @@ import { objectDepth, SPRITE_ASSETS } from "./sprites.js";
 export const CONSTRUCTION_ALPHA = 0.45;
 export const HOUSE_OBJECT_LABEL = "house-object";
 export const FACILITY_OBJECT_LABEL = "facility-object";
+export const FACILITY_PROGRESS_LABEL = "facility-progress";
 
 export interface FacilityVisual {
   bodyColor: number;
@@ -83,11 +85,27 @@ function drawFacility(graphic: Graphics, visual: FacilityVisual): void {
   drawDepot(graphic, visual);
 }
 
+export function facilityProgressRatio(kind: FacilityKind, progress: number): number {
+  return Math.min(1, Math.max(0, progress / FACILITY_BUILD_TICKS[kind]));
+}
+
+function progressGraphic(facility: Facility): Graphics {
+  const ratio = facilityProgressRatio(facility.kind, facility.progress);
+  const progress = new Graphics()
+    .rect(2, 14, 12, 1)
+    .fill(0x1d2428)
+    .rect(2, 14, 12 * ratio, 1)
+    .fill(0xfff176);
+  progress.label = FACILITY_PROGRESS_LABEL;
+  return progress;
+}
+
 function facilityGraphic(facility: Facility): Graphics {
   const graphic = new Graphics();
   drawFacility(graphic, facilityVisual(facility.kind));
   graphic.position.set(facility.pos.x * TILE_SIZE, facility.pos.y * TILE_SIZE);
   graphic.alpha = facility.complete ? 1 : CONSTRUCTION_ALPHA;
+  if (!facility.complete) graphic.addChild(progressGraphic(facility));
   graphic.label = FACILITY_OBJECT_LABEL;
   graphic.zIndex = objectDepth(facility.pos.y, "facility");
   return graphic;

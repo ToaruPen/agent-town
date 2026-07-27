@@ -16,7 +16,7 @@ import {
   validateNormalizedPlanExecutability,
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
+import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
@@ -119,6 +119,38 @@ describe("normalizePlan", () => {
       ok: true,
       tasks: [{ kind: "moveTo", dest: destination }, task],
     });
+  });
+
+  it("routes eat to reachable facility food when the stockpile is empty", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    world.stockpile.food = 0;
+    const granary = makeFacilityFixture("communalGranary", { x: 2, y: 1 });
+    granary.complete = true;
+    granary.operation = "active";
+    granary.inventory.food = FOOD_PER_MEAL;
+    world.buildings.push(granary);
+
+    const normalized = normalizePlan(world, agent, [{ kind: "eat" }]);
+
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) return;
+    expect(normalized.tasks.at(-1)).toEqual({ kind: "eat" });
+    expect(normalized.tasks[0]).not.toEqual({ kind: "moveTo", dest: world.stockpile.pos });
+  });
+
+  it("does not refresh facility availability while normalizing an LLM response", () => {
+    const agent = createAgent();
+    const world = createWorld(agent);
+    const market = makeFacilityFixture("grainMarket", { x: 2, y: 1 });
+    market.complete = true;
+    market.operation = "active";
+    market.inventory.food = FOOD_PER_MEAL;
+    world.buildings.push(market);
+
+    normalizePlan(world, agent, [{ kind: "eat" }]);
+
+    expect(market).toMatchObject({ operation: "active", blockedReason: null });
   });
 
   it("uses the stockpile as the rest target when there is no completed house", () => {

@@ -348,6 +348,10 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
         warnUnknownAgent(agentId);
         return;
       }
+      if (agent.carrying !== null) {
+        agent.thinking = false;
+        return;
+      }
       agent.tasks = tasks;
       agent.planSource = source;
       agent.thinking = false;

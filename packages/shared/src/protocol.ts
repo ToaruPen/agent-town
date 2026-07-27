@@ -67,7 +67,13 @@ function isServerMessage(value: unknown): value is ServerMessage {
   if (value.type === "welcome") {
     return (
       isRecord(value.state) &&
-      hasRequiredKeys(value.state, ["history", "collectives", "institutions"]) &&
+      hasRequiredKeys(value.state, [
+        "history",
+        "collectives",
+        "institutions",
+        "spatialDemands",
+        "trailCells",
+      ]) &&
       hasWorldHistory(value.state.history)
     );
   }
