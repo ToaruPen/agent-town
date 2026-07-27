@@ -29,6 +29,8 @@ The slice is complete when:
 Explicitly out of scope:
 
 - diplomacy, war, territory change, colonisation (N3) — the `changedCells` protocol field is frozen now but stays empty;
+- per-season directive upkeep — no N1 directive has one, so the `directiveUpkeep` ledger reason is frozen now and stays unused;
+- a distinct wealth-production field on `NationState` — `openMine` yields materials and trade income is the wealth source (spec §4.5);
 - LLM rulers, generated prose, nation naming by LLM (N4);
 - crisis events, plagues, magical anomalies (N5);
 - victory conditions, replay, save/load;
@@ -229,10 +231,10 @@ and tests that justify it. The expected owners:
 
 | Task | Constants it appends |
 |---|---|
-| 2 | Codex | Population scaling from history effects, capital population weighting, value-driven starting-stock coefficients, terrain production coefficients |
-| 3 | Codex | Directive costs, durations, effects, city development cap, the kind → cultural-value affinity table |
-| 4 | Codex | Per-capita food production and consumption, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, culture gain, **initial stability and initial culture**, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference per component |
-| 7 | Codex | No new constants — tunes the values above |
+| 2 | Population scaling from history effects, capital population weighting, value-driven starting-stock coefficients, terrain production coefficients |
+| 3 | Directive costs, durations, completion-effect magnitudes, city development cap, the **signed** kind → cultural-value affinity table, the taboo affinity threshold, the chancellor deficit bonus, the chancellor low-stability threshold |
+| 4 | Per-capita food production and consumption, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, culture gain, **initial stability and initial culture**, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference per component |
+| 7 | No new constants — tunes the values above |
 
 Only the prosperity weights are fixed in advance, because they define what the game rewards. Every other
 value is a first guess that Task 7 is expected to change.
@@ -290,13 +292,77 @@ work needs separate worktrees under `.worktrees/`.
 
 ### Task 3 — Directives and chancellor
 
-- `directives.ts` exports `listDirectiveOptions(nation, polity, worldMap): DirectiveOption[]` and `applyDirectiveEffects(...)` used by the season pipeline.
-- Every `DirectiveKind` appears in the returned list every season. Unavailable ones carry a non-null `blockedReason` instead of being omitted, so the UI can explain them.
-- `openMine` requires an owned `hills` or `mountains` cell (`missingTerrain`). `growCity` requires a city below the development cap. A directive already active on the same target is `alreadyActive`. `Polity.taboo` blocks the matching kind with `taboo`.
-- `affinity` is computed from `Polity.values` weights and a constant table mapping each kind to the cultural values it expresses.
-- `chancellor.ts` exports `chooseDirective(nation, polity, options, lastReport): DirectiveOption | null`. It scores unblocked options by affinity plus a deficit term read from `lastReport` (a food deficit last season raises farmland; low stability raises festival), and picks the highest score with a stable tie-break by `DirectiveKind` ordering. It may return `null` when nothing is affordable.
-- The chancellor never calls RNG, never mutates its inputs, and never imports from `llm/` or `net/`.
-- Tests: each blocked reason fires for the right state; two polities with opposite value weights choose different directives from the same state; repeated calls are identical; a nation with an empty treasury gets `null`.
+Files this task may touch: `packages/server/src/sim/nation/directives.ts` (new), `packages/server/src/sim/nation/chancellor.ts` (new), `packages/shared/src/constants.ts` (append only), and its own new test files. No others. The frozen contracts do not change — this task needs no amendment to them.
+
+**Candidate listing.** `listDirectiveOptions(nation, polity, worldMap): DirectiveOption[]` returns options every season. Every `DirectiveKind` is represented every season: an unavailable one carries a non-null `blockedReason` rather than being omitted, so the UI can explain it. `growCity` yields one option **per owned city**, each with its own `targetCityId` and its own blocked reason; every other kind yields exactly one option with `targetCityId: null`. Nothing downstream may choose or apply a blocked option.
+
+**Preconditions**, evaluated in this fixed order so the reported reason is deterministic when more than one applies:
+
+1. `taboo` — the kind's affinity for this polity is at or below `NATION_DIRECTIVE_TABOO_AFFINITY`.
+2. `missingTerrain` — `openMine` needs an owned `hills` or `mountains` cell; `developTimber` needs an owned `forest` cell.
+3. `cityAtMaxDevelopment` — this option's city is at `NATION_CITY_DEVELOPMENT_CAP`.
+4. `alreadyActive` — an `ActiveDirective` with the same kind and the same `targetCityId` exists.
+5. `insufficientFood`, then `insufficientMaterials`, then `insufficientWealth` — the cost exceeds the matching stock.
+
+**Affinity.** A constant table maps each `DirectiveKind` to **signed** coefficients over `CulturalValue`. The signs carry the meaning: felling marked timber and clearing old-growth land run against `stewardship`, so those entries are negative, while a festival expresses `faith` and `kinship` positively. `affinity` is the sum of each coefficient times the polity's weight for that value — zero when the polity has no weight for it — clamped to -1..1. A polity with no weighted value in a kind's table gets affinity 0.
+
+Note that `Polity.values` weights are only ever positive (0.35 when an event introduces a value, 0.65 and 0.8 at founding, capped at 1). Affinity can therefore only go negative through negative coefficients in this table. A table of positive coefficients would make the `taboo` reason unreachable.
+
+**Taboo.** `Polity.taboo` is free-form prose about moral conduct toward people, and of the eight polity templates only one has any structural link to an economic directive, so the `taboo` reason is derived from the affinity table rather than parsed from the string — see spec §4.5. A kind at or below the threshold is refused outright: the nation will not do it at any price. Choose the coefficients and the threshold so at least one generated polity refuses at least one kind; a threshold that blocks nothing makes the reason decorative.
+
+**Effects.** Two shapes only, both expressible in the frozen `NationState`.
+
+*On completion*, applied once when `seasonsRemaining` reaches zero:
+
+| kind | effect |
+|---|---|
+| `clearFarmland` | `foodProduction` += constant |
+| `developTimber` | `materialProduction` += constant |
+| `openMine` | `materialProduction` += a larger constant |
+| `growCity` | target city `developmentLevel` += 1, never past the cap |
+| `encourageStores` | `stocks.food` += constant |
+| `holdFestival` | `stability` += constant and `culture` += constant |
+
+*While active*, read from `activeDirectives` by the season pipeline with no field of its own: only `encourageStores` has one, reducing famine loss. Task 4 owns that reduction and its constant.
+
+`openMine` yields materials, not wealth: the frozen `NationState` has no wealth-production field, and Task 4's trade income already gives wealth a source. Spec §4.5 was changed to match the contract rather than the contract being amended.
+
+**Cost** is charged once, at the season boundary where the directive becomes active, and Task 4 logs it as a `directiveCost` entry. No directive has a per-season upkeep in N1, so the `directiveUpkeep` ledger reason stays unused this slice, like `changedCells`.
+
+**Applying effects.** Export a descriptor, not a mutator, so Task 4 owns every state transition and can write the matching ledger entries:
+
+```ts
+export interface DirectiveCompletion {
+  foodProductionDelta: number;
+  materialProductionDelta: number;
+  stockDeltas: NationStocks;
+  stabilityDelta: number;
+  cultureDelta: number;
+  cityDevelopment: { cityId: string; delta: number } | null;
+}
+
+export function completeDirective(
+  directive: ActiveDirective,
+  nation: NationState,
+): DirectiveCompletion;
+```
+
+Nothing in `directives.ts` mutates a `NationState`.
+
+**Chancellor.** `chancellor.ts` exports `chooseDirective(nation, polity, options, lastReport): DirectiveOption | null`.
+
+- Unblocked options only; `null` when none remain.
+- Score is `affinity` plus deficit bonuses:
+  - the `lastReport` entries for metric `food` sum to a negative number → `NATION_CHANCELLOR_DEFICIT_BONUS` for `clearFarmland` and `encourageStores`;
+  - the same test on metric `materials` → the same bonus for `developTimber` and `openMine`;
+  - `nation.stability` below `NATION_CHANCELLOR_LOW_STABILITY` → the same bonus for `holdFestival`. This reads the absolute stability, not a delta, because `SeasonReport` carries only deltas.
+  - `lastReport === null`, the first season, adds no bonus.
+- Highest score wins; ties break by the declaration order of `DirectiveKind`, then by ascending `targetCityId`.
+- No RNG at all, no mutation of any input, no import from `net/` or `llm/`.
+
+**Constants this task owns:** per-kind cost, per-kind duration in seasons, per-kind completion-effect magnitudes, the city development cap, the signed kind → cultural-value affinity table, the taboo affinity threshold, the chancellor deficit bonus, and the chancellor low-stability threshold. Nothing else — in particular, do not touch Task 2's starting values or add anything Task 4 owns.
+
+- Tests: each blocked reason fires for the right state, and wins the precedence order when two apply at once; every `DirectiveKind` appears every season; `growCity` yields one option per owned city; at least one generated polity refuses at least one kind through `taboo`; two polities with opposing value weights choose different directives from the same state; repeated `chooseDirective` calls on the same input are identical; a nation with empty stocks gets `null`; `completeDirective` is pure and its deltas match the constants; `growCity` never carries a city past the cap.
 
 ### Task 4 — Season pipeline and prosperity
 
@@ -340,7 +406,7 @@ work needs separate worktrees under `.worktrees/`.
 - Two runs with the same `SEED` produce identical nation state at the same tick; different seeds differ.
 - Opening the browser shows live nations, a moving ranking, a working directive panel and a working speed control, with no LLM process ever spawned.
 - A nation that is never given an order still develops under its chancellor, and its choices reflect its cultural values.
-- The ledger explains every change: for any metric in any season, the report's entries sum to the observed delta.
+- The ledger explains every change it can carry: for each of the six `SeasonMetric` values in any season, the report's entries sum to the observed delta. `foodProduction`, `materialProduction` and `developmentLevel` are production capacity, not `SeasonMetric` values, so directive completions change them without a ledger entry; `completedDirectiveIds` is what explains those.
 - Frozen resident-scale modules and their tests remain in the tree and green.
 
 ## Worker Rules
