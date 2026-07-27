@@ -151,7 +151,42 @@ nothing made optional.
   archival `Polity.color`, whose worst pairwise ΔE76 is 12.6 (sable/river), while the banner ring the city
   dots and borders use holds a 40.86 floor. The largest coloured region therefore has the least separation,
   inverting the point of the banner system. Folded into C1-6b, which already owns the fill alpha.
+- **After the fill change, the open question is the alpha and not the moss hue.** C1-6b folds the fill onto
+  the banner colour, which makes three of the four world-map adjacencies a pure function of alpha and the
+  terrain underneath — identical in kind for every nation, so they can be read off a table rather than
+  measured per nation. Measured with the pipeline that reproduces the design's published moss-on-plains
+  figure of 16.8 exactly, so these are commensurable with the design's own numbers. Worst first:
+
+  | adjacency | ΔE76 | what it decides |
+  |---|---|---|
+  | wash vs unowned terrain | 4.8 @ 0.28, 5.2 @ 0.32, 7.4 @ 0.45 | whether territory *extent* reads at a glance |
+  | wash vs wash at a frontier | 13.2 @ 0.32 (worst pair, ember/moss) | who borders whom |
+  | banner vs its own wash | 12.1 @ 0.28, 11.6 @ 0.32, 9.5 @ 0.45 | whether a city reads against its own territory |
+  | banner vs terrain | 16.8 | already handled: banner vs casing is 51.0 |
+
+  Two consequences. **Raising alpha does not fix the worst figure** — it moves wash-vs-unowned by 2.6 across
+  the entire range while costing 2.6 of banner distinctness, so extent is not tunable by alpha at all.
+  And **the 1 px full-alpha band is not decorative.** There is no casing at a nation-nation frontier, so
+  after the fill change the frontier is wash against wash at 13.2 while the banners either side are at 45.2;
+  the band is the only mark there still separated at the figure the palette was designed around.
+- **One banner pair to confirm was ruled out rather than missed.** Gold and moss measure 24.6 at full alpha,
+  which would undercut C1-1b's stated 40.86 floor if both were ever assigned together. The assignment the
+  generator actually produces at seed 12345 does not contain that pair, so this is not a contradiction —
+  only a pair worth finding explicitly in C1-1b's 163-set sweep rather than assuming it was covered.
 - No LLM work in N1. Ruler LLMs arrive in N4.
+
+## Assignments outlive agents
+
+Three times today a worker died mid-task and the artifact left behind said nothing about it. A branch sitting
+at its base commit does not mean the worker abandoned the task — one was still running and simply had not
+committed, and recording the inference as fact cost two correcting commits. The inverse is worse: a line in
+this document reading "asked of the C1-10 worker" survived that worker's death by 529, which reads as *work is
+assigned* when the truth is *nobody has it*. `client-c1-04` then died on a session limit before touching a
+file, so a fourth line nearly joined them.
+
+So: the reliable signal that a task is owned is the worker's status or a reply, never an artifact in the repo,
+and never a line in this file. Any queue entry naming an owner must name a *live* one — if the agent is gone,
+the entry says **unowned**, which is the state that gets it re-dispatched.
 
 ## Queued cleanups
 
@@ -162,7 +197,8 @@ else, and would otherwise be lost.
 |---|---|---|
 | Delete `WORLD_MAP_CITY_RADIUS_PX` and `WORLD_MAP_CAPITAL_RADIUS_PX` | `shared/src/constants.ts` | Was blocked by doc references claiming they were current; those are corrected, so it is unblocked now |
 | Derive the prosperity expectation instead of pasting it | `server/test/nationProsperity.test.ts` | `toBeCloseTo(0.321_428_571_428_571_45)` is `225 / NATION_PROSPERITY_PRODUCTION_REFERENCE`; correct today, but needs re-pasting on every retune, and the derivation is invisible |
-| Guard Node *globals* in client `src/` | `client/test/assetConformance.test.ts` | C1-10 already blocks `from "node:"` imports; `types: ["node"]` also admits bare `process`/`Buffer`/`__dirname`, which no rule catches. Asked of the C1-10 worker |
+| Guard Node *globals* in client `src/` | `client/test/assetConformance.test.ts` | C1-10 already blocks `from "node:"` imports; `types: ["node"]` also admits bare `process`/`Buffer`/`__dirname`, which no rule catches. **Unowned.** It was asked of the C1-10 worker, which then died on a 529 before replying, so the request may never have been read — see "Assignments outlive agents" below |
+| Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
 | Import the shared city tier constant | `client/src/ui/worldCityViewModel.ts` | Replaces the local `as const` copy; values identical, type widens harmlessly (checked) |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
 | Bring the repo root under `tsc` | root `vitest.config.ts`, `test/` | `pnpm-workspace.yaml` lists only `packages/*`, so `pnpm -r exec tsc` never reaches the root |
