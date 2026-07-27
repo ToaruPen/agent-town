@@ -229,10 +229,10 @@ and tests that justify it. The expected owners:
 
 | Task | Constants it appends |
 |---|---|
-| 2 | Population scaling from history effects, capital population weighting, value-driven starting-stock coefficients, terrain production coefficients |
-| 3 | Directive costs, durations, effects, city development cap, the kind → cultural-value affinity table |
-| 4 | Per-capita food production and consumption, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, culture gain, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference per component |
-| 7 | No new constants — tunes the values above |
+| 2 | Codex | Population scaling from history effects, capital population weighting, value-driven starting-stock coefficients, terrain production coefficients |
+| 3 | Codex | Directive costs, durations, effects, city development cap, the kind → cultural-value affinity table |
+| 4 | Codex | Per-capita food production and consumption, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, culture gain, **initial stability and initial culture**, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference per component |
+| 7 | Codex | No new constants — tunes the values above |
 
 Only the prosperity weights are fixed in advance, because they define what the game rewards. Every other
 value is a first guess that Task 7 is expected to change.
@@ -245,17 +245,23 @@ value is a first guess that Task 7 is expected to change.
 
 ## Task List
 
-Tasks are sequential; each depends on the previous commit. One worker, one branch per task, commit locally, never push. The supervisor verifies independently, fast-forward merges to the slice branch, and pushes.
+Simulation tasks are sequential; each depends on the previous commit. One branch per task, commit locally,
+never push. The supervisor verifies independently, fast-forward merges to the slice branch, and pushes.
 
-| Order | Assignment | Branch | Independent gate |
-|---|---|---|---|
-| 1 | Frozen `nation.ts` contracts, nation-scale constants, `nationYearOfTick`/`nationSeasonOfTick` helpers, exports | `n1-01-nation-contracts` | Contract + time-helper tests, `just check && just test`, local commit |
-| 2 | `sim/nation/bootstrap.ts`: derive `NationState[]` from `WorldHistory` | `n1-02-nation-bootstrap` | Determinism, survivor selection, history-derived stocks/values tests, forbidden-import scan, `just check && just test`, local commit |
-| 3 | `sim/nation/directives.ts` + `chancellor.ts`: candidates, preconditions, costs, affinity, effects, deterministic choice | `n1-03-directives-chancellor` | Precondition/cost/taboo/affinity tests, culture-divergence test, `just check && just test`, local commit |
-| 4 | `sim/nation/season.ts` + `prosperity.ts`: fixed pipeline, ledger, score | `n1-04-season-prosperity` | Pipeline-order, ledger-completeness, order-invariance, score tests, `just check && just test`, local commit |
-| 5 | `sim/nation/engine.ts` + protocol reshape + `net/wsServer.ts` wiring + `SEED` env | `n1-05-realtime-protocol` | Speed-invariance, message-shape, directive-validation, headless 20-year smoke tests, `just check && just test`, local commit |
-| 6 | Client: nation dashboard, ranking table, directive panel, season report, speed control, live territory paint | `n1-06-client-nation-ui` | View-model tests, controller tests, build + browser check, `just check && just test`, local commit |
-| 7 | Balance pass: headless 20-year run, tune constants only | `n1-07-balance` | Smoke-run assertions, `just check && just test`, local commit |
+Ownership follows `docs/superpowers/handoff/2026-07-27-delegation.md`: the simulation worker (Codex) owns
+`packages/shared/` and `packages/server/`, the client worker (Claude subagents) owns `packages/client/`.
+Task 6 is the client worker's, and can start as soon as Task 5 has landed the protocol it renders. Parallel
+work needs separate worktrees under `.worktrees/`.
+
+| Order | Owner | Assignment | Branch | Independent gate |
+|---|---|---|---|---|
+| 1 | Codex | Frozen `nation.ts` contracts, nation-scale constants, `nationYearOfTick`/`nationSeasonOfTick` helpers, exports | `n1-01-nation-contracts` | Contract + time-helper tests, `just check && just test`, local commit |
+| 2 | Codex | `sim/nation/bootstrap.ts`: derive `NationState[]` from `WorldHistory` | `n1-02-nation-bootstrap` | Determinism, survivor selection, history-derived stocks/values tests, forbidden-import scan, `just check && just test`, local commit |
+| 3 | Codex | `sim/nation/directives.ts` + `chancellor.ts`: candidates, preconditions, costs, affinity, effects, deterministic choice | `n1-03-directives-chancellor` | Precondition/cost/taboo/affinity tests, culture-divergence test, `just check && just test`, local commit |
+| 4 | Codex | `sim/nation/season.ts` + `prosperity.ts`: fixed pipeline, ledger, score | `n1-04-season-prosperity` | Pipeline-order, ledger-completeness, order-invariance, score tests, `just check && just test`, local commit |
+| 5 | Codex | `sim/nation/engine.ts` + protocol reshape + `net/wsServer.ts` wiring + `SEED` env | `n1-05-realtime-protocol` | Speed-invariance, message-shape, directive-validation, headless 20-year smoke tests, `just check && just test`, local commit |
+| 6 | Claude | Client: nation dashboard, ranking table, directive panel, season report, speed control, live territory paint | `n1-06-client-nation-ui` | View-model tests, controller tests, build + browser check, `just check && just test`, local commit |
+| 7 | Codex | Balance pass: headless 20-year run, tune constants only | `n1-07-balance` | Smoke-run assertions, `just check && just test`, local commit |
 
 ### Task 1 — Contracts and constants
 
@@ -300,6 +306,8 @@ Tasks are sequential; each depends on the previous commit. One worker, one branc
 - Famine: food stock reaching zero with unmet demand reduces population and stability by constant rates and logs `famine` entries.
 - `prosperity.ts` exports `computeProsperity(nation): ProsperityScore`, normalising each component against its fixed reference constant and clamping to 0..1000.
 - Tests: pipeline order observable through the ledger; ledger sums match state deltas; reordering the input array does not change any nation's result; removing a rival nation does not change another nation's score; a full famine cycle behaves as specified.
+- Replace bootstrap's placeholder starting values for `stability` and `culture`. Task 2 had no owned constant for either and left `stability` as the history population points clamped to 0..100, which saturates near 100 for most nations, and `culture` as the raw sum of cultural-value weights. Both need a named constant and a derivation that leaves headroom in **both** directions from the start, so the stability and culture components of the prosperity score can actually move. `developmentLevel` starting at `0` is correct and stays.
+- Tests: no bootstrapped nation starts with `stability` at either bound; two nations with different histories start with different stability and different culture.
 
 ### Task 5 — Real-time engine, protocol, server
 
