@@ -43,6 +43,7 @@ Do not rename these, make fields optional, or add fields while executing this pl
 
 ```ts
 import type { SEASONS } from "./constants.js";
+import type { WorldHistory } from "./history.js";
 
 export type NationId = string; // equals Polity.id
 export type DirectiveId = string;
@@ -172,6 +173,17 @@ export interface WorldCellChange {
 ### `packages/shared/src/protocol.ts` (reshaped)
 
 ```ts
+import type {
+  DirectiveId,
+  DirectiveKind,
+  NationId,
+  NationState,
+  NationWorldState,
+  Season,
+  SpeedMultiplier,
+  WorldCellChange,
+} from "./nation.js";
+
 export type ServerMessage =
   | { type: "welcome"; state: NationWorldState }
   | { type: "clock"; tick: number; year: number; season: Season; speed: SpeedMultiplier }
@@ -193,7 +205,7 @@ export type ClientMessage =
   | { type: "setAutoPilot"; enabled: boolean };
 ```
 
-`welcome` carries the full initial state exactly once. `clock` is a light heartbeat (about 1 Hz) and carries no nation state. Nation state changes only at season boundaries, so `season` is the only message that carries `nations`. `changedCells` stays empty in N1 and exists so N3 does not break the wire format.
+`welcome` carries the full initial state exactly once. `clock` is a light heartbeat, emitted on a wall-clock interval so its rate does not change with game speed, and carries no nation state. Nation state changes only at season boundaries, so `season` is the only message that carries `nations`. `changedCells` stays empty in N1 and exists so N3 does not break the wire format.
 
 ### Constants (`packages/shared/src/constants.ts`, appended — never rename existing ones)
 
@@ -204,7 +216,7 @@ export const NATION_TICKS_PER_SEASON = 300; // 30 s at x1
 export const NATION_TICKS_PER_YEAR = NATION_TICKS_PER_SEASON * SEASONS.length; // 2 min at x1
 export const SPEED_MULTIPLIERS = [0, 1, 2, 4, 8] as const;
 export const DEFAULT_SPEED: SpeedMultiplier = 1;
-export const CLOCK_BROADCAST_TICKS = 10; // ~1 Hz heartbeat
+export const CLOCK_BROADCAST_MS = 1000; // wall-clock heartbeat; stays ~1 Hz at every speed
 ```
 
 Add, in the same file, with clear names and a one-line comment each: base per-capita food production and consumption, terrain production coefficients, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, directive costs/durations/effects, culture gain, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference for each component. No number used by `sim/nation/` may be inlined.
@@ -269,7 +281,7 @@ Tasks are sequential; each depends on the previous commit. One worker, one branc
 ### Task 5 — Real-time engine, protocol, server
 
 - `engine.ts` owns tick advance and season-boundary detection; it calls `resolveSeason` and returns the new state plus the reports. No wall-clock inside.
-- `wsServer.ts` drives the loop, applies `SPEED_MULTIPLIERS` to pacing only, broadcasts `clock` every `CLOCK_BROADCAST_TICKS` and `season` at boundaries, and sends `welcome` on connect.
+- `wsServer.ts` drives the loop, applies `SPEED_MULTIPLIERS` to pacing only, broadcasts `clock` on a `CLOCK_BROADCAST_MS` wall-clock interval — never on a tick count, which would scale the heartbeat with speed — and `season` at boundaries, and sends `welcome` on connect.
 - Client messages are validated server-side: an unknown nation, an unaffordable or blocked directive, a directive for another nation, or an out-of-range speed is rejected and never mutates state.
 - Player directives queue and take effect at the next season boundary. When a nation is on auto-pilot (or is an agent nation), the chancellor's choice is applied at the boundary instead.
 - `index.ts` accepts a `SEED` env var (positive integer) and keeps the time-based default when unset. Determinism tests use `SEED`.
@@ -308,4 +320,4 @@ Tasks are sequential; each depends on the previous commit. One worker, one branc
 - Do not dispatch reviewer sub-agents. The commit is part of the task; never end a task with uncommitted work.
 - Do not push. The supervisor merges and pushes.
 - No absolute local paths in code, docs or commit messages.
-- If a frozen contract looks wrong, stop and report instead of changing it.
+- Implement the frozen contracts exactly as written — creating `nation.ts` and reshaping `protocol.ts` is part of the work. What is frozen is their content: never rename a field, change a type, add a field, or make one optional. If a contract looks wrong, stop and report instead of editing it.

@@ -125,7 +125,7 @@ agent-town を、**住民の暮らしを神の視点から観察するコロニ�
 
 ### 4.4 繁栄度スコア
 
-```
+```text
 total = 1000 × Σ ( weight_i × normalize_i(component_i) )
 ```
 

@@ -9,8 +9,10 @@ The owner moved the game from a colony sim to a real-time contest between nation
 | Worker | Codex | Implementation, tests, self-review, local commits |
 | Reviewer | Codex | Review of each finished task before the supervisor merges |
 
-The supervisor does not implement plan tasks. The worker does not push, does not change frozen
-contracts, and does not decide scope.
+The supervisor does not implement plan tasks. The worker does not push and does not decide scope. The
+worker *implements* the frozen contracts — creating `packages/shared/src/nation.ts` and reshaping
+`protocol.ts` is assigned work — but never deviates from them: no renamed field, no changed type, no
+added field, nothing made optional.
 
 ## Current state
 
@@ -41,9 +43,11 @@ Parallel tasks would need separate git worktrees. N1 is sequential, so a single 
 > `<branch from the task table>`, branched from `<previous task's commit>`.
 >
 > Rules: TDD (failing test first). `just check && just test` must pass before you commit. Conventional
-> Commits. Never delete or disable a test. Do not add dependencies or assets. Do not change any contract
-> listed under "Frozen Contracts" — if one looks wrong, stop and report instead. Do not dispatch reviewer
-> sub-agents. The commit is part of your task; never end your turn with uncommitted work. Do not push.
+> Commits. Never delete or disable a test. Do not add dependencies or assets. Implement the contracts
+> listed under "Frozen Contracts" exactly as written, including creating or reshaping the files that hold
+> them; never rename a field, change a type, add a field, or make one optional. If a contract looks wrong,
+> stop and report instead of editing it. Do not dispatch reviewer sub-agents. The commit is part of your
+> task; never end your turn with uncommitted work. Do not push.
 >
 > Report: the commit hash, the files touched, the tests you added, and anything in the plan you found
 > ambiguous or wrong.
@@ -54,8 +58,10 @@ Parallel tasks would need separate git worktrees. N1 is sequential, so a single 
 - `just check` and `just test` pass on a fresh checkout of the branch.
 - The diff touches only what the task brief allows.
 - `packages/shared/src/nation.ts` and the protocol types match the frozen contracts byte for byte.
-- `grep` the new `sim/nation/` files for `Date.now`, `Math.random`, `process.`, and imports from
-  `../net/` or `../llm/` — all must be absent.
+- The new `sim/nation/` files contain no `Date.now`, `Math.random` or `process.`.
+- Read every import specifier in those files and resolve it: anything landing inside
+  `packages/server/src/net/` or `packages/server/src/llm/` is forbidden. Do not grep for a fixed prefix —
+  from `sim/nation/` the relative path is `../../net/`, and a deeper file would differ again.
 - Frozen resident-scale modules and their tests are untouched and still green.
 
 ## Hard rules (from AGENTS.md and owner mandates)
