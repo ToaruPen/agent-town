@@ -26,6 +26,11 @@ vi.mock("pixi.js", () => ({
 class MockWebSocket implements WebSocketLike {
   onmessage: ((event: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
+  readonly sent: string[] = [];
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
 
   emit(message: ServerMessage): void {
     this.onmessage?.({ data: JSON.stringify(message) });
@@ -168,6 +173,46 @@ describe("connect", () => {
   });
 });
 
+describe("connect's outbound channel", () => {
+  it("encodes a client message onto the socket", () => {
+    const socket = new MockWebSocket();
+
+    const send = connect(
+      "ws://example.test",
+      { onWelcome: vi.fn(), onUpdate: vi.fn(), onOrders: vi.fn() },
+      () => socket,
+    );
+    send({ type: "setSpeed", speed: 4 });
+
+    expect(socket.sent).toEqual(['{"type":"setSpeed","speed":4}']);
+  });
+
+  /** Reconnect replaces the socket, so a `send` captured before the drop must reach the new one. */
+  it("routes to the reconnected socket rather than the closed one", () => {
+    vi.useFakeTimers();
+    const sockets = [new MockWebSocket(), new MockWebSocket()];
+    let opened = 0;
+
+    const send = connect(
+      "ws://example.test",
+      { onWelcome: vi.fn(), onUpdate: vi.fn(), onOrders: vi.fn() },
+      () => {
+        const socket = sockets[opened];
+        opened += 1;
+        if (socket === undefined) throw new Error("opened more sockets than the test provides");
+        return socket;
+      },
+    );
+    sockets[0]?.onclose?.();
+    vi.runOnlyPendingTimers();
+    send({ type: "setSpeed", speed: 0 });
+    vi.useRealTimers();
+
+    expect(sockets[0]?.sent).toEqual([]);
+    expect(sockets[1]?.sent).toEqual(['{"type":"setSpeed","speed":0}']);
+  });
+});
+
 describe("getWebSocketUrl", () => {
   it("uses the same-origin /ws path for HTTP development", () => {
     expect(getWebSocketUrl({ host: "localhost:5173", protocol: "http:" })).toBe(
@@ -183,9 +228,17 @@ describe("getWebSocketUrl", () => {
 });
 
 describe("main shell", () => {
+  /**
+   * The Pixi half of the entry point, which the nation HUD sits beside rather than replaces. The stub
+   * document has no HUD roots, so `main.ts` takes its unmounted path and this stays a test of the
+   * shell — the mounted path is DOM construction, which this repo has no environment to exercise.
+   */
   it("boots an empty nearest-neighbour Pixi application after preloading resident sprites", async () => {
     vi.stubGlobal("window", {});
-    vi.stubGlobal("document", { body: { appendChild: pixiShell.appendChild } });
+    vi.stubGlobal("document", {
+      body: { appendChild: pixiShell.appendChild },
+      getElementById: () => null,
+    });
 
     await expect(import("../src/main.js")).resolves.toBeDefined();
 

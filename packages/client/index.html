@@ -36,6 +36,294 @@
         outline-offset: -2px;
       }
 
+      /* Nation HUD. Reuses the --world-* palette so the nation layer and the chronicle read as one
+         world rather than two apps sharing a tab. */
+      .nation-clock {
+        position: fixed;
+        z-index: 8;
+        top: 0;
+        right: 0;
+        left: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        box-sizing: border-box;
+        padding: calc(0.5rem + env(safe-area-inset-top)) 0.75rem 0.5rem;
+        color: var(--world-parchment);
+        font-family: system-ui, sans-serif;
+        background: rgb(29 36 40 / 92%);
+        border-bottom: 1px solid var(--world-iron);
+      }
+
+      .nation-clock__headline {
+        margin: 0;
+        font-size: 1.05rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .nation-clock__countdown-label {
+        color: var(--world-iron);
+        font-size: 0.8rem;
+      }
+
+      .nation-clock__progress {
+        width: min(14rem, 30vw);
+        height: 0.5rem;
+      }
+
+      .nation-clock__countdown {
+        min-width: 7rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* The commit is close enough that "later" is no longer a plan. Colour only — the text already
+         says how long is left, so nothing here is carried by hue alone. */
+      .nation-clock__countdown--urgent {
+        color: var(--world-ember);
+        font-weight: 700;
+      }
+
+      .nation-clock__speeds {
+        display: flex;
+        gap: 0.25rem;
+        margin-left: auto;
+      }
+
+      .nation-clock__speed {
+        min-width: 2.75rem;
+        min-height: 44px;
+        color: var(--world-parchment);
+        font-size: 0.9rem;
+        background: transparent;
+        border: 1px solid var(--world-iron);
+        border-radius: 0.25rem;
+        cursor: pointer;
+      }
+
+      .nation-clock__speed[aria-pressed="true"] {
+        color: var(--world-peat);
+        background: var(--world-parchment);
+        border-color: var(--world-parchment);
+      }
+
+      .nation-clock__speed:focus-visible {
+        outline: 2px solid #fff176;
+        outline-offset: 2px;
+      }
+
+      .nation-hud {
+        position: fixed;
+        z-index: 7;
+        top: 4.5rem;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+        pointer-events: none;
+      }
+
+      .nation-dashboard,
+      .prosperity {
+        box-sizing: border-box;
+        width: min(17rem, 32vw);
+        max-height: 100%;
+        padding: 0.75rem;
+        overflow-y: auto;
+        color: var(--world-parchment);
+        font-family: system-ui, sans-serif;
+        font-size: 0.85rem;
+        background: rgb(29 36 40 / 88%);
+        border: 1px solid var(--world-iron);
+        border-radius: 0.25rem;
+        pointer-events: auto;
+      }
+
+      .nation-dashboard__name,
+      .prosperity__title {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+
+      .nation-dashboard__own {
+        margin-left: 0.5rem;
+        padding: 0.1rem 0.4rem;
+        color: var(--world-peat);
+        font-size: 0.7rem;
+        background: var(--world-verdigris);
+        border-radius: 0.2rem;
+      }
+
+      .nation-dashboard__metrics,
+      .nation-dashboard__directives,
+      .prosperity__rows,
+      .prosperity__contributions {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nation-dashboard__metric {
+        display: grid;
+        grid-template-columns: 3.5rem 1fr auto;
+        gap: 0.5rem;
+        padding: 0.15rem 0;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .nation-dashboard__metric-value {
+        text-align: right;
+      }
+
+      /* Direction is a glyph first (▲ ▼ ―) and a colour second, so the diff survives a colour-blind
+         reader and a greyscale screenshot. */
+      .nation-dashboard__delta {
+        min-width: 3.5rem;
+        text-align: right;
+      }
+
+      .nation-dashboard__delta--up {
+        color: var(--world-verdigris);
+      }
+
+      .nation-dashboard__delta--down {
+        color: var(--world-ember);
+      }
+
+      .nation-dashboard__delta--flat,
+      .nation-dashboard__delta--unknown {
+        color: var(--world-iron);
+      }
+
+      .nation-dashboard__section-title,
+      .prosperity__subtitle {
+        margin: 0.75rem 0 0.25rem;
+        color: var(--world-iron);
+        font-size: 0.75rem;
+        font-weight: 400;
+      }
+
+      .nation-dashboard__directive {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.15rem 0;
+      }
+
+      .nation-dashboard__empty,
+      .nation-dashboard__waiting {
+        margin: 0.25rem 0;
+        color: var(--world-iron);
+      }
+
+      .prosperity__row,
+      .prosperity__contribution {
+        display: grid;
+        grid-template-columns: 1.25rem 0.6rem 1fr auto;
+        gap: 0.4rem;
+        align-items: center;
+        padding: 0.2rem 0;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .prosperity__row--own {
+        background: rgb(111 159 145 / 18%);
+      }
+
+      .prosperity__swatch {
+        width: 0.6rem;
+        height: 0.6rem;
+        background: var(--banner-color, var(--world-iron));
+        border-radius: 0.15rem;
+      }
+
+      .prosperity__bar,
+      .prosperity__contribution-bar {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 0.35rem;
+      }
+
+      .prosperity__contribution {
+        grid-template-columns: 3rem 1fr auto;
+      }
+
+      .prosperity__contribution--dragging {
+        color: var(--world-ember);
+      }
+
+      /* The marker's meaning is spelled out rather than left to a colour or an arrow. */
+      .prosperity__dragging-note {
+        grid-column: 1 / -1;
+        color: var(--world-ember);
+        font-size: 0.7rem;
+      }
+
+      @media (width <= 40rem) {
+        .nation-hud {
+          top: 6.5rem;
+          flex-direction: column;
+          overflow-y: auto;
+        }
+
+        .nation-dashboard,
+        .prosperity {
+          width: 100%;
+        }
+      }
+
+      .nation-select {
+        position: fixed;
+        z-index: 12;
+        top: 50%;
+        left: 50%;
+        box-sizing: border-box;
+        width: min(24rem, 90vw);
+        padding: 1rem;
+        color: var(--world-parchment);
+        font-family: system-ui, sans-serif;
+        background: rgb(29 36 40 / 97%);
+        border: 1px solid var(--world-iron);
+        border-radius: 0.35rem;
+        transform: translate(-50%, -50%);
+      }
+
+      .nation-select__title {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+      }
+
+      .nation-select__options {
+        display: grid;
+        gap: 0.4rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nation-select__option {
+        width: 100%;
+        min-height: 44px;
+        color: var(--world-parchment);
+        font-size: 0.9rem;
+        background: transparent;
+        border: 1px solid var(--world-iron);
+        border-radius: 0.25rem;
+        cursor: pointer;
+      }
+
+      .nation-select__option:hover {
+        background: rgb(111 159 145 / 22%);
+      }
+
+      .nation-select__option:focus-visible {
+        outline: 2px solid #fff176;
+        outline-offset: 2px;
+      }
+
       .visually-hidden {
         position: absolute;
         width: 1px;
@@ -777,14 +1065,34 @@
     >
       旧世界を見る
     </button>
+    <!-- Resident-era control. Nothing wires it since main.ts became the nation shell, so it is hidden
+         rather than deleted: the resident renderers are still in the tree and C1-7 docks the city view. -->
     <button
       id="traffic-overlay-toggle"
       class="traffic-overlay-toggle"
       type="button"
       aria-pressed="false"
+      hidden
     >
       通行量を表示
     </button>
+    <!-- A section rather than a div: an accessible name needs a role to attach to, and section with a
+         name is a region. -->
+    <section id="nation-clock" class="nation-clock" aria-label="暦と進行速度"></section>
+    <main class="nation-hud">
+      <section
+        id="nation-dashboard"
+        class="nation-dashboard"
+        aria-label="自国の状況"
+      ></section>
+      <section id="nation-ranking" class="prosperity" aria-label="繁栄度の順位"></section>
+    </main>
+    <aside
+      id="nation-select"
+      class="nation-select"
+      aria-label="国の選択"
+      hidden
+    ></aside>
     <aside
       id="world-chronicle"
       class="world-chronicle"

@@ -1,11 +1,21 @@
-import { decodeServerMessage, type NationWorldState, type ServerMessage } from "@agent-town/shared";
+import {
+  type ClientMessage,
+  decodeServerMessage,
+  encodeMessage,
+  type NationWorldState,
+  type ServerMessage,
+} from "@agent-town/shared";
 
 const RECONNECT_DELAY_MS = 1_000;
 
 export interface WebSocketLike {
   onmessage: ((event: { data: string }) => void) | null;
   onclose: (() => void) | null;
+  send(data: string): void;
 }
+
+/** Outbound channel for the HUD. Routes to whichever socket is current, so it survives a reconnect. */
+export type SendClientMessage = (message: ClientMessage) => void;
 
 type WebSocketFactory = (url: string) => WebSocketLike;
 type OrdersMessage = Extract<ServerMessage, { type: "orders" }>;
@@ -28,8 +38,22 @@ export function getWebSocketUrl(location: WebSocketLocation): string {
 
 function createBrowserSocket(url: string): WebSocketLike {
   const socket = new WebSocket(url);
-  const adapter: WebSocketLike = { onmessage: null, onclose: null };
+  // A speed click can land before the handshake finishes, and sending then throws. Holding the first
+  // messages until "open" costs a few bytes and keeps the HUD from having to know about socket states.
+  let pending: string[] | null = [];
+  const adapter: WebSocketLike = {
+    onmessage: null,
+    onclose: null,
+    send(data: string): void {
+      if (pending === null) socket.send(data);
+      else pending.push(data);
+    },
+  };
 
+  socket.addEventListener("open", () => {
+    for (const data of pending ?? []) socket.send(data);
+    pending = null;
+  });
   socket.addEventListener("message", (event) => {
     adapter.onmessage?.({ data: String(event.data) });
   });
@@ -66,11 +90,13 @@ export function connect(
   url: string,
   handlers: ConnectionHandlers,
   createSocket: WebSocketFactory = createBrowserSocket,
-): void {
+): SendClientMessage {
   let state: NationWorldState | null = null;
+  let current: WebSocketLike | null = null;
 
   const open = (): void => {
     const socket = createSocket(url);
+    current = socket;
 
     socket.onmessage = (event) => {
       const message = decodeServerMessage(event.data);
@@ -94,4 +120,8 @@ export function connect(
   };
 
   open();
+
+  return (message) => {
+    current?.send(encodeMessage(message));
+  };
 }
