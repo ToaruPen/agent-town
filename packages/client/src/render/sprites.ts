@@ -182,8 +182,12 @@ export const SPRITE_ASSETS = {
       emblem: "/assets/tiny-town/Tiles/tile_0083.png",
     },
   },
-  // Tiny Town tile 94: golden supply chest.
-  stockpile: "/assets/tiny-town/Tiles/tile_0094.png",
+  stockpile: {
+    // Tiny Town tile 130: a woven food basket.
+    basket: "/assets/tiny-town/Tiles/tile_0130.png",
+    // Tiny Town tile 106: a cut log.
+    log: "/assets/tiny-town/Tiles/tile_0106.png",
+  },
   // Tiny Dungeon tile 65: gray inscribed tombstone.
   tombstone: "/assets/tiny-dungeon/Tiles/tile_0065.png",
   agents: [
@@ -214,7 +218,8 @@ export const SPRITE_PATHS = [
   SPRITE_ASSETS.buildings.rationDepot.roof,
   SPRITE_ASSETS.buildings.rationDepot.wall,
   SPRITE_ASSETS.buildings.rationDepot.emblem,
-  SPRITE_ASSETS.stockpile,
+  SPRITE_ASSETS.stockpile.basket,
+  SPRITE_ASSETS.stockpile.log,
   SPRITE_ASSETS.tombstone,
   ...SPRITE_ASSETS.agents,
 ] as const;

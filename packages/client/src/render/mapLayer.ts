@@ -90,13 +90,17 @@ export function renderMapLayer(
   drawRockCluster(rocks, state);
   groundLayer.addChild(rocks);
 
+  const stockpileX = state.stockpile.pos.x * TILE_SIZE;
+  const stockpileY = state.stockpile.pos.y * TILE_SIZE;
   addMapObject(
     objectLayer,
-    createTileSprite(
-      SPRITE_ASSETS.stockpile,
-      state.stockpile.pos.x * TILE_SIZE,
-      state.stockpile.pos.y * TILE_SIZE,
-    ),
+    createTileSprite(SPRITE_ASSETS.stockpile.basket, stockpileX - TILE_SIZE / 4, stockpileY),
+    state.stockpile.pos.y,
+    "stockpile",
+  );
+  addMapObject(
+    objectLayer,
+    createTileSprite(SPRITE_ASSETS.stockpile.log, stockpileX + TILE_SIZE / 4, stockpileY),
     state.stockpile.pos.y,
     "stockpile",
   );
