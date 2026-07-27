@@ -97,12 +97,19 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1, C1-2, C1-6a and C1-10 merged).
+  C1-1, C1-2, C1-3, C1-6a and C1-10 merged).
 - **The simulation is complete; the N1 slice is not.** The plan's own completion criteria include "opening
-  the browser shows live nations, a moving ranking, a working directive panel and a working speed control",
-  and `main.ts` is still 14 lines. C1-3 then C1-6b is what closes the slice. Of the other criteria,
-  same-seed reproducibility and seed *divergence* are both genuinely tested —
-  `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158` — so only the browser one is outstanding.
+  the browser shows live nations, a moving ranking, a working directive panel and a working speed control".
+  Live nations, the ranking and the speed control landed with C1-3; `main.ts` mounts the HUD. **The
+  directive panel is the one clause still unmet**, which is C1-4, and C1-6b then adds the map. Of the other
+  criteria, same-seed reproducibility and seed *divergence* are both genuinely tested —
+  `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158` — so only that one clause is outstanding.
+
+  This paragraph claimed `main.ts` was still 14 lines and that C1-3 was next for four commits after C1-3
+  merged, while the section at :41 recorded it as merged. A Codex review caught the contradiction. It is
+  the same failure as the queue entry that outlived its worker: a status line in this file describing a
+  world that has moved on, and an orchestration source that contradicts itself will send the next agent
+  to redo finished work. Status claims here need editing when the status changes, not appending to.
 - **The balance is tuned to a window the game leaves in about six minutes, and this is the next balance
   task.** Task 7's criteria sample year 20 only and impose a floor, so a spread that decays passes them.
   Measured at seed 42: the top-to-bottom prosperity spread runs 149.9 % at year 5, 103.3 % at year 10,
@@ -246,6 +253,7 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Delete `WORLD_MAP_CITY_RADIUS_PX` and `WORLD_MAP_CAPITAL_RADIUS_PX` | `shared/src/constants.ts` | Was blocked by doc references claiming they were current; those are corrected, so it is unblocked now |
 | Derive the prosperity expectation instead of pasting it | `server/test/nationProsperity.test.ts` | `toBeCloseTo(0.321_428_571_428_571_45)` is `225 / NATION_PROSPERITY_PRODUCTION_REFERENCE`; correct today, but needs re-pasting on every retune, and the derivation is invisible |
 | Guard Node *globals* in client `src/` | `client/test/assetConformance.test.ts` | C1-10 already blocks `from "node:"` imports; `types: ["node"]` also admits bare `process`/`Buffer`/`__dirname`, which no rule catches. **Unowned.** It was asked of the C1-10 worker, which then died on a 529 before replying, so the request may never have been read — see "Assignments outlive agents" below |
+| Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
 | Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
 | Import the shared city tier constant | `client/src/ui/worldCityViewModel.ts` | Replaces the local `as const` copy; values identical, type widens harmlessly (checked) |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
