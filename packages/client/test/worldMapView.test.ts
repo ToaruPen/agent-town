@@ -247,6 +247,91 @@ describe("buildWorldMapViewModel", () => {
   });
 });
 
+describe("world map territory outline", () => {
+  it("outlines the rim against off-map and leaves the frontier between two nations uncased", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+
+    const rim = view.territoryEdges.find(
+      ({ pos, side }) => pos.x === 1 && pos.y === 0 && side === "top",
+    );
+    expect(rim).toMatchObject({ polityId: "polity-1", hasCasing: true });
+
+    const frontier = view.territoryEdges.filter(
+      ({ pos, side }) => pos.x === 2 && pos.y === 1 && side === "left",
+    );
+    expect(frontier).toMatchObject([{ polityId: "polity-2", hasCasing: false }]);
+  });
+
+  it("draws no edge between two cells the same nation holds", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+
+    // (1,0) and (2,0) are both polity-1, so the side they share is interior.
+    expect(
+      view.territoryEdges.filter(({ pos, side }) => pos.x === 1 && pos.y === 0 && side === "right"),
+    ).toEqual([]);
+  });
+
+  it("gives every edge a banner colour to paint it with", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+    const banners = new Map(
+      assignNationBanners(historyFixture().polities).map(
+        ({ nationId, color }) => [nationId, hexColor(color)] as const,
+      ),
+    );
+
+    expect(view.territoryEdges.length).toBeGreaterThan(0);
+    for (const edge of view.territoryEdges) {
+      expect(edge.bannerColor).toBe(banners.get(edge.polityId));
+    }
+  });
+});
+
+describe("world map city tiers", () => {
+  it("sizes a city from the population its nation reports for it", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null, [
+      { cityId: "city-polity-1-1", population: 9000, developmentLevel: 4 },
+      { cityId: "city-polity-2-1", population: 100, developmentLevel: 1 },
+    ]);
+
+    const capital = view.cities.find(({ id }) => id === "city-polity-1-1");
+    const small = view.cities.find(({ id }) => id === "city-polity-2-1");
+    expect(capital?.glyph.tier).toBe(4);
+    expect(small?.glyph.tier).toBe(1);
+    expect(capital?.glyph.radiusPx).toBeGreaterThan(small?.glyph.radiusPx ?? 0);
+  });
+
+  /** A rival's collapse must not resize anyone else's city — the thresholds are absolute. */
+  it("leaves one nation's tier alone when the other empties out", () => {
+    const held = buildWorldMapViewModel(historyFixture(), null, [
+      { cityId: "city-polity-1-1", population: 6000, developmentLevel: 3 },
+      { cityId: "city-polity-2-1", population: 9000, developmentLevel: 5 },
+    ]);
+    const collapsed = buildWorldMapViewModel(historyFixture(), null, [
+      { cityId: "city-polity-1-1", population: 6000, developmentLevel: 3 },
+      { cityId: "city-polity-2-1", population: 0, developmentLevel: 0 },
+    ]);
+
+    const before = held.cities.find(({ id }) => id === "city-polity-1-1")?.glyph;
+    const after = collapsed.cities.find(({ id }) => id === "city-polity-1-1")?.glyph;
+    expect(after).toEqual(before);
+  });
+
+  /** What the chronicle renders today: it has no nation state until the map gets a live host. */
+  it("falls back to the smallest tier when it is given no nation state at all", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+
+    expect(view.cities.map(({ glyph }) => glyph.tier)).toEqual([1, 1]);
+  });
+
+  it("keeps capitals as diamonds whether or not their population is known", () => {
+    const known = buildWorldMapViewModel(historyFixture(), null, [
+      { cityId: "city-polity-1-1", population: 9000, developmentLevel: 4 },
+    ]);
+
+    expect(known.cities.map(({ glyph }) => glyph.shape)).toEqual(["diamond", "diamond"]);
+  });
+});
+
 describe("world map selection", () => {
   it("returns an owned polity and clears selection on sea or unclaimed land", () => {
     const view = buildWorldMapViewModel(historyFixture(), null);

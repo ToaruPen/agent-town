@@ -1,8 +1,7 @@
 import {
+  type NationCityState,
   type Position,
-  WORLD_MAP_CAPITAL_RADIUS_PX,
   WORLD_MAP_CELL_SIZE_PX,
-  WORLD_MAP_CITY_RADIUS_PX,
   WORLD_MAP_POLITY_ALPHA,
   WORLD_MAP_SELECTED_POLITY_ALPHA,
   WORLD_MAP_SETTLEMENT_RADIUS_PX,
@@ -12,6 +11,8 @@ import {
 
 import { MAP_ACCENT_COLOR, MAP_CASING_COLOR, MAP_CITY_FILL_COLOR } from "../render/colors.js";
 import { assignNationBanners } from "../render/nationBanner.js";
+import { type CityGlyph, chronicleCityGlyph } from "./worldCityViewModel.js";
+import { extractTerritoryEdges, type TerritoryEdge } from "./worldTerritoryViewModel.js";
 
 const TERRAIN_VIEW = {
   sea: { label: "海", color: "#1b3442" },
@@ -41,6 +42,13 @@ export interface WorldMapCityViewModel {
   bannerColor: string;
   isCapital: boolean;
   isHighlighted: boolean;
+  /** Population tier, capital shape and the development ratio, decided in `worldCityViewModel`. */
+  glyph: CityGlyph;
+}
+
+/** An outline edge with the colour to paint it in, so the paint pass makes no colour decisions. */
+export interface WorldMapTerritoryEdgeViewModel extends TerritoryEdge {
+  bannerColor: string;
 }
 
 export interface WorldMapRouteViewModel {
@@ -55,6 +63,7 @@ export interface WorldMapViewModel {
   height: number;
   cells: WorldMapCellViewModel[];
   cities: WorldMapCityViewModel[];
+  territoryEdges: WorldMapTerritoryEdgeViewModel[];
   tradeRoutes: WorldMapRouteViewModel[];
   settlement: {
     pos: Position;
@@ -105,6 +114,7 @@ function buildCities(
   history: WorldHistory,
   selectedPolityId: string | null,
   banners: ReadonlyMap<string, string>,
+  cityStates: ReadonlyMap<string, NationCityState>,
 ): WorldMapCityViewModel[] {
   return history.worldMap.cities.map(({ id, name, pos, polityId, isCapital }) => ({
     id,
@@ -114,6 +124,17 @@ function buildCities(
     bannerColor: banners.get(polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
     isCapital,
     isHighlighted: polityId === selectedPolityId,
+    glyph: chronicleCityGlyph(cityStates.get(id) ?? null, { isCapital }),
+  }));
+}
+
+function buildTerritoryEdges(
+  history: WorldHistory,
+  banners: ReadonlyMap<string, string>,
+): WorldMapTerritoryEdgeViewModel[] {
+  return extractTerritoryEdges(history.worldMap).map((edge) => ({
+    ...edge,
+    bannerColor: banners.get(edge.polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
   }));
 }
 
@@ -137,15 +158,28 @@ function buildRoutes(
   });
 }
 
+/**
+ * `cityStates` is optional because the chronicle map has no nation state to give it: the live host
+ * that carries one arrives with the world map's own surface. Cities without it draw at the smallest
+ * tier. Pass `nations.flatMap(({ cities }) => cities)` once there is a nation snapshot to hand.
+ */
 export function buildWorldMapViewModel(
   history: WorldHistory,
   selectedPolityId: string | null,
+  cityStates: readonly NationCityState[] = [],
 ): WorldMapViewModel {
+  const banners = bannerColors(history);
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
     cells: buildCells(history, selectedPolityId),
-    cities: buildCities(history, selectedPolityId, bannerColors(history)),
+    cities: buildCities(
+      history,
+      selectedPolityId,
+      banners,
+      new Map(cityStates.map((state) => [state.cityId, state] as const)),
+    ),
+    territoryEdges: buildTerritoryEdges(history, banners),
     tradeRoutes: buildRoutes(history, selectedPolityId),
     settlement: {
       pos: history.worldMap.settlementFrontierPos,
@@ -232,6 +266,71 @@ function drawPolityOverlays(
   context.globalAlpha = previousAlpha;
 }
 
+/** 1 px at the 6 px chronicle cell (visual.md §2.7); the playable surface uses 2 px. */
+const BORDER_WIDTH_PX = 1;
+const CASING_WIDTH_PX = 1;
+const CASING_ALPHA = 0.55;
+
+/**
+ * The rectangle to fill for one edge. `fillRect` rather than `stroke` because a stroked path centres
+ * on the line and lands on half pixels, which at a 6 px cell blurs the only identity channel there is.
+ */
+function edgeRect(
+  edge: WorldMapTerritoryEdgeViewModel,
+  width: number,
+  outward: boolean,
+): [number, number, number, number] {
+  const origin = cellOrigin(edge.pos);
+  const cell = WORLD_MAP_CELL_SIZE_PX;
+  // A band either just inside the cell's own side, or just outside it for the casing behind it.
+  const near = outward ? -width : 0;
+  const far = outward ? cell : cell - width;
+  switch (edge.side) {
+    case "top":
+      return [origin.x, origin.y + near, cell, width];
+    case "bottom":
+      return [origin.x, origin.y + far, cell, width];
+    case "left":
+      return [origin.x + near, origin.y, width, cell];
+    default:
+      return [origin.x + far, origin.y, width, cell];
+  }
+}
+
+/**
+ * The slice of the 2D context the border pass actually uses. Narrowed to these three so the geometry
+ * below can be tested without a canvas, which is the only channel this map's identity travels on.
+ */
+export type BorderPaintContext = Pick<
+  CanvasRenderingContext2D,
+  "fillRect" | "fillStyle" | "globalAlpha"
+>;
+
+/**
+ * Casing first, then every border, so a neighbour's casing can never land on top of a banner. Both
+ * are separate passes over the edge list for the same reason `renderWorldMapCanvas` is layered.
+ */
+export function drawTerritoryBorders(
+  context: BorderPaintContext,
+  edges: readonly WorldMapTerritoryEdgeViewModel[],
+): void {
+  const previousAlpha = context.globalAlpha;
+  context.globalAlpha = CASING_ALPHA;
+  context.fillStyle = hexColor(MAP_CASING_COLOR);
+  for (const edge of edges) {
+    if (!edge.hasCasing) continue;
+    const [x, y, width, height] = edgeRect(edge, CASING_WIDTH_PX, true);
+    context.fillRect(x, y, width, height);
+  }
+  context.globalAlpha = previousAlpha;
+
+  for (const edge of edges) {
+    context.fillStyle = edge.bannerColor;
+    const [x, y, width, height] = edgeRect(edge, BORDER_WIDTH_PX, false);
+    context.fillRect(x, y, width, height);
+  }
+}
+
 function drawRoutes(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   context.lineCap = "round";
   for (const route of view.tradeRoutes) {
@@ -246,17 +345,32 @@ function drawRoutes(context: CanvasRenderingContext2D, view: WorldMapViewModel):
   }
 }
 
+/** A diamond marks a capital, which frees the radius to mean population honestly (visual.md §2.3). */
+function traceCityGlyph(
+  context: CanvasRenderingContext2D,
+  center: Position,
+  glyph: CityGlyph,
+): void {
+  context.beginPath();
+  if (glyph.shape === "circle") {
+    context.arc(center.x, center.y, glyph.radiusPx, 0, Math.PI * 2);
+    return;
+  }
+  context.moveTo(center.x, center.y - glyph.radiusPx);
+  context.lineTo(center.x + glyph.radiusPx, center.y);
+  context.lineTo(center.x, center.y + glyph.radiusPx);
+  context.lineTo(center.x - glyph.radiusPx, center.y);
+  context.closePath();
+}
+
 function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   for (const city of view.cities) {
-    const center = cellCenter(city.pos);
-    const radius = city.isCapital ? WORLD_MAP_CAPITAL_RADIUS_PX : WORLD_MAP_CITY_RADIUS_PX;
-    context.beginPath();
-    context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    traceCityGlyph(context, cellCenter(city.pos), city.glyph);
     context.fillStyle = city.isHighlighted ? hexColor(MAP_ACCENT_COLOR) : city.bannerColor;
     context.fill();
     // The casing is what keeps a banner colour legible on any terrain — visual.md §2.2.2.
     context.strokeStyle = hexColor(MAP_CASING_COLOR);
-    context.lineWidth = 1;
+    context.lineWidth = city.glyph.ringWidthPx;
     context.stroke();
   }
 }
@@ -297,6 +411,7 @@ export function renderWorldMapCanvas(canvas: HTMLCanvasElement, view: WorldMapVi
   context.imageSmoothingEnabled = false;
   drawTerrain(context, view);
   drawPolityOverlays(context, view.cells);
+  drawTerritoryBorders(context, view.territoryEdges);
   drawRoutes(context, view);
   drawCities(context, view);
   drawSettlement(context, view);
