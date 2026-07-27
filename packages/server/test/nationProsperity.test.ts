@@ -1,4 +1,4 @@
-import type { NationState } from "@agent-town/shared";
+import { NATION_PROSPERITY_PRODUCTION_REFERENCE, type NationState } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import { computeProsperity } from "../src/sim/nation/prosperity.js";
@@ -67,6 +67,6 @@ describe("computeProsperity", () => {
   it("uses seasonal per-capita food output in the production component", () => {
     const score = computeProsperity(nationFixture({ population: 2_500 }));
 
-    expect(score.production).toBeCloseTo(0.321_428_571_428_571_45);
+    expect(score.production).toBeCloseTo(225 / NATION_PROSPERITY_PRODUCTION_REFERENCE);
   });
 });
