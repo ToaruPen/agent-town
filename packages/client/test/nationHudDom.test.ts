@@ -25,10 +25,12 @@ const CLIENT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 function loadIndexBody(): string {
   const html = readFileSync(join(CLIENT_ROOT, "index.html"), "utf8");
   const opening = html.indexOf("<body>");
+  const script = html.indexOf('<script type="module"', opening);
   const closing = html.indexOf("</body>");
   expect(opening).toBeGreaterThan(-1);
-  expect(closing).toBeGreaterThan(opening);
-  return html.slice(opening + "<body>".length, closing);
+  expect(script).toBeGreaterThan(opening);
+  expect(closing).toBeGreaterThan(script);
+  return html.slice(opening + "<body>".length, script);
 }
 
 /** Mirrors `findNationHudRoots` in `main.ts`. A null here is exactly the failure that blanks the page. */
