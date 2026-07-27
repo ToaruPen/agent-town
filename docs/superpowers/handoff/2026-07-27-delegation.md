@@ -97,6 +97,7 @@ A client worker gets the same rules as a simulation worker, plus:
 
 - `git status` is clean and the commit actually exists — do not trust a "done" report.
 - `just check` and `just test` pass on a fresh checkout of the branch.
+- **Run the gate inside the branch's own worktree, never from the primary.** Measured on 2026-07-27: `npx vitest list` from the primary returned 2395 tests, of which 1599 came from `.worktrees/` siblings. The primary gate therefore runs other workers' in-flight code, and a worker mid-TDD with a deliberately failing test turns it red for everybody. A worktree contains no nested `.worktrees/`, so running the gate inside one is clean — a sane test-file count is the tell. CI is unaffected because `.worktrees/` is gitignored and never exists in a fresh checkout. A fix to the root config is in progress; until it lands, this is a hard rule, and after it lands the file count is still worth a glance.
 - The diff touches only what the task brief allows, and stays inside the worker's package.
 - `packages/shared/src/nation.ts` and the protocol types match the frozen contracts byte for byte.
 - The new `sim/nation/` files contain no `Date.now`, `Math.random` or `process.`.
