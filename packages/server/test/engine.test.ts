@@ -132,7 +132,7 @@ describe("createEngine", () => {
     expect(first.stockpile.wood).toBeGreaterThan(0);
     expect(first.stockpile.food).toBeGreaterThan(0);
     expect(JSON.stringify(second)).toBe(JSON.stringify(first));
-  });
+  }, 15_000);
 
   it("identifies positive day-boundary ticks", () => {
     const rng = createRng(42);

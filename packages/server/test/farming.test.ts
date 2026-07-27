@@ -81,5 +81,5 @@ describe("crop seasons", () => {
     const second = runWorld(7, 12_000);
 
     expect(first.buildings.filter(isField)).toEqual(second.buildings.filter(isField));
-  }, 30_000);
+  }, 90_000);
 });

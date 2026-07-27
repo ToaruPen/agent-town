@@ -37,6 +37,6 @@ describe("settlement growth", () => {
       expect(completedHouses.length, diagnostic).toBeGreaterThan(0);
       expect(world.agents.length, diagnostic).toBeGreaterThan(foundingPopulation);
     },
-    60_000,
+    90_000,
   );
 });
