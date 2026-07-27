@@ -23,6 +23,7 @@ import {
   type Position,
   SEASONS,
   STARVATION_HEALTH_PER_DAY,
+  seasonOfTick,
   TICKS_PER_DAY,
   type Tile,
   TREE_REGROWTH_CAP,
@@ -35,6 +36,7 @@ import { findNearestReachable } from "./astar.js";
 import { stepAgent, type TraversalRecorder } from "./executor.js";
 import { chooseFoodStore, runFacilityDay, runFacilityInterval } from "./facilityOperation.js";
 import type { Planner } from "./fakePlanner.js";
+import { advanceCrops } from "./farming.js";
 import { updateFoodSecurityDesires } from "./foodAnxiety.js";
 import { advanceSociety, createSocietyMemory, type SocietyMemory } from "./society.js";
 import { advanceSpatialDemands } from "./spatialDemand.js";
@@ -161,6 +163,7 @@ function runDailyHooks(
   berryCaps: (number | null)[],
   dirtyTrailIndexes: Set<number>,
 ): void {
+  advanceCrops(world, seasonOfTick(world.tick));
   runFacilityDay(world);
   for (const index of decayTrails(world)) dirtyTrailIndexes.add(index);
   regrowResources(world, berryCaps);
