@@ -55,16 +55,30 @@ nothing made optional.
 - The farming plan's Task 10 is closed except for two items that need the owner: a browser judgement
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation, Tasks 1–5 merged,
-  Task 7 balance outstanding) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client, C1-1,
+  Task 7 balance in flight) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client, C1-1,
   C1-2 and C1-6a merged).
+- A shared-chores commit (`c8a7c47`) sits between them. It landed `NATION_CITY_TIER_MIN_POPULATIONS`, so
+  the client's provisional copy in `worldCityViewModel.ts` can now be replaced by an import — the values
+  match exactly, so nothing but the import changes. It also added a server test that pins the eight private
+  polity template colours, which is the tripwire the client's hand-copied `ARCHIVAL_COLORS` table needed:
+  change the server's palette and a server test fails naming the client file to re-measure.
+- **Two constants in `shared/src/constants.ts` are dead and still declared.**
+  `WORLD_MAP_CITY_RADIUS_PX` and `WORLD_MAP_CAPITAL_RADIUS_PX` have one repo-wide occurrence each, their own
+  declaration; C1-6a replaced them with population tiers and the capital diamond. The chores worker was told
+  to report references rather than delete, found four doc mentions, and correctly declined. Those docs are
+  now corrected, so the deletion is unblocked and is a shared-package chore.
 - The owner asked for a world-map ↔ local-map traversal like Songs of Syx or RimWorld. The local view is
   a derived, non-authoritative view of the player's own cities; the resident-scale sim stays frozen.
   Design docs for the traversal, the ruler HUD, the visual identity, the directive sprites, the asset policy
   and the sound design all live in `docs/superpowers/design/` and are the client worker's brief.
 - **Two things wait on the owner and cannot be delegated.** The nine staged audio cues and seven alternates
   need auditioning — risks 2 through 6 in the audio design are decisions only a listener can make, and the
-  authoring agent could not hear any of them. And the `dev-city.html` judgement is still outstanding across
-  two rounds because the worker's browser access was denied.
+  authoring agent could not hear any of them. And the `dev-city.html` judgement cannot be delegated at all:
+  browser access is denied to every agent here, not to one unlucky worker. Two workers were denied, then the
+  supervisor tried directly and was denied too. Stop spending dispatches on it. What an agent *can* do is
+  serve the page — `pnpm --filter @agent-town/client dev` puts it at `/dev-city.html` on the Vite port — and
+  the owner opens it. The questions waiting there are the open square, whether six deliberate gaps read as
+  room for growth or as holes, and forest tree density.
 - **The territory fill is the worst-separated element on the world map.** `buildCells` washes territory in
   archival `Polity.color`, whose worst pairwise ΔE76 is 12.6 (sable/river), while the banner ring the city
   dots and borders use holds a 40.86 floor. The largest coloured region therefore has the least separation,
