@@ -47,8 +47,16 @@ nothing made optional.
   determinism scan all pass. `origin/main` matches, and CI is green.
 - **`just check` does not type-check any test file.** All three package tsconfigs include only
   `src/**/*.ts`, so a test can assert against a contract shape that no longer exists and stay green — which
-  silently weakens the per-task contract verification below. A tooling task is fixing it; it was told to
-  enumerate errors before fixing any, and to leave alone the test files a sibling worker holds open.
+  silently weakens the per-task contract verification below. **Still open.** A first attempt was dispatched
+  and abandoned — the `tooling-typecheck-tests` branch and worktree exist but sit at their base commit with
+  nothing committed, so do not read them as work in progress.
+  Measured on main at `6be468a`: adding `test/**/*.ts` to each package's `include` and running `tsc` yields
+  **0 errors in all three packages**. So the fix is a clean-window change today, not an excavation, and the
+  window closes as soon as a worker merges a test that only ever ran untyped. Two cautions for whoever takes
+  it. Sibling worktrees on older bases *do* have errors — `wsClient.test.ts` there fails against the
+  pre-`c8215cf` protocol — so enumerate inside the branch's own worktree and do not treat another worktree's
+  errors as main's. And bring `lib`/`target` along: test files already use syntax like `Array.prototype.at`
+  that a `lib` predating `es2022` rejects, which turns the gate red on code that is fine.
 - CI is roughly 2.7× slower than a local run. Determinism tests that pass locally can time out there.
   Timeouts are set per test at 3× or more of the measured local duration; there is deliberately no
   global `testTimeout` in `vitest.config.ts`, so a slow test states its own budget where a reader sees it.
@@ -58,8 +66,13 @@ nothing made optional.
   Task 7 balance in flight) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client, C1-1,
   C1-2 and C1-6a merged).
 - A shared-chores commit (`c8a7c47`) sits between them. It landed `NATION_CITY_TIER_MIN_POPULATIONS`, so
-  the client's provisional copy in `worldCityViewModel.ts` can now be replaced by an import — the values
-  match exactly, so nothing but the import changes. It also added a server test that pins the eight private
+  the client's provisional copy in `worldCityViewModel.ts` can now be replaced by an import. The values match
+  exactly. The types do not: the client's copy is `as const`, the shared one is a mutable `number[]`, so the
+  import drops the readonly tuple. That was checked rather than assumed — swapping the local declaration to
+  `number[]` and running `pnpm -r exec tsc` exits 0 with no errors, nothing repo-wide keys off
+  `typeof CITY_TIER_MIN_POPULATIONS`, and `CityTier` is written literally as `1 | 2 | 3 | 4` rather than
+  derived from the array, which is what makes the widening harmless. Note the check's reach: that `tsc` run
+  does not cover test files yet, so a test depending on the literal types would not have shown up. It also added a server test that pins the eight private
   polity template colours, which is the tripwire the client's hand-copied `ARCHIVAL_COLORS` table needed:
   change the server's palette and a server test fails naming the client file to re-measure.
 - **Two constants in `shared/src/constants.ts` are dead and still declared.**
