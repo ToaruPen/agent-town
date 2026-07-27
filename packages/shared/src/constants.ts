@@ -312,8 +312,47 @@ export const TRAIL_MOVE_TICK_MULTIPLIER = {
   establishedTrail: 0.65,
 } as const satisfies Readonly<Record<TrailLevel, number>>;
 
-export const NATION_TICKS_PER_SEASON = 300;
-export const NATION_TICKS_PER_YEAR = NATION_TICKS_PER_SEASON * SEASONS.length;
+export const NATION_TICKS_PER_SEASON = 300; // 30 s at x1
+export const NATION_TICKS_PER_YEAR = NATION_TICKS_PER_SEASON * SEASONS.length; // 2 min at x1
 export const SPEED_MULTIPLIERS = [0, 1, 2, 4, 8] as const;
 export const DEFAULT_SPEED: import("./nation.js").SpeedMultiplier = 1;
-export const CLOCK_BROADCAST_MS = 1000;
+export const CLOCK_BROADCAST_MS = 1000; // wall-clock heartbeat; stays ~1 Hz at every speed
+
+/** Live residents represented by one population point recorded in world history. */
+export const NATION_POPULATION_PER_HISTORY_POINT = 100;
+/** Relative population weight assigned to a capital during the initial city split. */
+export const NATION_CAPITAL_POPULATION_WEIGHT = 2;
+/** Relative population weight assigned to a non-capital city during the initial city split. */
+export const NATION_CITY_POPULATION_WEIGHT = 1;
+/** Per-cell food production contributed by each owned terrain kind. */
+export const NATION_TERRAIN_FOOD_PRODUCTION = {
+  sea: 0,
+  plains: 2,
+  forest: 1,
+  hills: 0.5,
+  mountains: 0.25,
+} as const satisfies Readonly<Record<WorldMapTerrain, number>>;
+/** Per-cell material production contributed by each owned terrain kind. */
+export const NATION_TERRAIN_MATERIAL_PRODUCTION = {
+  sea: 0,
+  plains: 0.25,
+  forest: 1,
+  hills: 1.5,
+  mountains: 2,
+} as const satisfies Readonly<Record<WorldMapTerrain, number>>;
+/** Base seasons of food production held as the initial food stock. */
+export const NATION_STARTING_FOOD_PRODUCTION_MULTIPLIER = 4;
+/** Extra initial food-production seasons granted per mutual-aid value weight. */
+export const NATION_STARTING_FOOD_MUTUAL_AID_COEFFICIENT = 2;
+/** Extra initial food-production seasons granted per stewardship value weight. */
+export const NATION_STARTING_FOOD_STEWARDSHIP_COEFFICIENT = 2;
+/** Base seasons of material production held as the initial material stock. */
+export const NATION_STARTING_MATERIAL_PRODUCTION_MULTIPLIER = 4;
+/** Extra initial material-production seasons granted per valor value weight. */
+export const NATION_STARTING_MATERIAL_VALOR_COEFFICIENT = 2;
+/** Extra initial material-production seasons granted per order value weight. */
+export const NATION_STARTING_MATERIAL_ORDER_COEFFICIENT = 2;
+/** Base wealth held for each owned territory cell. */
+export const NATION_STARTING_WEALTH_PER_TERRITORY_CELL = 2;
+/** Extra per-cell initial wealth granted per commerce value weight. */
+export const NATION_STARTING_WEALTH_COMMERCE_COEFFICIENT = 6;

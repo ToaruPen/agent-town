@@ -1,11 +1,11 @@
 import type { SEASONS } from "./constants.js";
 import type { WorldHistory } from "./history.js";
 
-export type NationId = string;
+export type NationId = string; // equals Polity.id
 export type DirectiveId = string;
 export type Season = (typeof SEASONS)[number];
 export type NationController = "player" | "agent";
-export type SpeedMultiplier = 0 | 1 | 2 | 4 | 8;
+export type SpeedMultiplier = 0 | 1 | 2 | 4 | 8; // 0 = paused
 
 export interface NationStocks {
   food: number;
@@ -49,7 +49,7 @@ export interface ActiveDirective {
 }
 
 export interface NationCityState {
-  cityId: string;
+  cityId: string; // WorldCity.id
   population: number;
   developmentLevel: number;
 }
@@ -115,7 +115,7 @@ export interface NationWorldState {
   year: number;
   season: Season;
   speed: SpeedMultiplier;
-  history: WorldHistory;
+  history: WorldHistory; // unchanged contract, carries worldMap
   nations: NationState[];
   playerNationId: NationId | null;
 }
