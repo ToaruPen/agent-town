@@ -430,6 +430,8 @@ Two consequences for the simulation worker, because they are easy to break from 
 - Add a headless smoke script (not a server) that runs 20 game years at a fixed seed with every nation on auto-pilot and prints per-nation prosperity every 5 years.
 - Tune only `packages/shared/src/constants.ts` until: no nation collapses to zero population by year 20 under auto-pilot; the ranking changes hands at least once; the top and bottom prosperity totals differ by at least 15%; no stock goes negative or unbounded.
 - Record the final constants and the resulting 20-year table in the commit body.
+- **The taboo threshold sits on a knife edge and the constants alone do not show it.** At Task 3's first values the moss-keeper polity (`stewardship` 0.8) lands at affinity −0.8 for `developTimber`, just past the −0.75 threshold, and −0.735 for `clearFarmland`, just short of it. So it refuses to fell timber but will grudgingly clear land, and a small change to either the threshold or a `stewardship` coefficient flips that. Any tuning here must re-check that at least one generated polity still refuses at least one kind — the reachability test guards it, but read what it actually asserts before changing a coefficient.
+- `chooseDirective` takes a `polity` it does not use, because affinity is precomputed into each option. Leave the parameter: N4's LLM ruler and any future scoring that reads `ambition` or the taboo prose will want it, and removing it would be a contract change for no gain.
 
 ## Completion Criteria
 
