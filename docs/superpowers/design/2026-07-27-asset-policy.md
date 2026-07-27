@@ -40,13 +40,23 @@ So the real palette is roughly forty colours with a short tail of near-duplicate
 
 With that gate in place the provenance stops mattering — model, human or script, non-conforming art fails `just check`. Without it, "pixel perfect" is a hope that decays with every asset added. The gate is also the cheap part: the palette is already measured above, and reading PNGs in a test needs no new runtime dependency in `packages/client`.
 
-**Quantisation is a deterministic post-process, not a prompt instruction.** If a tile is generated, it goes through snap-to-grid and quantise-to-palette as a scripted step whose output is committed, with the script committed alongside it. Regenerating must produce the same bytes.
+**Snapping and quantisation happen before the file reaches the repo.** If a tile is generated, it gets snapped to the grid and cleaned of inconsistent pixels first, and only the cleaned file is committed.
+
+That step does not have to be built here. [Sprite Fusion](https://www.spritefusion.com/) ships a **Pixel Snapper** — batch cleanup of messy, blurry or off-grid pixel art into a crisp grid — alongside its tilemap editor and its own pixel-art generator. That covers the grid and the stray-pixel problem as a product rather than as something to write. What it is not known to cover is *this project's* palette and outline convention: whether it can quantise to a declared 40-colour set and force outlines to `#3f2631` has not been verified. So the producer-side tool and the consumer-side gate are complementary, not alternatives — the snapper makes conforming art easy to produce, and the conformance test is what guarantees only conforming art is in the tree.
+
+Practical consequence: Sprite Fusion is a hosted browser tool, so it is a **manual step in the owner's hands**, not something a worker or CI can invoke. The workflow is generate → snap in the browser → conformance test in the repo. A worker never fetches or generates art on its own.
+
+Sprite Fusion's tilemap editor is worth a separate note, because its obvious use here is not the real one. The local city view's layout is *generated deterministically from nation state* — a hand-authored tilemap is the opposite of that and would not fit. Where it does fit is authoring the multi-tile compositions that `2026-07-27-directive-sprites.md` describes — the mine head's roof/wall/emblem arrangement, the timber camp's prop group — as reusable stamps that the generator then places. Author once, export JSON, commit a small data file, and let the generator decide where stamps go. That is worth doing when C1-8 needs those stamps, and not before.
 
 ## What this does not change yet
 
-The current need is zero. The three directives that had no sprite representation — `developTimber`, `openMine`, `holdFestival` — all turned out to be buildable from the vendored packs with no new file (`2026-07-27-directive-sprites.md`). So this document is policy for when a real need appears, and the pipeline gets built then rather than speculatively.
+The current need is zero, and the owner is explicit that getting by on already-published assets is a fine outcome rather than a compromise. The three directives that had no sprite representation — `developTimber`, `openMine`, `holdFestival` — all turned out to be buildable from the vendored packs with no new file (`2026-07-27-directive-sprites.md`). So this document is policy for when a real need appears, and nothing gets built speculatively.
 
 Two things to settle at that point, not now:
 
-- **Verify the tool exists.** Whether the Codex CLI in use has an image-generation tool available, and in what form, has not been checked. Design the workflow after confirming it, not before.
+- **Verify the tool exists.** Whether the Codex CLI in use has an image-generation tool available, and in what form, has not been checked. Design the workflow after confirming it, not before. Sprite Fusion's own generator is a second option and needs no CLI capability at all.
 - **`AGENTS.md` currently says no new assets, flatly.** That is the right default while no gate exists, because it makes a worker stop and report rather than improvise. When the gate lands, the rule becomes "no new assets that do not pass the conformance test".
+
+## Audio
+
+There is no audio in the project at all. A separate investigation is designing the sound and collecting CC0 candidates; its document will land beside this one. The policy above applies in spirit — licence verified at the source and committed alongside the files, no new runtime dependency where a browser API will do, and a conformance rule rather than an intention — but sound has one problem the visuals do not, and it is the harder one: at x8 a season boundary fires every 3.75 seconds across four nations, so anything pleasant at x1 becomes a machine gun. That has to be solved structurally, not with a volume slider.
