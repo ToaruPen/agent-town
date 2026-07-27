@@ -102,7 +102,10 @@ describe("extractTerritoryEdges", () => {
 
   /**
    * At a 6 px cell, casing both sides of a shared frontier puts 4 px of dark across it and leaves no
-   * terrain visible. Two banners are ≥40 apart by construction, so the seam separates nothing anyway.
+   * terrain visible in either cell. That alone decides it. Two banners are also far enough apart that
+   * the seam separates nothing — C1-1b measured a 40.86 worst-case floor across every colour set the
+   * generator can draw — but that is a measurement of today's palette, not a property to rely on: a
+   * ninth template or a populated override table would lower it, and this rule would still hold.
    */
   it("leaves a nation-nation frontier uncased while still drawing both borders", () => {
     const edges = extractTerritoryEdges(grid(["AB"]));
