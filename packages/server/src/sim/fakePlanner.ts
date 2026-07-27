@@ -3,13 +3,17 @@ import {
   type AgentTask,
   DAYS_PER_SEASON,
   FATIGUE_REST_THRESHOLD,
+  type Field,
   HOUSE_CAPACITY,
   HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
+  isField,
   isHouse,
   type Position,
+  RESIDENTS_PER_FIELD,
   type ResourceKind,
   STOCKPILE_TARGET_FOOD,
+  seasonOfTick,
   WANDER_RADIUS,
   WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
@@ -135,6 +139,46 @@ function newHouseTasks(
   return site === null ? null : [{ kind: "build", pos: site }];
 }
 
+function nearestFieldTarget(
+  world: WorldState,
+  agent: AgentState,
+  matches: (field: Field) => boolean,
+): Position | null {
+  const candidates = world.buildings
+    .filter(isField)
+    .filter(matches)
+    .map(({ pos }) => pos);
+  return findNearestReachable(world, agent.pos, candidates);
+}
+
+function fieldTasks(world: WorldState, agent: AgentState): AgentTask[] | null {
+  const season = seasonOfTick(world.tick);
+  if (season === "autumn") {
+    const ripe = nearestFieldTarget(
+      world,
+      agent,
+      (field) => field.complete && field.stage === "ripe",
+    );
+    if (ripe !== null) return [{ kind: "harvest", pos: ripe }];
+  }
+  if (season === "spring") {
+    const fallow = nearestFieldTarget(
+      world,
+      agent,
+      (field) => field.complete && field.stage === "fallow",
+    );
+    if (fallow !== null) return [{ kind: "sow", pos: fallow }];
+  }
+  const incomplete = nearestFieldTarget(world, agent, (field) => !field.complete);
+  if (incomplete !== null) return [{ kind: "till", pos: incomplete }];
+
+  const completedFields = world.buildings.filter(isField).filter(({ complete }) => complete).length;
+  const targetFields = Math.ceil(world.agents.length / RESIDENTS_PER_FIELD);
+  if (completedFields >= targetFields) return null;
+  const site = newHouseSite(world, agent);
+  return site === null ? null : [{ kind: "till", pos: site }];
+}
+
 function resourceTasks(
   world: WorldState,
   agent: AgentState,
@@ -158,6 +202,8 @@ export class FakePlanner implements Planner {
     const winterWoodTarget = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
     const house = newHouseTasks(world, agent, winterWoodTarget);
     if (house !== null) return house;
+    const fields = fieldTasks(world, agent);
+    if (fields !== null) return fields;
     const resources = resourceTasks(world, agent, winterWoodTarget);
     if (resources !== null) return resources;
 

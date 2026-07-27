@@ -1,5 +1,6 @@
 import {
   type AgentState,
+  type CropStage,
   DAYS_PER_SEASON,
   dailyFoodNeed,
   FACILITY_FOOD_CAPACITY,
@@ -7,14 +8,18 @@ import {
   FACILITY_WOOD_COST,
   FATIGUE_REST_THRESHOLD,
   type Facility,
+  FIELD_TILL_WORK,
+  type Field,
   FOOD_PER_MEAL,
   foodDaysRemaining,
   HOUSE_BUILD_TICKS,
   HOUSE_WOOD_COST,
   HUNGER_EAT_THRESHOLD,
+  isField,
   RATION_BELOW_FOOD_DAYS,
   STOCKPILE_TARGET_FOOD,
   STOCKPILE_TARGET_WOOD,
+  TICKS_PER_DAY,
   type Tile,
   WOOD_BURN_PER_AGENT_PER_DAY,
   type WorldState,
@@ -72,6 +77,46 @@ function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
       worldMap: makeWorldMapFixture(),
     },
   };
+}
+
+function seasonTick(index: number): number {
+  return index * DAYS_PER_SEASON * TICKS_PER_DAY;
+}
+
+function completeField(stage: CropStage, pos: { x: number; y: number }): Field {
+  return {
+    kind: "field",
+    pos,
+    progress: FIELD_TILL_WORK,
+    complete: true,
+    stage,
+  };
+}
+
+function farmingWorld(stage: CropStage, tick: number): WorldState {
+  const agent = createAgent();
+  const world = createWorld(
+    agent,
+    Array.from({ length: 6 }, () => ({ terrain: "plains", resource: null })),
+  );
+  world.tick = tick;
+  world.buildings = [
+    { kind: "house", pos: { x: 1, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+    completeField(stage, { x: 3, y: 0 }),
+  ];
+  return world;
+}
+
+function firstAgent(world: WorldState): AgentState {
+  const agent = world.agents[0];
+  if (agent === undefined) throw new Error("missing test agent");
+  return agent;
+}
+
+function completeHouse(world: WorldState): WorldState["buildings"][number] {
+  const house = world.buildings.find((building) => building.kind === "house");
+  if (house === undefined) throw new Error("missing test house");
+  return house;
 }
 
 describe("FakePlanner", () => {
@@ -188,6 +233,7 @@ describe("FakePlanner", () => {
       { terrain: "plains", resource: null },
     ]);
     world.stockpile.food = STOCKPILE_TARGET_FOOD;
+    world.buildings.push(completeField("sown", { x: 0, y: 0 }));
     const winterReserve = WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
     const target = woodTarget(world, winterReserve);
     const planner = new FakePlanner(() => 0);
@@ -319,6 +365,78 @@ describe("FakePlanner", () => {
       kind: "build",
       pos: expect.anything(),
     });
+  });
+
+  it("harvests before it gathers when a field is ripe in autumn", () => {
+    const world = farmingWorld("ripe", seasonTick(2));
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks[0]?.kind).toBe("harvest");
+  });
+
+  it("sows a fallow field in spring", () => {
+    const world = farmingWorld("fallow", seasonTick(0));
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks).toEqual([{ kind: "sow", pos: { x: 3, y: 0 } }]);
+  });
+
+  it.each([
+    ["summer", 1],
+    ["autumn", 2],
+    ["winter", 3],
+  ])("does not sow in %s", (_season, seasonIndex) => {
+    const world = farmingWorld("fallow", seasonTick(seasonIndex));
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks.some((task) => task.kind === "sow")).toBe(false);
+  });
+
+  it("resumes an incomplete field before starting another one", () => {
+    const world = farmingWorld("fallow", seasonTick(1));
+    world.buildings = [
+      completeHouse(world),
+      { kind: "field", pos: { x: 3, y: 0 }, progress: 1, complete: false, stage: "fallow" },
+    ];
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks).toEqual([{ kind: "till", pos: { x: 3, y: 0 } }]);
+  });
+
+  it("starts a field when the settlement has too few", () => {
+    const world = farmingWorld("fallow", seasonTick(1));
+    world.buildings = [completeHouse(world)];
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks[0]?.kind).toBe("till");
+  });
+
+  it("stops tilling once the settlement has a field per resident", () => {
+    const world = farmingWorld("fallow", seasonTick(1));
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(world.buildings.filter(isField)).toHaveLength(1);
+    expect(tasks.some((task) => task.kind === "till")).toBe(false);
+  });
+
+  it("finishes needed housing before working a ripe field", () => {
+    const world = farmingWorld("ripe", seasonTick(2));
+    world.agents.push(
+      createAgent({ id: "agent-2", name: "シラカバ" }),
+      createAgent({ id: "agent-3", name: "スギ" }),
+    );
+    world.stockpile.wood =
+      HOUSE_WOOD_COST + world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+
+    const tasks = new FakePlanner(() => 0).plan(world, firstAgent(world));
+
+    expect(tasks[0]?.kind).toBe("build");
   });
 });
 
@@ -486,6 +604,7 @@ describe("FakePlanner facility priorities", () => {
       woodTile.terrain = "forest";
       woodTile.resource = { kind: "wood", amount: 10 };
     }
+    world.buildings.push(completeField("sown", { x: 1, y: 0 }));
     const planner = new FakePlanner(() => 0);
 
     expect(planner.plan(world, agent)).toEqual([
