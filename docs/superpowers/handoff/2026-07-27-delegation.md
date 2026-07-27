@@ -182,6 +182,28 @@ nothing made optional.
   only a pair worth finding explicitly in C1-1b's 163-set sweep rather than assuming it was covered.
 - No LLM work in N1. Ruler LLMs arrive in N4.
 
+## A live worktree is not readable with a build
+
+The supervisor ran `just check` inside a worker's worktree while that worker was mid-edit, compiled a tree
+that existed for about two minutes between two of its tool calls, and reported the resulting `TS2741` to it
+as a blocker on its branch. The error cited `nationHud.ts(128,55)`; the committed call site is at 148 with
+the required field supplied at 153, so what got compiled had one file already requiring a field and the
+other not yet passing it — a state no commit ever contained. The same intrusion, one step later, rebased
+that worker's branch onto a newer main and moved its hashes without telling it.
+
+Both were the supervisor's, and both invert a rule the supervisor had been issuing all day: every directory
+under `.worktrees/` is another agent's live workspace, and a worker is told never to touch a sibling's. The
+hazard runs in both directions, and **reading a worktree with a build is not a read** — `tsc` and `vitest`
+compile whatever is on disk at that instant, including a half-finished edit.
+
+So: to verify a branch while its author is still working, check the tip out into a scratch directory, wait
+for the author's report, or ask for the numbers. Do not run the gate in place, and do not rebase someone
+else's branch out from under them — if a rebase is needed, ask the author to do it.
+
+One related correction, since it was published to the worker as evidence: the mismatched `77 / 1055` count
+that looked like proof of the mid-edit compile came from the worker's own first report, not from any
+supervisor measurement. The line-number argument establishes the mid-edit compile on its own.
+
 ## Assignments outlive agents
 
 Three times today a worker died mid-task and the artifact left behind said nothing about it. A branch sitting
