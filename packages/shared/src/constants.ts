@@ -356,3 +356,111 @@ export const NATION_STARTING_MATERIAL_ORDER_COEFFICIENT = 2;
 export const NATION_STARTING_WEALTH_PER_TERRITORY_CELL = 2;
 /** Extra per-cell initial wealth granted per commerce value weight. */
 export const NATION_STARTING_WEALTH_COMMERCE_COEFFICIENT = 6;
+
+/** One-time stock cost paid when each directive becomes active. */
+export const NATION_DIRECTIVE_COSTS = {
+  clearFarmland: { food: 20, materials: 30, wealth: 10 },
+  developTimber: { food: 10, materials: 20, wealth: 15 },
+  openMine: { food: 15, materials: 50, wealth: 30 },
+  growCity: { food: 30, materials: 40, wealth: 50 },
+  encourageStores: { food: 10, materials: 10, wealth: 20 },
+  holdFestival: { food: 20, materials: 0, wealth: 40 },
+} as const satisfies Readonly<
+  Record<import("./nation.js").DirectiveKind, import("./nation.js").NationStocks>
+>;
+/** Seasons each directive remains active before its completion effect. */
+export const NATION_DIRECTIVE_DURATIONS = {
+  clearFarmland: 2,
+  developTimber: 2,
+  openMine: 3,
+  growCity: 3,
+  encourageStores: 2,
+  holdFestival: 1,
+} as const satisfies Readonly<Record<import("./nation.js").DirectiveKind, number>>;
+/** Signed cultural-value coefficients used to score directive affinity. */
+export const NATION_DIRECTIVE_CULTURAL_AFFINITIES = {
+  clearFarmland: {
+    commerce: 0.15,
+    faith: 0,
+    knowledge: 0.1,
+    kinship: 0.1,
+    mutualAid: 0.3,
+    order: 0.15,
+    stewardship: -1,
+    valor: 0,
+  },
+  developTimber: {
+    commerce: 0,
+    faith: 0,
+    knowledge: 0,
+    kinship: 0,
+    mutualAid: 0,
+    order: 0,
+    stewardship: -1,
+    valor: 0,
+  },
+  openMine: {
+    commerce: 0.3,
+    faith: 0,
+    knowledge: 0.35,
+    kinship: 0,
+    mutualAid: 0,
+    order: 0.2,
+    stewardship: -0.75,
+    valor: 0.2,
+  },
+  growCity: {
+    commerce: 0.6,
+    faith: 0,
+    knowledge: 0.2,
+    kinship: 0.2,
+    mutualAid: 0.1,
+    order: 0.4,
+    stewardship: 0,
+    valor: 0,
+  },
+  encourageStores: {
+    commerce: 0,
+    faith: 0,
+    knowledge: 0,
+    kinship: 0.2,
+    mutualAid: 0.7,
+    order: 0.25,
+    stewardship: 0.3,
+    valor: 0,
+  },
+  holdFestival: {
+    commerce: 0,
+    faith: 0.7,
+    knowledge: 0,
+    kinship: 0.5,
+    mutualAid: 0.2,
+    order: 0,
+    stewardship: 0,
+    valor: 0,
+  },
+} as const satisfies Readonly<
+  Record<import("./nation.js").DirectiveKind, Readonly<Record<CulturalValue, number>>>
+>;
+/** Affinity at or below this value makes a directive culturally taboo. */
+export const NATION_DIRECTIVE_TABOO_AFFINITY = -0.75;
+/** Maximum development level reachable by a nation city. */
+export const NATION_CITY_DEVELOPMENT_CAP = 5;
+/** Permanent food-production increase when farmland clearing completes. */
+export const NATION_CLEAR_FARMLAND_FOOD_PRODUCTION_BONUS = 10;
+/** Permanent material-production increase when timber development completes. */
+export const NATION_DEVELOP_TIMBER_MATERIAL_PRODUCTION_BONUS = 8;
+/** Permanent material-production increase when mine development completes. */
+export const NATION_OPEN_MINE_MATERIAL_PRODUCTION_BONUS = 16;
+/** Development levels added when city growth completes. */
+export const NATION_GROW_CITY_DEVELOPMENT_BONUS = 1;
+/** Food added to stocks when a storage-encouragement directive completes. */
+export const NATION_ENCOURAGE_STORES_FOOD_BONUS = 50;
+/** Stability added when a festival completes. */
+export const NATION_HOLD_FESTIVAL_STABILITY_BONUS = 8;
+/** Culture added when a festival completes. */
+export const NATION_HOLD_FESTIVAL_CULTURE_BONUS = 5;
+/** Score added when the chancellor responds to a reported deficit. */
+export const NATION_CHANCELLOR_DEFICIT_BONUS = 0.5;
+/** Stability below this value makes festivals a chancellor priority. */
+export const NATION_CHANCELLOR_LOW_STABILITY = 40;
