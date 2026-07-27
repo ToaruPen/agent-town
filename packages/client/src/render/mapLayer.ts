@@ -1,13 +1,15 @@
-import type { WorldState } from "@agent-town/shared";
+import { seasonOfTick, type Tile, type WorldState } from "@agent-town/shared";
 import { type Container, Graphics, Sprite } from "pixi.js";
 
 import {
   objectDepth,
   resourceSpritePath,
   SPRITE_ASSETS,
+  seasonGroundTint,
   TILE_SIZE,
   terrainSpritePath,
   terrainTint,
+  treeSpritePath,
   undergrowthSpritePath,
   type WorldObjectKind,
 } from "./sprites.js";
@@ -16,6 +18,8 @@ import { drawRockCluster, drawWater } from "./terrainDecor.js";
 export { TILE_SIZE } from "./sprites.js";
 
 const MAP_OBJECT_LABEL = "map-object";
+// Multiply tint cannot add gray, so winter pulls down autumn reds to mute the foliage.
+const WINTER_TREE_TINT = 0x88c4e8;
 
 function createTileSprite(path: string, x: number, y: number): Sprite {
   const sprite = Sprite.from(path);
@@ -44,6 +48,56 @@ function clearMapObjects(layer: Container): void {
   }
 }
 
+function multiplyTint(left: number, right: number): number {
+  const red = Math.round((((left >> 16) & 0xff) * ((right >> 16) & 0xff)) / 0xff);
+  const green = Math.round((((left >> 8) & 0xff) * ((right >> 8) & 0xff)) / 0xff);
+  const blue = Math.round(((left & 0xff) * (right & 0xff)) / 0xff);
+  return (red << 16) | (green << 8) | blue;
+}
+
+function seasonalResourcePath(
+  tile: Tile,
+  season: ReturnType<typeof seasonOfTick>,
+  tileIndex: number,
+): string | null {
+  if (tile.resource?.kind === "wood" && tile.resource.amount > 0) {
+    return treeSpritePath(season, tileIndex);
+  }
+  return resourceSpritePath(tile);
+}
+
+function renderTile(
+  groundLayer: Container,
+  objectLayer: Container,
+  tile: Tile,
+  index: number,
+  width: number,
+  season: ReturnType<typeof seasonOfTick>,
+): void {
+  const x = (index % width) * TILE_SIZE;
+  const tileY = Math.floor(index / width);
+  const y = tileY * TILE_SIZE;
+  const terrainPath = terrainSpritePath(tile.terrain, index);
+  if (terrainPath !== null) {
+    const terrainSprite = createTileSprite(terrainPath, x, y);
+    terrainSprite.tint = multiplyTint(terrainTint(tile.terrain), seasonGroundTint(season));
+    groundLayer.addChild(terrainSprite);
+  }
+
+  const resourcePath = seasonalResourcePath(tile, season, index);
+  if (resourcePath !== null) {
+    const resourceSprite = createTileSprite(resourcePath, x, y);
+    if (tile.resource?.kind === "wood" && season === "winter") {
+      resourceSprite.tint = WINTER_TREE_TINT;
+    }
+    addMapObject(objectLayer, resourceSprite, tileY, "resource");
+  }
+  const undergrowthPath = undergrowthSpritePath(tile, index);
+  if (undergrowthPath !== null) {
+    addMapObject(objectLayer, createTileSprite(undergrowthPath, x, y), tileY, "resource");
+  }
+}
+
 export function renderMapLayer(
   groundLayer: Container,
   objectLayer: Container,
@@ -55,35 +109,9 @@ export function renderMapLayer(
   const water = new Graphics();
   groundLayer.addChild(water);
   drawWater(water, state);
+  const season = seasonOfTick(state.tick);
   for (const [index, tile] of state.tiles.entries()) {
-    const x = (index % state.width) * TILE_SIZE;
-    const y = Math.floor(index / state.width) * TILE_SIZE;
-
-    const terrainPath = terrainSpritePath(tile.terrain, index);
-    if (terrainPath !== null) {
-      const terrainSprite = createTileSprite(terrainPath, x, y);
-      terrainSprite.tint = terrainTint(tile.terrain);
-      groundLayer.addChild(terrainSprite);
-    }
-
-    const resourcePath = resourceSpritePath(tile);
-    if (resourcePath !== null) {
-      addMapObject(
-        objectLayer,
-        createTileSprite(resourcePath, x, y),
-        Math.floor(index / state.width),
-        "resource",
-      );
-    }
-    const undergrowthPath = undergrowthSpritePath(tile, index);
-    if (undergrowthPath !== null) {
-      addMapObject(
-        objectLayer,
-        createTileSprite(undergrowthPath, x, y),
-        Math.floor(index / state.width),
-        "resource",
-      );
-    }
+    renderTile(groundLayer, objectLayer, tile, index, state.width, season);
   }
 
   const rocks = new Graphics();

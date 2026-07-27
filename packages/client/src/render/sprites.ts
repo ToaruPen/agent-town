@@ -1,8 +1,9 @@
-import type { AgentState, Building, Terrain, Tile } from "@agent-town/shared";
+import type { AgentState, Building, SEASONS, Terrain, Tile } from "@agent-town/shared";
 
 import { TERRAIN_TINTS } from "./colors.js";
 
 export const TILE_SIZE = 16;
+export type Season = (typeof SEASONS)[number];
 
 export type WorldObjectKind =
   | "resource"
@@ -144,8 +145,24 @@ export const SPRITE_ASSETS = {
     ],
   },
   resource: {
-    // Tiny Town tile 16: lower green tree canopy with a visible trunk.
-    tree: "/assets/tiny-town/Tiles/tile_0016.png",
+    tree: {
+      green: [
+        // Tiny Town tile 16: broad round green tree.
+        "/assets/tiny-town/Tiles/tile_0016.png",
+        // Tiny Town tile 28: oval green tree.
+        "/assets/tiny-town/Tiles/tile_0028.png",
+        // Tiny Town tile 4: conical green tree.
+        "/assets/tiny-town/Tiles/tile_0004.png",
+      ],
+      autumn: [
+        // Tiny Town tile 15: broad round autumn tree.
+        "/assets/tiny-town/Tiles/tile_0015.png",
+        // Tiny Town tile 27: oval autumn tree.
+        "/assets/tiny-town/Tiles/tile_0027.png",
+        // Tiny Town tile 3: conical autumn tree.
+        "/assets/tiny-town/Tiles/tile_0003.png",
+      ],
+    },
     // Tiny Town tile 17: a young green sprout.
     food: "/assets/tiny-town/Tiles/tile_0017.png",
   },
@@ -221,7 +238,8 @@ export const SPRITE_PATHS = [
   ...SPRITE_ASSETS.terrain.forest,
   ...SPRITE_ASSETS.terrain.rock,
   ...SPRITE_ASSETS.terrain.undergrowth,
-  SPRITE_ASSETS.resource.tree,
+  ...SPRITE_ASSETS.resource.tree.green,
+  ...SPRITE_ASSETS.resource.tree.autumn,
   SPRITE_ASSETS.resource.food,
   SPRITE_ASSETS.buildings.house.roof,
   SPRITE_ASSETS.buildings.house.wall,
@@ -264,10 +282,29 @@ export function buildingSprites(building: Building): BuildingSprites {
   return SPRITE_ASSETS.buildings[building.kind];
 }
 
+export function treeSpritePath(season: Season, tileIndex: number): string {
+  const palette =
+    season === "spring" || season === "summer"
+      ? SPRITE_ASSETS.resource.tree.green
+      : SPRITE_ASSETS.resource.tree.autumn;
+  return palette[tileIndex % palette.length] ?? palette[0];
+}
+
+const SEASON_GROUND_TINTS: Record<Season, number> = {
+  spring: 0xe2f2d8,
+  summer: 0xf8e6bd,
+  autumn: 0xe9bd8f,
+  winter: 0xf0f2f4,
+};
+
+export function seasonGroundTint(season: Season): number {
+  return SEASON_GROUND_TINTS[season];
+}
+
 export function resourceSpritePath(tile: Tile): string | null {
   const resource = tile.resource;
   if (resource === null || resource.amount <= 0) return null;
-  return resource.kind === "wood" ? SPRITE_ASSETS.resource.tree : SPRITE_ASSETS.resource.food;
+  return resource.kind === "wood" ? treeSpritePath("spring", 0) : SPRITE_ASSETS.resource.food;
 }
 
 export function terrainSpritePath(terrain: Terrain, tileIndex: number): string | null {

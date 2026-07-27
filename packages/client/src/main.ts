@@ -4,6 +4,7 @@ import {
   MAP_WIDTH,
   type Position,
   type ResourceKind,
+  seasonOfTick,
   type WorldState,
 } from "@agent-town/shared";
 import {
@@ -581,7 +582,8 @@ function updateState(next: WorldState): void {
     replaceState(next);
     return;
   }
-  mapDirty = mapDirty || next.tiles !== state.tiles;
+  mapDirty =
+    mapDirty || next.tiles !== state.tiles || seasonOfTick(next.tick) !== seasonOfTick(state.tick);
   trailsDirty = trailsDirty || next.trailCells !== state.trailCells;
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());

@@ -13,8 +13,10 @@ import {
   resourceSpritePath,
   SPRITE_ASSETS,
   SPRITE_PATHS,
+  seasonGroundTint,
   terrainSpritePath,
   terrainTint,
+  treeSpritePath,
   undergrowthSpritePath,
 } from "../src/render/sprites.js";
 
@@ -161,7 +163,7 @@ describe("resourceSpritePath", () => {
     };
     const depleted: Tile = { terrain: "forest", resource: null };
 
-    expect(resourceSpritePath(growing)).toBe(SPRITE_ASSETS.resource.tree);
+    expect(resourceSpritePath(growing)).toBe(treeSpritePath("spring", 0));
     expect(resourceSpritePath(depleted)).toBeNull();
   });
 
@@ -177,6 +179,52 @@ describe("resourceSpritePath", () => {
 
     expect(resourceSpritePath(growing)).toBe(SPRITE_ASSETS.resource.food);
     expect(resourceSpritePath(depleted)).toBeNull();
+  });
+});
+
+function colorChannels(color: number): number[] {
+  return [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff];
+}
+
+function colorBrightness(color: number): number {
+  return colorChannels(color).reduce((total, channel) => total + channel, 0);
+}
+
+function colorSaturation(color: number): number {
+  const channels = colorChannels(color);
+  return Math.max(...channels) - Math.min(...channels);
+}
+
+describe("seasonal map sprites", () => {
+  it("keeps each tree silhouette stable while its seasonal color changes", () => {
+    for (const index of [0, 1, 2]) {
+      expect(treeSpritePath("spring", index)).toBe(treeSpritePath("summer", index));
+      expect(treeSpritePath("autumn", index)).toBe(treeSpritePath("winter", index));
+      expect(treeSpritePath("spring", index)).not.toBe(treeSpritePath("autumn", index));
+    }
+  });
+
+  it("preloads all three green and autumn tree families", () => {
+    const seasonalTrees = new Set(
+      (["spring", "autumn"] as const).flatMap((season) =>
+        [0, 1, 2].map((index) => treeSpritePath(season, index)),
+      ),
+    );
+
+    expect(seasonalTrees).toHaveLength(6);
+    expect([...seasonalTrees].every((path) => SPRITE_PATHS.includes(path))).toBe(true);
+  });
+
+  it("gives every season a distinct tint and makes winter palest and least saturated", () => {
+    const seasons = ["spring", "summer", "autumn", "winter"] as const;
+    const tints = seasons.map(seasonGroundTint);
+    const winter = seasonGroundTint("winter");
+    const otherTints = seasons.filter((season) => season !== "winter").map(seasonGroundTint);
+
+    expect(new Set(tints)).toHaveLength(seasons.length);
+    expect(tints.filter((tint) => tint === 0xffffff).length).toBeLessThanOrEqual(1);
+    expect(colorBrightness(winter)).toBeGreaterThan(Math.max(...otherTints.map(colorBrightness)));
+    expect(colorSaturation(winter)).toBeLessThan(Math.min(...otherTints.map(colorSaturation)));
   });
 });
 
