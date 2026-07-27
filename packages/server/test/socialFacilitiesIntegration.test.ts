@@ -5,6 +5,7 @@ import {
   FACILITY_FOOD_CAPACITY,
   type Facility,
   type FacilityKind,
+  HOUSE_BUILD_TICKS,
   type InstitutionKind,
   isFacility,
   type Position,
@@ -22,6 +23,7 @@ import { createRng } from "../src/sim/rng.js";
 import { generateWorld } from "../src/sim/worldGen.js";
 
 const SEED = 42;
+/** Measured with housing demand held constant; this is not a settlement cold-start guarantee. */
 const TEN_MINUTE_TICK_BOUND = TICK_RATE * 60 * 10;
 /** Below institution pressure yet far above the four days that would end starvation. */
 const SCARCE_START_FOOD = 40;
@@ -155,6 +157,29 @@ function isLoopClosed(world: WorldState, kind: FacilityKind): boolean {
   return hasRecordedEffectAndCost(world, facility) && hasWornTrail(world);
 }
 
+/**
+ * Starts with one house already standing to hold housing demand constant. Without it, residents
+ * spend wood on a second house first, so the grain-market and ration-control loops miss
+ * TEN_MINUTE_TICK_BOUND.
+ */
+function addRemoteCompletedHouse(world: WorldState): void {
+  for (let index = world.tiles.length - 1; index >= 0; index -= 1) {
+    const pos = { x: index % world.width, y: Math.floor(index / world.width) };
+    const tile = world.tiles[index];
+    if (tile?.resource !== null || !isWalkable(world, pos)) continue;
+    if (positionsEqual(pos, world.stockpile.pos)) continue;
+    if (world.agents.some((agent) => positionsEqual(agent.pos, pos))) continue;
+    world.buildings.push({
+      kind: "house",
+      pos,
+      progress: HOUSE_BUILD_TICKS,
+      complete: true,
+    });
+    return;
+  }
+  throw new Error("missing remote housing site");
+}
+
 function scenarioWorld(culturalValue: CulturalValue): WorldState {
   const world = generateWorld(SEED);
   const homelandId = world.history.settlementOrigin?.homelandPolityId;
@@ -166,6 +191,7 @@ function scenarioWorld(culturalValue: CulturalValue): WorldState {
   );
   world.stockpile.wood = START_WOOD;
   world.stockpile.food = SCARCE_START_FOOD;
+  addRemoteCompletedHouse(world);
   return world;
 }
 

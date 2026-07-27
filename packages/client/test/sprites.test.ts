@@ -1,6 +1,8 @@
 import type { AgentState, Tile } from "@agent-town/shared";
+import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
+import { renderAgentLayer } from "../src/render/agentLayer.js";
 import {
   agentDepth,
   agentFacingScale,
@@ -10,7 +12,12 @@ import {
   objectDepth,
   resourceSpritePath,
   SPRITE_ASSETS,
+  SPRITE_PATHS,
+  seasonGroundTint,
   terrainSpritePath,
+  terrainTint,
+  treeSpritePath,
+  undergrowthSpritePath,
 } from "../src/render/sprites.js";
 
 describe("agentTileOffset", () => {
@@ -100,11 +107,51 @@ describe("agentFacingScale", () => {
 });
 
 describe("agentSpritePath", () => {
-  it("assigns the first three agents distinct character sprites", () => {
-    const firstThree = [0, 1, 2].map(agentSpritePath);
+  it("always gives the same resident id the same face", () => {
+    expect(agentSpritePath("resident-42")).toBe(agentSpritePath("resident-42"));
+  });
 
-    expect(new Set(firstThree).size).toBe(3);
-    expect(agentSpritePath(3)).toBe(firstThree[0]);
+  it("does not reshuffle surviving faces when a resident is removed", () => {
+    const ids = ["resident-a", "resident-b", "resident-c"];
+    const before = new Map(ids.map((id) => [id, agentSpritePath(id)]));
+    const survivors = ids.filter((id) => id !== "resident-b");
+
+    expect(survivors.map((id) => agentSpritePath(id))).toEqual(
+      survivors.map((id) => before.get(id)),
+    );
+  });
+
+  it("reaches every settlement face across generated resident ids", () => {
+    const paths = new Set(
+      Array.from({ length: 400 }, (_, index) => agentSpritePath(`resident-${index}`)),
+    );
+
+    expect(paths).toEqual(new Set(SPRITE_ASSETS.agents));
+  });
+});
+
+describe("resident carry sprites", () => {
+  it("preloads the log and grain tiles chosen for carried resources", () => {
+    expect(SPRITE_ASSETS).toHaveProperty("carry.wood", "/assets/tiny-town/Tiles/tile_0106.png");
+    expect(SPRITE_ASSETS).toHaveProperty("carry.food", "/assets/tiny-town/Tiles/tile_0093.png");
+    expect(SPRITE_PATHS).toContain("/assets/tiny-town/Tiles/tile_0106.png");
+    expect(SPRITE_PATHS).toContain("/assets/tiny-town/Tiles/tile_0093.png");
+  });
+
+  it("renders a carried resource as a sprite beside the resident", () => {
+    const layer = new Container();
+    const agent = {
+      ...movingAgent(5),
+      carrying: { kind: "wood" as const, amount: 1 },
+    };
+
+    renderAgentLayer(layer, [agent], new Map(), {
+      selectedAgentId: null,
+      hoveredAgentId: null,
+    });
+
+    expect(layer.children).toHaveLength(1);
+    expect(layer.children[0]?.children.filter((child) => child instanceof Sprite)).toHaveLength(2);
   });
 });
 
@@ -116,7 +163,7 @@ describe("resourceSpritePath", () => {
     };
     const depleted: Tile = { terrain: "forest", resource: null };
 
-    expect(resourceSpritePath(growing)).toBe(SPRITE_ASSETS.resource.tree);
+    expect(resourceSpritePath(growing)).toBe(treeSpritePath("spring", 0));
     expect(resourceSpritePath(depleted)).toBeNull();
   });
 
@@ -135,11 +182,90 @@ describe("resourceSpritePath", () => {
   });
 });
 
+function colorChannels(color: number): number[] {
+  return [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff];
+}
+
+function colorBrightness(color: number): number {
+  return colorChannels(color).reduce((total, channel) => total + channel, 0);
+}
+
+function colorSaturation(color: number): number {
+  const channels = colorChannels(color);
+  return Math.max(...channels) - Math.min(...channels);
+}
+
+describe("seasonal map sprites", () => {
+  it("keeps each tree silhouette stable while its seasonal color changes", () => {
+    for (const index of [0, 1, 2]) {
+      expect(treeSpritePath("spring", index)).toBe(treeSpritePath("summer", index));
+      expect(treeSpritePath("autumn", index)).toBe(treeSpritePath("winter", index));
+      expect(treeSpritePath("spring", index)).not.toBe(treeSpritePath("autumn", index));
+    }
+  });
+
+  it("preloads all three green and autumn tree families", () => {
+    const seasonalTrees = new Set(
+      (["spring", "autumn"] as const).flatMap((season) =>
+        [0, 1, 2].map((index) => treeSpritePath(season, index)),
+      ),
+    );
+
+    expect(seasonalTrees).toHaveLength(6);
+    expect([...seasonalTrees].every((path) => SPRITE_PATHS.includes(path))).toBe(true);
+  });
+
+  it("gives every season a distinct tint and makes winter palest and least saturated", () => {
+    const seasons = ["spring", "summer", "autumn", "winter"] as const;
+    const tints = seasons.map(seasonGroundTint);
+    const winter = seasonGroundTint("winter");
+    const otherTints = seasons.filter((season) => season !== "winter").map(seasonGroundTint);
+
+    expect(new Set(tints)).toHaveLength(seasons.length);
+    expect(tints.filter((tint) => tint === 0xffffff).length).toBeLessThanOrEqual(1);
+    expect(colorBrightness(winter)).toBeGreaterThan(Math.max(...otherTints.map(colorBrightness)));
+    expect(colorSaturation(winter)).toBeLessThan(Math.min(...otherTints.map(colorSaturation)));
+  });
+});
+
 describe("terrainSpritePath", () => {
   it("uses grass for walkable ground, dirt for rock, and Graphics for water", () => {
-    expect(terrainSpritePath("plains", 0)).toBe(SPRITE_ASSETS.terrain.grass[0]);
-    expect(terrainSpritePath("forest", 1)).toBe(SPRITE_ASSETS.terrain.grass[1]);
+    expect(terrainSpritePath("plains", 0)).toBe(SPRITE_ASSETS.terrain.plains[0]);
+    expect(terrainSpritePath("forest", 1)).toBe(SPRITE_ASSETS.terrain.forest[0]);
     expect(terrainSpritePath("rock", 0)).toBe(SPRITE_ASSETS.terrain.rock[0]);
     expect(terrainSpritePath("water", 0)).toBeNull();
+  });
+
+  it("distinguishes plains and forest by texture at the same tile index", () => {
+    expect(terrainSpritePath("plains", 0)).not.toBe(terrainSpritePath("forest", 0));
+  });
+});
+
+describe("terrainTint", () => {
+  it("leaves plains unchanged, cools forests, and shifts rock toward slate", () => {
+    const plains = terrainTint("plains");
+    const forest = terrainTint("forest");
+    const rock = terrainTint("rock");
+
+    expect(plains).toBe(0xffffff);
+    expect(forest).toBe(0xedf3ec);
+    expect((forest >> 8) & 0xff).toBeLessThan((plains >> 8) & 0xff);
+    expect(rock & 0xff).toBeGreaterThan((rock >> 16) & 0xff);
+  });
+});
+
+describe("undergrowthSpritePath", () => {
+  it("adds stable undergrowth only to depleted forest", () => {
+    const depletedForest: Tile = { terrain: "forest", resource: null };
+    const growingForest: Tile = {
+      terrain: "forest",
+      resource: { kind: "wood", amount: 1 },
+    };
+    const depletedPlains: Tile = { terrain: "plains", resource: null };
+
+    expect(undergrowthSpritePath(growingForest, 3)).toBeNull();
+    expect(undergrowthSpritePath(depletedPlains, 3)).toBeNull();
+    expect(undergrowthSpritePath(depletedForest, 3)).not.toBeNull();
+    expect(undergrowthSpritePath(depletedForest, 3)).toBe(undergrowthSpritePath(depletedForest, 3));
   });
 });

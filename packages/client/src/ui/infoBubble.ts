@@ -17,7 +17,7 @@ import {
 import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
 
 import { TILE_SIZE } from "../render/mapLayer.js";
-import { layoutAgentsFrontToBack, layoutAgentsOnTiles } from "../render/sprites.js";
+import { layoutAgentsFrontToBack } from "../render/sprites.js";
 import { wornLevel } from "../render/trailLayer.js";
 import { activityLabel, resourceLabel, terrainLabel } from "./displayText.js";
 import type { InspectTarget } from "./inspectPanel.js";
@@ -85,6 +85,10 @@ export interface InfoBubblePlacement {
   bottom: number;
 }
 
+export type InfoBubbleAnchor =
+  | { kind: "agent"; agentId: string }
+  | { kind: "world"; placement: InfoBubblePlacement };
+
 export interface ScreenBounds {
   width: number;
   height: number;
@@ -107,6 +111,11 @@ export interface InfoBubbleRenderGate {
 }
 
 export interface InfoBubbleViewModel extends AgentBubbleText {
+  inspectTarget: InspectTarget | null;
+  anchor: InfoBubbleAnchor;
+}
+
+export interface PositionedInfoBubbleViewModel extends AgentBubbleText {
   inspectTarget: InspectTarget | null;
   placement: InfoBubblePlacement;
 }
@@ -390,11 +399,12 @@ export function resolveScreenBubblePlacement(
   anchor: InfoBubblePlacement,
   bubble: ScreenBounds,
   viewport: ScreenBounds,
+  belowOverride?: boolean,
 ): ScreenBubblePlacement {
   const aboveSpace = anchor.top - BUBBLE_EDGE_GAP;
   const belowSpace = viewport.height - anchor.bottom - BUBBLE_EDGE_GAP;
   const neededSpace = bubble.height + BUBBLE_TAIL_SIZE;
-  const below = aboveSpace < neededSpace && belowSpace >= aboveSpace;
+  const below = belowOverride ?? (aboveSpace < neededSpace && belowSpace >= aboveSpace);
   const rawTop = below
     ? anchor.bottom + BUBBLE_TAIL_SIZE
     : anchor.top - BUBBLE_TAIL_SIZE - bubble.height;
@@ -411,6 +421,23 @@ export function resolveScreenBubblePlacement(
   };
 }
 
+export function positionInfoBubble(
+  layer: Container,
+  anchor: InfoBubblePlacement,
+  viewport: ScreenBounds,
+): void {
+  const bubble = layer.children.find(({ label }) => label === INFO_BUBBLE_LABEL);
+  if (!(bubble instanceof Container) || !(bubble.hitArea instanceof Rectangle)) return;
+  // Preserve the tail side between state-driven rebuilds while the outer container follows motion.
+  const placement = resolveScreenBubblePlacement(
+    anchor,
+    { width: bubble.hitArea.width, height: bubble.hitArea.height },
+    viewport,
+    bubble.hitArea.y >= 0,
+  );
+  bubble.position.set(placement.x, placement.y);
+}
+
 function tilePlacement(position: Position): InfoBubblePlacement {
   return {
     x: position.x * TILE_SIZE + TILE_SIZE / 2,
@@ -424,23 +451,25 @@ function textBubble(
   placement: InfoBubblePlacement,
   inspectTarget: InspectTarget | null = null,
 ): InfoBubbleViewModel {
-  return { title: text, badge: "", lines: [], inspectTarget, placement };
+  return {
+    title: text,
+    badge: "",
+    lines: [],
+    inspectTarget,
+    anchor: { kind: "world", placement },
+  };
 }
 
 function agentBubble(
   target: Extract<InfoBubbleTarget, { kind: "agent" }>,
   world: WorldState,
 ): InfoBubbleViewModel | null {
-  const placed = layoutAgentsOnTiles(world.agents).find(({ agent }) => agent.id === target.agentId);
-  if (placed === undefined) return null;
-  const center = {
-    x: placed.agent.pos.x * TILE_SIZE + TILE_SIZE / 2 + placed.offset.x,
-    y: placed.agent.pos.y * TILE_SIZE + TILE_SIZE / 2 + placed.offset.y,
-  };
+  const agent = world.agents.find(({ id }) => id === target.agentId);
+  if (agent === undefined) return null;
   return {
-    ...buildAgentBubbleText(placed.agent),
-    inspectTarget: { kind: "agent", agentId: placed.agent.id },
-    placement: { x: center.x, top: center.y - TILE_SIZE / 2, bottom: center.y + TILE_SIZE / 2 },
+    ...buildAgentBubbleText(agent),
+    inspectTarget: target,
+    anchor: target,
   };
 }
 
@@ -468,7 +497,7 @@ function facilityBubble(
     badge: "",
     lines: [`${viewModel.status} · ${viewModel.inventory}`],
     inspectTarget: target,
-    placement: tilePlacement(facility.pos),
+    anchor: { kind: "world", placement: tilePlacement(facility.pos) },
   };
 }
 
@@ -484,7 +513,7 @@ function trailBubble(
     badge: "",
     lines: [viewModel.passages],
     inspectTarget: target,
-    placement: tilePlacement(selected.position),
+    anchor: { kind: "world", placement: tilePlacement(selected.position) },
   };
 }
 
@@ -550,7 +579,7 @@ export function buildInfoBubbleViewModel(
   return tileBubble(target, world);
 }
 
-export function bubbleText(viewModel: InfoBubbleViewModel): string {
+export function bubbleText(viewModel: AgentBubbleText): string {
   const badge = viewModel.badge === "" ? "" : `  [${viewModel.badge}]`;
   return [`${viewModel.title}${badge}`, ...viewModel.lines].join("\n");
 }
@@ -627,7 +656,7 @@ function bubbleBackground(width: number, height: number, below: boolean): Graphi
 
 export function renderInfoBubble(
   layer: Container,
-  viewModel: InfoBubbleViewModel | null,
+  viewModel: PositionedInfoBubbleViewModel | null,
   viewport: ScreenBounds,
   onInspectOpen: (target: InspectTarget) => void,
   clearGestureHistory: () => void,

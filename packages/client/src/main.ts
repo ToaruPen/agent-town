@@ -4,6 +4,7 @@ import {
   MAP_WIDTH,
   type Position,
   type ResourceKind,
+  seasonOfTick,
   type WorldState,
 } from "@agent-town/shared";
 import {
@@ -16,7 +17,11 @@ import {
 } from "pixi.js";
 
 import { connect, getWebSocketUrl } from "./net/wsClient.js";
-import { renderAgentLayer } from "./render/agentLayer.js";
+import {
+  agentPresentationBounds,
+  interpolateAgentLayer,
+  renderAgentLayer,
+} from "./render/agentLayer.js";
 import { renderDeathMarkerLayer } from "./render/deathLayer.js";
 import { renderHistoryLayer } from "./render/historyLayer.js";
 import { HUD_PANEL_HEIGHT, renderHudLayer } from "./render/hudLayer.js";
@@ -31,10 +36,14 @@ import {
   buildInfoBubbleViewModel,
   createInfoBubbleGesture,
   createInfoBubbleRenderGate,
+  type InfoBubblePlacement,
   type InfoBubblePointer,
   type InfoBubbleTarget,
+  type InfoBubbleViewModel,
   isTapGesture,
   mapInfoBubblePlacementToScreen,
+  type PositionedInfoBubbleViewModel,
+  positionInfoBubble,
   preserveInfoBubbleInvalidation,
   renderInfoBubble,
   resolveHoveredAgentAtScreen,
@@ -581,7 +590,8 @@ function updateState(next: WorldState): void {
     replaceState(next);
     return;
   }
-  mapDirty = mapDirty || next.tiles !== state.tiles;
+  mapDirty =
+    mapDirty || next.tiles !== state.tiles || seasonOfTick(next.tick) !== seasonOfTick(state.tick);
   trailsDirty = trailsDirty || next.trailCells !== state.trailCells;
   structuresDirty = structuresDirty || next.buildings !== state.buildings;
   bubbleSchedule = updateThoughtBubbleSchedule(bubbleSchedule, next.agents, performance.now());
@@ -695,15 +705,7 @@ function renderActiveInfoBubble(currentState: WorldState): void {
       activeInfoTarget = null;
       agentsDirty = true;
     }
-    const screenViewModel =
-      viewModel === null
-        ? null
-        : {
-            ...viewModel,
-            placement: mapInfoBubblePlacementToScreen(viewModel.placement, (point) =>
-              world.toGlobal(point),
-            ),
-          };
+    const screenViewModel = positionedInfoBubbleViewModel(viewModel);
     renderInfoBubble(
       infoBubbleLayer,
       screenViewModel,
@@ -725,6 +727,34 @@ function renderActiveInfoBubble(currentState: WorldState): void {
     );
     infoBubbleDirty = false;
   }
+}
+
+function infoBubblePlacement(viewModel: InfoBubbleViewModel): InfoBubblePlacement | null {
+  if (viewModel.anchor.kind === "world") return viewModel.anchor.placement;
+  return agentPresentationBounds(objectLayer, viewModel.anchor.agentId);
+}
+
+function positionedInfoBubbleViewModel(
+  viewModel: InfoBubbleViewModel | null,
+): PositionedInfoBubbleViewModel | null {
+  if (viewModel === null) return null;
+  const placement = infoBubblePlacement(viewModel);
+  if (placement === null) return null;
+  return {
+    ...viewModel,
+    placement: mapInfoBubblePlacementToScreen(placement, (point) => world.toGlobal(point)),
+  };
+}
+
+function positionActiveAgentInfoBubble(): void {
+  if (activeInfoTarget?.kind !== "agent") return;
+  const placement = agentPresentationBounds(objectLayer, activeInfoTarget.agentId);
+  if (placement === null) return;
+  positionInfoBubble(
+    infoBubbleLayer,
+    mapInfoBubblePlacementToScreen(placement, (point) => world.toGlobal(point)),
+    app.screen,
+  );
 }
 
 function renderScreenLayers(currentState: WorldState): void {
@@ -749,10 +779,12 @@ function renderScreenLayers(currentState: WorldState): void {
   }
 }
 
-app.ticker.add(() => {
+app.ticker.add((ticker) => {
   if (state === null) return;
   expireSpeechBubbles(performance.now(), state);
+  interpolateAgentLayer(objectLayer, ticker.deltaMS);
   renderDirtyWorldLayers(state);
   renderActiveInfoBubble(state);
+  positionActiveAgentInfoBubble();
   renderScreenLayers(state);
 });

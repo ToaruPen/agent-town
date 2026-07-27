@@ -1,4 +1,9 @@
-import type { AgentState, Terrain, Tile } from "@agent-town/shared";
+import type { AgentState, Building, SEASONS, Terrain, Tile } from "@agent-town/shared";
+
+import { TERRAIN_TINTS } from "./colors.js";
+
+export const TILE_SIZE = 16;
+export type Season = (typeof SEASONS)[number];
 
 export type WorldObjectKind =
   | "resource"
@@ -58,6 +63,15 @@ export interface AgentTilePlacement {
   offset: { x: number; y: number };
 }
 
+export interface BuildingSprites {
+  /** Tile drawn one row above the building's own tile. */
+  roof: string;
+  /** Tile drawn on the building's own tile. */
+  wall: string;
+  /** Optional emblem that names the institution at a glance. */
+  emblem: string | null;
+}
+
 export function agentTileOffset(
   occupantIndex: number,
   occupantCount: number,
@@ -109,9 +123,11 @@ export function layoutAgentsFrontToBack(agents: AgentState[]): AgentTilePlacemen
 
 export const SPRITE_ASSETS = {
   terrain: {
-    grass: [
+    plains: [
       // Tiny Town tile 0: plain green grass.
       "/assets/tiny-town/Tiles/tile_0000.png",
+    ],
+    forest: [
       // Tiny Town tile 1: green grass with scattered tufts.
       "/assets/tiny-town/Tiles/tile_0001.png",
     ],
@@ -121,36 +137,125 @@ export const SPRITE_ASSETS = {
       // Tiny Town tile 40: ochre dirt ground with scattered pebbles.
       "/assets/tiny-town/Tiles/tile_0040.png",
     ],
+    undergrowth: [
+      // Tiny Town tile 29: a cluster of mushrooms.
+      "/assets/tiny-town/Tiles/tile_0029.png",
+      // Tiny Town tile 17: a young green sprout.
+      "/assets/tiny-town/Tiles/tile_0017.png",
+    ],
   },
   resource: {
-    // Tiny Town tile 16: lower green tree canopy with a visible trunk.
-    tree: "/assets/tiny-town/Tiles/tile_0016.png",
-    // Tiny Town tile 2: grass dotted with two bright orange flowers.
-    food: "/assets/tiny-town/Tiles/tile_0002.png",
+    tree: {
+      green: [
+        // Tiny Town tile 16: broad round green tree.
+        "/assets/tiny-town/Tiles/tile_0016.png",
+        // Tiny Town tile 28: oval green tree.
+        "/assets/tiny-town/Tiles/tile_0028.png",
+        // Tiny Town tile 4: conical green tree.
+        "/assets/tiny-town/Tiles/tile_0004.png",
+      ],
+      autumn: [
+        // Tiny Town tile 15: broad round autumn tree.
+        "/assets/tiny-town/Tiles/tile_0015.png",
+        // Tiny Town tile 27: oval autumn tree.
+        "/assets/tiny-town/Tiles/tile_0027.png",
+        // Tiny Town tile 3: conical autumn tree.
+        "/assets/tiny-town/Tiles/tile_0003.png",
+      ],
+    },
+    // Tiny Town tile 17: a young green sprout.
+    food: "/assets/tiny-town/Tiles/tile_0017.png",
   },
-  // Tiny Town tile 94: golden supply chest.
-  stockpile: "/assets/tiny-town/Tiles/tile_0094.png",
-  // Tiny Town tile 67: red-roofed house front.
-  house: "/assets/tiny-town/Tiles/tile_0067.png",
+  buildings: {
+    house: {
+      // Tiny Town tile 67: a red gable roof.
+      roof: "/assets/tiny-town/Tiles/tile_0067.png",
+      // Tiny Town tile 86: a timber wall with a door.
+      wall: "/assets/tiny-town/Tiles/tile_0086.png",
+      emblem: null,
+    },
+    communalGranary: {
+      // Tiny Town tile 63: a slate gable roof.
+      roof: "/assets/tiny-town/Tiles/tile_0063.png",
+      // Tiny Town tile 74: a timber wall with a wide doorway.
+      wall: "/assets/tiny-town/Tiles/tile_0074.png",
+      // Tiny Town tile 116: a pitchfork.
+      emblem: "/assets/tiny-town/Tiles/tile_0116.png",
+    },
+    grainMarket: {
+      // Tiny Town tile 55: a red roof with a dormer.
+      roof: "/assets/tiny-town/Tiles/tile_0055.png",
+      // Tiny Town tile 75: a plain timber wall.
+      wall: "/assets/tiny-town/Tiles/tile_0075.png",
+      // Tiny Town tile 93: a bundle of grain.
+      emblem: "/assets/tiny-town/Tiles/tile_0093.png",
+    },
+    rationDepot: {
+      // Tiny Town tile 51: a slate roof with a dormer.
+      roof: "/assets/tiny-town/Tiles/tile_0051.png",
+      // Tiny Town tile 78: a slate wall with a doorway.
+      wall: "/assets/tiny-town/Tiles/tile_0078.png",
+      // Tiny Town tile 83: a wooden notice board.
+      emblem: "/assets/tiny-town/Tiles/tile_0083.png",
+    },
+  },
+  stockpile: {
+    // Tiny Town tile 130: a woven food basket.
+    basket: "/assets/tiny-town/Tiles/tile_0130.png",
+    // Tiny Town tile 106: a cut log.
+    log: "/assets/tiny-town/Tiles/tile_0106.png",
+  },
+  carry: {
+    // Tiny Town tile 106: a cut log.
+    wood: "/assets/tiny-town/Tiles/tile_0106.png",
+    // Tiny Town tile 93: a bundle of grain.
+    food: "/assets/tiny-town/Tiles/tile_0093.png",
+  },
   // Tiny Dungeon tile 65: gray inscribed tombstone.
   tombstone: "/assets/tiny-dungeon/Tiles/tile_0065.png",
   agents: [
-    // Tiny Dungeon tile 84: purple-robed wizard.
+    // Tiny Dungeon tile 84: purple-hatted wizard.
     "/assets/tiny-dungeon/Tiles/tile_0084.png",
-    // Tiny Dungeon tile 85: brown-haired adventurer in a blue tunic.
+    // Tiny Dungeon tile 85: brown-haired settler in a pale-blue tunic.
     "/assets/tiny-dungeon/Tiles/tile_0085.png",
-    // Tiny Dungeon tile 87: gray-haired bearded knight.
-    "/assets/tiny-dungeon/Tiles/tile_0087.png",
+    // Tiny Dungeon tile 86: bald, bearded settler in a blue tunic.
+    "/assets/tiny-dungeon/Tiles/tile_0086.png",
+    // Tiny Dungeon tile 88: brown-haired settler in a tan apron.
+    "/assets/tiny-dungeon/Tiles/tile_0088.png",
+    // Tiny Dungeon tile 98: long-haired settler in purple.
+    "/assets/tiny-dungeon/Tiles/tile_0098.png",
+    // Tiny Dungeon tile 99: gray-haired settler in brown.
+    "/assets/tiny-dungeon/Tiles/tile_0099.png",
+    // Tiny Dungeon tile 100: bearded farmer with a green headband.
+    "/assets/tiny-dungeon/Tiles/tile_0100.png",
+    // Tiny Dungeon tile 112: short-haired settler in a brown tunic.
+    "/assets/tiny-dungeon/Tiles/tile_0112.png",
   ],
 } as const;
 
 export const SPRITE_PATHS = [
-  ...SPRITE_ASSETS.terrain.grass,
+  ...SPRITE_ASSETS.terrain.plains,
+  ...SPRITE_ASSETS.terrain.forest,
   ...SPRITE_ASSETS.terrain.rock,
-  SPRITE_ASSETS.resource.tree,
+  ...SPRITE_ASSETS.terrain.undergrowth,
+  ...SPRITE_ASSETS.resource.tree.green,
+  ...SPRITE_ASSETS.resource.tree.autumn,
   SPRITE_ASSETS.resource.food,
-  SPRITE_ASSETS.stockpile,
-  SPRITE_ASSETS.house,
+  SPRITE_ASSETS.buildings.house.roof,
+  SPRITE_ASSETS.buildings.house.wall,
+  SPRITE_ASSETS.buildings.communalGranary.roof,
+  SPRITE_ASSETS.buildings.communalGranary.wall,
+  SPRITE_ASSETS.buildings.communalGranary.emblem,
+  SPRITE_ASSETS.buildings.grainMarket.roof,
+  SPRITE_ASSETS.buildings.grainMarket.wall,
+  SPRITE_ASSETS.buildings.grainMarket.emblem,
+  SPRITE_ASSETS.buildings.rationDepot.roof,
+  SPRITE_ASSETS.buildings.rationDepot.wall,
+  SPRITE_ASSETS.buildings.rationDepot.emblem,
+  SPRITE_ASSETS.stockpile.basket,
+  SPRITE_ASSETS.stockpile.log,
+  SPRITE_ASSETS.carry.wood,
+  SPRITE_ASSETS.carry.food,
   SPRITE_ASSETS.tombstone,
   ...SPRITE_ASSETS.agents,
 ] as const;
@@ -161,18 +266,61 @@ export function agentFacingScale(agent: AgentState): -1 | 1 {
   return next !== undefined && next.x < agent.pos.x ? -1 : 1;
 }
 
-export function agentSpritePath(agentIndex: number): string {
-  return SPRITE_ASSETS.agents[agentIndex % SPRITE_ASSETS.agents.length] ?? SPRITE_ASSETS.agents[0];
+/** Stable per resident, so a death cannot reshuffle the faces of the living. */
+export function agentSpritePath(agentId: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < agentId.length; index += 1) {
+    hash ^= agentId.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (
+    SPRITE_ASSETS.agents[(hash >>> 0) % SPRITE_ASSETS.agents.length] ?? SPRITE_ASSETS.agents[0]
+  );
+}
+
+export function buildingSprites(building: Building): BuildingSprites {
+  return SPRITE_ASSETS.buildings[building.kind];
+}
+
+export function treeSpritePath(season: Season, tileIndex: number): string {
+  const palette =
+    season === "spring" || season === "summer"
+      ? SPRITE_ASSETS.resource.tree.green
+      : SPRITE_ASSETS.resource.tree.autumn;
+  return palette[tileIndex % palette.length] ?? palette[0];
+}
+
+const SEASON_GROUND_TINTS: Record<Season, number> = {
+  spring: 0xe2f2d8,
+  summer: 0xf8e6bd,
+  autumn: 0xe9bd8f,
+  winter: 0xf0f2f4,
+};
+
+export function seasonGroundTint(season: Season): number {
+  return SEASON_GROUND_TINTS[season];
 }
 
 export function resourceSpritePath(tile: Tile): string | null {
   const resource = tile.resource;
   if (resource === null || resource.amount <= 0) return null;
-  return resource.kind === "wood" ? SPRITE_ASSETS.resource.tree : SPRITE_ASSETS.resource.food;
+  return resource.kind === "wood" ? treeSpritePath("spring", 0) : SPRITE_ASSETS.resource.food;
 }
 
 export function terrainSpritePath(terrain: Terrain, tileIndex: number): string | null {
   if (terrain === "water") return null;
-  const variants = terrain === "rock" ? SPRITE_ASSETS.terrain.rock : SPRITE_ASSETS.terrain.grass;
+  const variants = SPRITE_ASSETS.terrain[terrain];
+  return variants[tileIndex % variants.length] ?? variants[0];
+}
+
+/** A restrained multiply suggests terrain shade without obscuring its identifying texture. */
+export function terrainTint(terrain: Terrain): number {
+  return TERRAIN_TINTS[terrain];
+}
+
+/** Undergrowth for a forest tile whose wood is gone, so the clearing still reads as forest. */
+export function undergrowthSpritePath(tile: Tile, tileIndex: number): string | null {
+  if (tile.terrain !== "forest" || (tile.resource?.amount ?? 0) > 0) return null;
+  const variants = SPRITE_ASSETS.terrain.undergrowth;
   return variants[tileIndex % variants.length] ?? variants[0];
 }

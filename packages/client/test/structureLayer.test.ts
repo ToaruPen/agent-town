@@ -1,13 +1,13 @@
 import { type Building, FACILITY_BUILD_TICKS, type FacilityKind } from "@agent-town/shared";
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
-import { FACILITY_COLORS } from "../src/render/colors.js";
+import { TILE_SIZE } from "../src/render/mapLayer.js";
+import { buildingSprites, objectDepth } from "../src/render/sprites.js";
 import {
   CONSTRUCTION_ALPHA,
   FACILITY_OBJECT_LABEL,
   facilityProgressRatio,
-  facilityVisual,
   HOUSE_OBJECT_LABEL,
   renderStructureLayer,
 } from "../src/render/structureLayer.js";
@@ -20,30 +20,19 @@ const FACILITY_KINDS = [
   "rationDepot",
 ] as const satisfies readonly FacilityKind[];
 
-describe("facilityVisual", () => {
-  it("gives each institution its own body, roof, and emblem", () => {
-    expect(facilityVisual("communalGranary")).toEqual({
-      bodyColor: FACILITY_COLORS.communalGranary,
-      roofColor: 0x5f4626,
-      emblem: "grain",
-    });
-    expect(facilityVisual("grainMarket")).toEqual({
-      bodyColor: FACILITY_COLORS.grainMarket,
-      roofColor: 0x7a3527,
-      emblem: "awning",
-    });
-    expect(facilityVisual("rationDepot")).toEqual({
-      bodyColor: FACILITY_COLORS.rationDepot,
-      roofColor: 0x3d4a50,
-      emblem: "scales",
-    });
-  });
+describe("buildingSprites", () => {
+  it("gives all four buildings a distinct roof and wall pair", () => {
+    const buildings: Building[] = [
+      house,
+      ...FACILITY_KINDS.map((kind, index) => makeFacilityFixture(kind, { x: index + 1, y: 0 })),
+    ];
+    const visuals = buildings.map(buildingSprites);
 
-  it("never repeats a body colour or an emblem across the three institutions", () => {
-    const visuals = FACILITY_KINDS.map(facilityVisual);
-
-    expect(new Set(visuals.map(({ bodyColor }) => bodyColor)).size).toBe(FACILITY_KINDS.length);
-    expect(new Set(visuals.map(({ emblem }) => emblem)).size).toBe(FACILITY_KINDS.length);
+    expect(new Set(visuals.map(({ roof, wall }) => `${roof}|${wall}`))).toHaveLength(
+      buildings.length,
+    );
+    expect(visuals[0]?.emblem).toBeNull();
+    expect(visuals.slice(1).every(({ emblem }) => emblem !== null)).toBe(true);
   });
 });
 
@@ -71,10 +60,15 @@ describe("renderStructureLayer", () => {
 
     renderStructureLayer(layer, [{ ...house, complete: false, progress: 10 }, site]);
 
-    expect(layer.children.map(({ alpha }) => alpha)).toEqual([
-      CONSTRUCTION_ALPHA,
-      CONSTRUCTION_ALPHA,
-    ]);
+    expect(layer.children).toHaveLength(2);
+    expect(layer.children.every(({ children }) => children.length > 0)).toBe(true);
+    expect(
+      layer.children
+        .flatMap(({ children }) => children)
+        .every(({ alpha }) => {
+          return alpha === CONSTRUCTION_ALPHA;
+        }),
+    ).toBe(true);
     const facility = layer.children.find(({ label }) => label === FACILITY_OBJECT_LABEL);
     expect(facility?.children.some(({ label }) => label === "facility-progress")).toBe(true);
   });
@@ -108,5 +102,37 @@ describe("renderStructureLayer", () => {
     expect(layer.children.filter(({ label }) => label === HOUSE_OBJECT_LABEL)).toHaveLength(1);
     expect(layer.children).toContain(foreign);
     expect(foreign.destroyed).toBe(false);
+  });
+
+  it("does not leak roof or emblem children when structures are redrawn", () => {
+    const layer = new Container();
+    const buildings: Building[] = [house, makeFacilityFixture("communalGranary", { x: 1, y: 0 })];
+
+    renderStructureLayer(layer, buildings);
+    const firstChildCount = layer.children.reduce(
+      (total, child) => total + child.children.length,
+      0,
+    );
+    renderStructureLayer(layer, buildings);
+
+    expect(layer.children).toHaveLength(buildings.length);
+    expect(layer.children.reduce((total, child) => total + child.children.length, 0)).toBe(
+      firstChildCount,
+    );
+  });
+
+  it("sorts a southern roof on its own row so it occludes the row north of it", () => {
+    const layer = new Container();
+    const north = { ...house, pos: { x: 0, y: 0 } };
+    const south = { ...house, pos: { x: 0, y: 1 } };
+
+    renderStructureLayer(layer, [north, south]);
+
+    const roofs = layer.children.map((building) =>
+      building.children.find((child) => child instanceof Sprite && child.position.y === -TILE_SIZE),
+    );
+    expect(roofs[0]?.zIndex).toBe(objectDepth(north.pos.y, "house"));
+    expect(roofs[1]?.zIndex).toBe(objectDepth(south.pos.y, "house"));
+    expect(roofs[1]?.zIndex).toBeGreaterThan(roofs[0]?.zIndex ?? Number.POSITIVE_INFINITY);
   });
 });

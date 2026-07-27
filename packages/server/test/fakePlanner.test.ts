@@ -21,7 +21,7 @@ import {
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { FakePlanner } from "../src/sim/fakePlanner.js";
+import { FakePlanner, woodTarget } from "../src/sim/fakePlanner.js";
 import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 
@@ -145,30 +145,62 @@ describe("FakePlanner", () => {
     ]);
   });
 
-  it("gathers wood only below the current population's full-winter reserve", () => {
+  it("gathers wood only below the full-winter reserve when housing capacity is free", () => {
     const agent = createAgent();
-    const woodTarget = { x: 1, y: 0 };
+    const woodTile = { x: 1, y: 0 };
     const world = createWorld(agent, [
       { terrain: "plains", resource: null },
       { terrain: "forest", resource: { kind: "wood", amount: 10 } },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
     ]);
     world.agents.push(createAgent({ id: "agent-2", name: "シラカバ" }));
+    world.buildings = [
+      { kind: "house", pos: { x: 2, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+      { kind: "house", pos: { x: 3, y: 0 }, progress: HOUSE_BUILD_TICKS, complete: true },
+    ];
     world.stockpile.food = STOCKPILE_TARGET_FOOD * world.agents.length;
     const winterReserve = world.agents.length * WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
     const planner = new FakePlanner(() => 0);
+    expect(woodTarget(world, winterReserve)).toBe(winterReserve);
 
     world.stockpile.wood = winterReserve - 1;
     expect(planner.plan(world, agent)).toEqual([
-      { kind: "moveTo", dest: woodTarget },
-      { kind: "gather", resource: "wood", target: woodTarget },
+      { kind: "moveTo", dest: woodTile },
+      { kind: "gather", resource: "wood", target: woodTile },
     ]);
 
     world.stockpile.wood = winterReserve;
     expect(planner.plan(world, agent)).not.toContainEqual({
       kind: "gather",
       resource: "wood",
-      target: woodTarget,
+      target: woodTile,
     });
+  });
+
+  it("uses one house-demand wood target for both gathering and construction", () => {
+    const agent = createAgent();
+    const world = createWorld(agent, [
+      { terrain: "plains", resource: null },
+      { terrain: "forest", resource: { kind: "wood", amount: 10 } },
+      { terrain: "plains", resource: null },
+      { terrain: "plains", resource: null },
+    ]);
+    world.stockpile.food = STOCKPILE_TARGET_FOOD;
+    const winterReserve = WOOD_BURN_PER_AGENT_PER_DAY * DAYS_PER_SEASON;
+    const target = woodTarget(world, winterReserve);
+    const planner = new FakePlanner(() => 0);
+    expect(target).toBe(winterReserve + HOUSE_WOOD_COST);
+
+    world.stockpile.wood = target - 1;
+    expect(planner.plan(world, agent)).toEqual([
+      { kind: "moveTo", dest: { x: 1, y: 0 } },
+      { kind: "gather", resource: "wood", target: { x: 1, y: 0 } },
+    ]);
+
+    world.stockpile.wood = target;
+    expect(planner.plan(world, agent)).toEqual([{ kind: "build", pos: { x: 2, y: 0 } }]);
   });
 
   it("rests after carrying and hunger priorities when fatigue is below threshold", () => {
