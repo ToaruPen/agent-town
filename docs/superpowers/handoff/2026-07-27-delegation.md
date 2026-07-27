@@ -38,10 +38,29 @@ nothing made optional.
   1 Hz broadcasts, rolled 1年秋 → 2年春, fired two `season` reports and three `orders` messages; the
   chancellor governed unprompted; and the ledger carried `directiveEffect +50` against `directiveCost -20`
   under distinct directive ids, which is the double-charge trap closed in a live run rather than in a test.
-- **The browser shows nothing.** Task 5 reduced `main.ts` to 14 lines by design, and `index.html` is 800
-  lines of resident-era markup with nothing populating it. C1-6a's territory borders and C1-1's banners are
-  in the tree but mounted nowhere, because the chronicle went out with `main.ts`. C1-3 then C1-6b is the
-  path back to a visible game; until then `dev-city.html` is the only page that renders.
+- **The browser shows the game again, as of C1-3 (`d9825a6`).** `just dev` serves the page on 5173 and Vite
+  proxies `/ws` to the server on `WS_PORT` 8790, so both halves come up with one command. Verified end to end
+  through that proxy — the path the browser actually takes, not a direct socket: `welcome` arrives with four
+  nations, the five HUD roots (`nation-clock`, `nation-dashboard`, `nation-ranking`, `nation-select`,
+  `world-status`) are present in the served markup, and the client bundles. What renders is the clock, the
+  nation picker, then the dashboard and the prosperity ranking once a nation is chosen. Still unmounted: the
+  world map (C1-6b), the directive panel (C1-4) and the season report (C1-5). `dev-city.html` remains the
+  only page showing the resident scale.
+- **A fresh connect carries no player nation, and only `orders` ever names one.** Measured directly:
+  `welcome` gives `playerNationId = null` with all four nations at `controller: "agent"`, and
+  `wsServer.ts:161`'s `selectNation` returns `[orders]` and never a second `welcome`. So `orders.nationId` is
+  the sole channel. An earlier note here recorded `playerNationId: polity-1`; that was read after a
+  `selectNation` had already been sent and was wrong about the connect state. The consequence is load-bearing:
+  without a picker the dashboard is unreachable, which is why C1-3 owns the picker even though its task
+  bullets never listed one. C1-4 still owns the candidate list, `queued`, `chancellorChoice` and `rejected`.
+- **Open fiction decision: the first game year renders as 紀元0年.** `historyGen.ts:615` hardcodes
+  `currentYear: 0`, and the client's label is `history.currentYear + clock.year - 1` exactly as the plan
+  specifies, so "now" is year 0 rather than the 紀元1043年 the design uses as its example. Nothing forces an
+  absolute epoch today — the chronicle only ever renders durations (`開拓以前の${currentYear - startYear}年間`).
+  Either the generator gains a real epoch or the label wants different wording; both are outside
+  `packages/client/`, and the client needs no change under either. This is the owner's call, not a bug.
+- After rebasing a client worktree onto a main that carries `22950e1`, run `pnpm install` before `tsc`, or it
+  fails with `TS2688` (missing `@types/node`) before reaching any real error. The message names nothing useful.
 - `main` is green through S5 (social facilities and trails), V3 (readable settlement), the farming slice
   and N1 Tasks 1–5: `just check`, `just test`, client build, secretlint, and the `Date.now`/`Math.random`
   determinism scan all pass. `origin/main` matches, and CI is green.
