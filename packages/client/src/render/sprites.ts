@@ -1,4 +1,12 @@
-import type { AgentState, Facility, House, SEASONS, Terrain, Tile } from "@agent-town/shared";
+import type {
+  AgentState,
+  CropStage,
+  Facility,
+  House,
+  SEASONS,
+  Terrain,
+  Tile,
+} from "@agent-town/shared";
 
 import { TERRAIN_TINTS } from "./colors.js";
 
@@ -8,6 +16,7 @@ export type Season = (typeof SEASONS)[number];
 export type WorldObjectKind =
   | "resource"
   | "stockpile"
+  | "field"
   | "house"
   | "facility"
   | "landmark"
@@ -17,6 +26,7 @@ export type WorldObjectKind =
 const OBJECT_DEPTHS: Record<WorldObjectKind, number> = {
   resource: 0,
   stockpile: 1,
+  field: 2,
   house: 2,
   facility: 3,
   landmark: 4,
@@ -199,6 +209,22 @@ export const SPRITE_ASSETS = {
       emblem: "/assets/tiny-town/Tiles/tile_0083.png",
     },
   },
+  field: {
+    soil: {
+      // Tiny Farm tile 0: a rounded plot of dry soil with soft grass edges.
+      fallow: "/assets/tiny-farm/Tiles/tile_0000.png",
+      // Tiny Farm tile 1: the same rounded plot in darker, worked soil.
+      worked: "/assets/tiny-farm/Tiles/tile_0001.png",
+    },
+    crop: {
+      // Tiny Farm tile 64: small green sprouts.
+      sown: "/assets/tiny-farm/Tiles/tile_0064.png",
+      // Tiny Farm tile 65: taller green shoots.
+      growing: "/assets/tiny-farm/Tiles/tile_0065.png",
+      // Tiny Farm tile 66: golden ears on the stalk.
+      ripe: "/assets/tiny-farm/Tiles/tile_0066.png",
+    },
+  },
   stockpile: {
     // Tiny Town tile 130: a woven food basket.
     basket: "/assets/tiny-town/Tiles/tile_0130.png",
@@ -256,6 +282,11 @@ export const SPRITE_PATHS = [
   SPRITE_ASSETS.buildings.rationDepot.roof,
   SPRITE_ASSETS.buildings.rationDepot.wall,
   SPRITE_ASSETS.buildings.rationDepot.emblem,
+  SPRITE_ASSETS.field.soil.fallow,
+  SPRITE_ASSETS.field.soil.worked,
+  SPRITE_ASSETS.field.crop.sown,
+  SPRITE_ASSETS.field.crop.growing,
+  SPRITE_ASSETS.field.crop.ripe,
   SPRITE_ASSETS.stockpile.basket,
   SPRITE_ASSETS.stockpile.log,
   SPRITE_ASSETS.carry.wood,
@@ -284,6 +315,23 @@ export function agentSpritePath(agentId: string): string {
 
 export function buildingSprites(building: House | Facility): BuildingSprites {
   return SPRITE_ASSETS.buildings[building.kind];
+}
+
+/** Ground tile under a field: dry soil when fallow, worked soil once sown. */
+export function fieldSoilPath(stage: CropStage): string {
+  return stage === "fallow" ? SPRITE_ASSETS.field.soil.fallow : SPRITE_ASSETS.field.soil.worked;
+}
+
+const CROP_SPRITE_PATHS = {
+  fallow: null,
+  sown: SPRITE_ASSETS.field.crop.sown,
+  growing: SPRITE_ASSETS.field.crop.growing,
+  ripe: SPRITE_ASSETS.field.crop.ripe,
+} as const satisfies Readonly<Record<CropStage, string | null>>;
+
+/** Crop drawn over the soil, or null when the field is bare. */
+export function cropSpritePath(stage: CropStage): string | null {
+  return CROP_SPRITE_PATHS[stage];
 }
 
 export function treeSpritePath(season: Season, tileIndex: number): string {

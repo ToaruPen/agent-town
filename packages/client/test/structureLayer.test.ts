@@ -1,4 +1,9 @@
-import { type Building, FACILITY_BUILD_TICKS, type FacilityKind } from "@agent-town/shared";
+import {
+  type Building,
+  type CropStage,
+  FACILITY_BUILD_TICKS,
+  type FacilityKind,
+} from "@agent-town/shared";
 import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
@@ -20,6 +25,18 @@ const FACILITY_KINDS = [
   "rationDepot",
 ] as const satisfies readonly FacilityKind[];
 
+function worldWithCompleteField(stage: CropStage): Building[] {
+  return [
+    {
+      kind: "field",
+      pos: { x: 3, y: 3 },
+      progress: 30,
+      complete: true,
+      stage,
+    },
+  ];
+}
+
 describe("buildingSprites", () => {
   it("gives all four buildings a distinct roof and wall pair", () => {
     const buildings: Building[] = [
@@ -37,6 +54,23 @@ describe("buildingSprites", () => {
 });
 
 describe("renderStructureLayer", () => {
+  it("renders a ripe field as soil plus a crop", () => {
+    const layer = new Container();
+
+    renderStructureLayer(layer, worldWithCompleteField("ripe"));
+
+    expect(layer.children[0]?.children).toHaveLength(3);
+  });
+
+  it("leaves no crop behind when a field is harvested", () => {
+    const layer = new Container();
+    renderStructureLayer(layer, worldWithCompleteField("ripe"));
+
+    renderStructureLayer(layer, worldWithCompleteField("fallow"));
+
+    expect(layer.children[0]?.children).toHaveLength(2);
+  });
+
   it("draws one marker per facility beside the houses", () => {
     const layer = new Container();
     const buildings: Building[] = [

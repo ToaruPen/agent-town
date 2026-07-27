@@ -3,6 +3,7 @@ import {
   FACILITY_BUILD_TICKS,
   type Facility,
   type FacilityKind,
+  type Field,
   type House,
   isFacility,
   isField,
@@ -12,11 +13,18 @@ import { Container, Graphics, Sprite } from "pixi.js";
 
 import { TILE_SIZE } from "./mapLayer.js";
 import { BUILDING_SHADOW_WIDTH_RATIO, shadowGraphic } from "./shadow.js";
-import { buildingSprites, objectDepth, type WorldObjectKind } from "./sprites.js";
+import {
+  buildingSprites,
+  cropSpritePath,
+  fieldSoilPath,
+  objectDepth,
+  type WorldObjectKind,
+} from "./sprites.js";
 
 export const CONSTRUCTION_ALPHA = 0.45;
 export const HOUSE_OBJECT_LABEL = "house-object";
 export const FACILITY_OBJECT_LABEL = "facility-object";
+export const FIELD_OBJECT_LABEL = "field-object";
 export const FACILITY_PROGRESS_LABEL = "facility-progress";
 
 export function facilityProgressRatio(kind: FacilityKind, progress: number): number {
@@ -78,9 +86,34 @@ function buildingContainer(building: House | Facility): Container {
   return container;
 }
 
+function fieldContainer(field: Field): Container {
+  const depth = objectDepth(field.pos.y, "field");
+  const alpha = field.complete ? 1 : CONSTRUCTION_ALPHA;
+  const container = new Container();
+  container.position.set(field.pos.x * TILE_SIZE, field.pos.y * TILE_SIZE);
+  container.label = FIELD_OBJECT_LABEL;
+  container.zIndex = depth;
+  const shadow = shadowGraphic(BUILDING_SHADOW_WIDTH_RATIO);
+  shadow.position.set(TILE_SIZE / 2, TILE_SIZE - 2);
+  shadow.alpha = alpha;
+  container.addChild(shadow);
+  container.addChild(buildingPart(fieldSoilPath(field.stage), 0, alpha, FIELD_OBJECT_LABEL, depth));
+  const cropPath = cropSpritePath(field.stage);
+  if (cropPath !== null) {
+    container.addChild(buildingPart(cropPath, 0, alpha, FIELD_OBJECT_LABEL, depth));
+  }
+  return container;
+}
+
 function clearStructures(layer: Container): void {
   for (const child of [...layer.children]) {
-    if (child.label !== HOUSE_OBJECT_LABEL && child.label !== FACILITY_OBJECT_LABEL) continue;
+    if (
+      child.label !== HOUSE_OBJECT_LABEL &&
+      child.label !== FACILITY_OBJECT_LABEL &&
+      child.label !== FIELD_OBJECT_LABEL
+    ) {
+      continue;
+    }
     layer.removeChild(child);
     child.destroy({ children: true });
   }
@@ -90,7 +123,6 @@ export function renderStructureLayer(layer: Container, buildings: Building[]): v
   clearStructures(layer);
 
   for (const building of buildings) {
-    if (isField(building)) continue;
-    layer.addChild(buildingContainer(building));
+    layer.addChild(isField(building) ? fieldContainer(building) : buildingContainer(building));
   }
 }

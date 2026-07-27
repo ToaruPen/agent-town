@@ -8,6 +8,8 @@ import {
   agentFacingScale,
   agentSpritePath,
   agentTileOffset,
+  cropSpritePath,
+  fieldSoilPath,
   layoutAgentsOnTiles,
   objectDepth,
   resourceSpritePath,
@@ -19,6 +21,28 @@ import {
   treeSpritePath,
   undergrowthSpritePath,
 } from "../src/render/sprites.js";
+
+describe("field sprites", () => {
+  it("gives every crop stage a distinct look", () => {
+    const paths = (["fallow", "sown", "growing", "ripe"] as const).map(
+      (stage) => `${fieldSoilPath(stage)}|${cropSpritePath(stage) ?? ""}`,
+    );
+
+    expect(new Set(paths).size).toBe(4);
+  });
+
+  it("draws no crop on a fallow field", () => {
+    expect(cropSpritePath("fallow")).toBeNull();
+  });
+
+  it("preloads every field tile", () => {
+    for (const stage of ["fallow", "sown", "growing", "ripe"] as const) {
+      expect(SPRITE_PATHS).toContain(fieldSoilPath(stage));
+      const crop = cropSpritePath(stage);
+      if (crop !== null) expect(SPRITE_PATHS).toContain(crop);
+    }
+  });
+});
 
 describe("agentTileOffset", () => {
   it("keeps one agent centered and separates same-tile occupants deterministically", () => {
