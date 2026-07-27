@@ -590,6 +590,36 @@ describe("stepAgent", () => {
     expect(fieldOf(world).stage).toBe("fallow");
   });
 
+  it("walks to a distant ripe field before harvesting it", () => {
+    const world = worldWithCompleteField("ripe", autumnTick());
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    agent.pos = { x: 0, y: 3 };
+    agent.tasks = [{ kind: "harvest", pos: { x: 3, y: 3 } }];
+    const before = world.stockpile.food;
+
+    for (let tick = 0; tick < 2 * MOVE_TICKS_PER_TILE + 1; tick += 1) {
+      stepAgent(world, agent);
+    }
+
+    expect(world.stockpile.food).toBe(before + FIELD_YIELD);
+    expect(fieldOf(world).stage).toBe("fallow");
+  });
+
+  it("walks to a distant fallow field before sowing it", () => {
+    const world = worldWithCompleteField("fallow", springTick());
+    const agent = world.agents[0];
+    if (agent === undefined) throw new Error("missing test agent");
+    agent.pos = { x: 0, y: 3 };
+    agent.tasks = [{ kind: "sow", pos: { x: 3, y: 3 } }];
+
+    for (let tick = 0; tick < 2 * MOVE_TICKS_PER_TILE + 1; tick += 1) {
+      stepAgent(world, agent);
+    }
+
+    expect(fieldOf(world).stage).toBe("sown");
+  });
+
   it("refuses to harvest a field that is not ripe", () => {
     for (const stage of ["fallow", "sown", "growing"] as const) {
       const world = worldWithCompleteField(stage, autumnTick());

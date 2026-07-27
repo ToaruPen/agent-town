@@ -469,18 +469,39 @@ function stepTill(
   if (field.complete) finishHeadTask(agent);
 }
 
+function reachPlacedField(
+  world: WorldState,
+  agent: AgentState,
+  target: Position,
+  step: StepContext,
+): boolean {
+  if (isAdjacentOrOn(agent.pos, target)) return true;
+  const approach = findNearestReachable(
+    world,
+    agent.pos,
+    buildApproachPositions(world, target, true),
+  );
+  if (approach === null) {
+    finishHeadTask(agent);
+    return false;
+  }
+  stepToward(world, agent, approach, (pos) => positionsEqual(pos, approach), step);
+  return false;
+}
+
 function stepSow(
   world: WorldState,
   agent: AgentState,
   task: Extract<AgentTask, { kind: "sow" }>,
+  step: StepContext,
 ): void {
   const field = fieldAt(world, task.pos);
-  if (
-    seasonOfTick(world.tick) === "spring" &&
-    field?.complete === true &&
-    field.stage === "fallow" &&
-    isAdjacentOrOn(agent.pos, task.pos)
-  ) {
+  if (field === undefined) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!reachPlacedField(world, agent, task.pos, step)) return;
+  if (seasonOfTick(world.tick) === "spring" && field.complete && field.stage === "fallow") {
     field.stage = "sown";
   }
   finishHeadTask(agent);
@@ -490,14 +511,15 @@ function stepHarvest(
   world: WorldState,
   agent: AgentState,
   task: Extract<AgentTask, { kind: "harvest" }>,
+  step: StepContext,
 ): void {
   const field = fieldAt(world, task.pos);
-  if (
-    seasonOfTick(world.tick) === "autumn" &&
-    field?.complete === true &&
-    field.stage === "ripe" &&
-    isAdjacentOrOn(agent.pos, task.pos)
-  ) {
+  if (field === undefined) {
+    finishHeadTask(agent);
+    return;
+  }
+  if (!reachPlacedField(world, agent, task.pos, step)) return;
+  if (seasonOfTick(world.tick) === "autumn" && field.complete && field.stage === "ripe") {
     world.stockpile.food += FIELD_YIELD;
     field.stage = "fallow";
   }
@@ -683,10 +705,10 @@ export function stepAgent(
       stepTill(world, agent, task, step);
       break;
     case "sow":
-      stepSow(world, agent, task);
+      stepSow(world, agent, task, step);
       break;
     case "harvest":
-      stepHarvest(world, agent, task);
+      stepHarvest(world, agent, task, step);
       break;
     case "rest":
       stepRest(world, agent, step);
