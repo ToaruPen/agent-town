@@ -17,6 +17,17 @@ import type { NationClockSnapshot } from "./nationClockViewModel.js";
 /** The `orders` message verbatim. The order desk renders the server's answer, never its own guess. */
 export type NationOrders = Extract<ServerMessage, { type: "orders" }>;
 
+/**
+ * What the client remembers about a directive it has actually seen, for the season report's "完了した
+ *施策" line (hud.md §4.5). The server never resends a completed directive's kind or issue date —
+ * `completedDirectiveIds` on `SeasonReport` is ids only — so this is bookkeeping over facts already sent
+ * (`ActiveDirective.kind`/`issuedAtTick`, or `orders.queued`), never a value invented client-side.
+ */
+export interface DirectiveLogEntry {
+  kind: DirectiveKind;
+  issuedAtTick: number;
+}
+
 export interface NationHudState {
   /** `history.currentYear`, captured once from `welcome`; it never changes mid-game. */
   currentYear: number | null;
@@ -58,6 +69,22 @@ export interface NationHudState {
    * the values differing.
    */
   generation: number;
+  /**
+   * Every directive this session has seen the kind and issue tick of, keyed by id. Populated from
+   * `activeDirectives` as it arrives and from `orders.queued`, never overwritten once a key exists —
+   * a directive's kind does not change after it is issued, so the first sighting is authoritative.
+   *
+   * Survives `welcome`, unlike `orders`: this is a record of what was observed, not an assertion about
+   * the next boundary, so a reconnect gap does not invalidate it (measured against `sim/nation/engine.ts`
+   * — a directive's id and kind are fixed at selection and untouched by anything a gap could have done).
+   */
+  directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>;
+  /**
+   * Ids the player themself queued, via `orders.queued`. This is what lets the season report attribute a
+   * completed directive to "あなたの発令" rather than the chancellor — `completedDirectiveIds` carries no
+   * such flag. Survives `welcome` for the same reason `directiveLog` does.
+   */
+  ownDirectiveIds: ReadonlySet<DirectiveId>;
 }
 
 const DEFAULT_RESUME_SPEED: SpeedMultiplier = 1;
@@ -75,7 +102,29 @@ export function initialNationHudState(): NationHudState {
     speed: 0,
     lastNonZeroSpeed: DEFAULT_RESUME_SPEED,
     generation: 0,
+    directiveLog: new Map(),
+    ownDirectiveIds: new Set(),
   };
+}
+
+/**
+ * Folds any directive not already logged into the map, from a fresh `nations` snapshot. Returns the same
+ * reference when nothing is new, so the render-key dedupe two panels rely on is not defeated by a map
+ * that is structurally identical but freshly allocated.
+ */
+function mergedDirectiveLog(
+  log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
+  nations: readonly NationState[],
+): ReadonlyMap<DirectiveId, DirectiveLogEntry> {
+  let next: Map<DirectiveId, DirectiveLogEntry> | null = null;
+  for (const nation of nations) {
+    for (const directive of nation.activeDirectives) {
+      if (log.has(directive.id)) continue;
+      next ??= new Map(log);
+      next.set(directive.id, { kind: directive.kind, issuedAtTick: directive.issuedAtTick });
+    }
+  }
+  return next ?? log;
 }
 
 function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier): SpeedMultiplier {
@@ -96,6 +145,11 @@ function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier):
  * it), autopilot may have been flipped from another connection — `playerNationId` and `autoPilot` live on
  * the shared runtime, not the session — and the chancellor's pick was for a season that may be over. The
  * slot reads 同期中 until the next `orders`, which is the one thing here that is true.
+ *
+ * `directiveLog` and `ownDirectiveIds` are the one exception to "welcome re-establishes everything": both
+ * are records of what was observed, not claims about what comes next, so a gap does not make them stale —
+ * only wrong to discard. Resetting `ownDirectiveIds` in particular would turn "the client does not know
+ * who issued this" into a confident, incorrect 宰相の決定 for the player's own order.
  */
 export function applyWelcome(state: NationHudState, world: NationWorldState): NationHudState {
   return {
@@ -110,6 +164,8 @@ export function applyWelcome(state: NationHudState, world: NationWorldState): Na
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
     generation: state.generation + 1,
+    directiveLog: mergedDirectiveLog(state.directiveLog, world.nations),
+    ownDirectiveIds: state.ownDirectiveIds,
   };
 }
 
@@ -135,7 +191,33 @@ export function applyUpdate(
     },
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
+    directiveLog: mergedDirectiveLog(state.directiveLog, world.nations),
   };
+}
+
+/**
+ * `queued.id`'s kind and issue tick, the moment they arrive — the one directive-log source that reaches a
+ * one-season directive (`holdFestival`) before it completes. `engine.ts` `activateBoundaryDirectives`
+ * adds a freshly selected directive and resolves the season in the same boundary, so a chancellor-picked
+ * festival is never seen sitting in `activeDirectives` first; a player-queued one still passes through
+ * here before that boundary runs. Never overwrites an existing key, so the *first* sighting's tick is
+ * what is kept — `queued` can repeat across several `orders` messages while autopilot holds it.
+ */
+function observedFromOrders(
+  log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
+  ownIds: ReadonlySet<DirectiveId>,
+  orders: NationOrders,
+): {
+  directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>;
+  ownDirectiveIds: ReadonlySet<DirectiveId>;
+} {
+  const queued = orders.queued;
+  if (queued === null) return { directiveLog: log, ownDirectiveIds: ownIds };
+  const directiveLog = log.has(queued.id)
+    ? log
+    : new Map(log).set(queued.id, { kind: queued.kind, issuedAtTick: orders.tick });
+  const ownDirectiveIds = ownIds.has(queued.id) ? ownIds : new Set(ownIds).add(queued.id);
+  return { directiveLog, ownDirectiveIds };
 }
 
 /**
@@ -148,7 +230,15 @@ export function applyUpdate(
  * exactly as the server still holds it (measured — a refusal never disturbs `queued`).
  */
 export function applyOrders(state: NationHudState, orders: NationOrders): NationHudState {
-  return { ...state, playerNationId: orders.nationId, options: orders.options, orders };
+  const observed = observedFromOrders(state.directiveLog, state.ownDirectiveIds, orders);
+  return {
+    ...state,
+    playerNationId: orders.nationId,
+    options: orders.options,
+    orders,
+    directiveLog: observed.directiveLog,
+    ownDirectiveIds: observed.ownDirectiveIds,
+  };
 }
 
 /**

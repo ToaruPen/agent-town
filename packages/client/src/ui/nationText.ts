@@ -4,6 +4,7 @@ import type {
   DirectiveKind,
   NationStocks,
   Season,
+  SeasonLedgerReason,
   SeasonMetric,
   SpeedMultiplier,
 } from "@agent-town/shared";
@@ -37,6 +38,33 @@ const METRIC_LABELS: Readonly<Record<SeasonMetric, string>> = {
 
 export function metricLabel(metric: SeasonMetric): string {
   return METRIC_LABELS[metric];
+}
+
+/**
+ * Keyed by `SeasonLedgerReason` so a new reason is a compile error here rather than a blank cause on the
+ * season report's diff.
+ *
+ * `directiveUpkeep` has no emitter today (`grep -rn "directiveUpkeep" packages/server/src` returns
+ * nothing) — `directiveCost` covers issuance and `directiveEffect` covers completion, and nothing charges
+ * a per-season maintenance fee while a directive is active. Spelled out anyway, for the same reason
+ * `REQUIRED_TERRAIN` below spells out every `DirectiveKind`: if the simulation starts emitting it, this
+ * is where the missing wording surfaces as a compile error rather than as a blank reason on screen.
+ */
+const LEDGER_REASON_LABELS: Readonly<Record<SeasonLedgerReason, string>> = {
+  baseProduction: "基礎生産",
+  tradeIncome: "交易収入",
+  directiveEffect: "施策の効果",
+  directiveCost: "施策の支出",
+  directiveUpkeep: "施策の維持",
+  populationConsumption: "人口の消費",
+  famine: "飢饉",
+  growth: "人口成長",
+  stabilityDrift: "安定の自然変動",
+  cultureAffinity: "国柄との一致",
+};
+
+export function ledgerReasonLabel(reason: SeasonLedgerReason): string {
+  return LEDGER_REASON_LABELS[reason];
 }
 
 const DIRECTIVE_KIND_LABELS: Readonly<Record<DirectiveKind, string>> = {

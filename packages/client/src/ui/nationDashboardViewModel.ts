@@ -60,8 +60,14 @@ export interface NationDashboardViewModel {
   commitSlot: NationCommitSlotViewModel;
 }
 
-/** Fixed so rows never reshuffle between renders; matches the always-on layout in hud.md §4.1. */
-const METRIC_ORDER: readonly SeasonMetric[] = [
+/**
+ * Fixed so rows never reshuffle between renders; matches the always-on layout in hud.md §4.1.
+ *
+ * Exported for `seasonReportViewModel.ts`, which draws its diff over the same six metrics in the same
+ * order (hud.md §4.5) — a second copy of this array would be one more place a seventh metric could go
+ * missing from silently.
+ */
+export const METRIC_ORDER: readonly SeasonMetric[] = [
   "food",
   "materials",
   "wealth",
@@ -83,7 +89,8 @@ const METRIC_VALUES: Readonly<Record<SeasonMetric, (nation: NationState) => numb
   culture: (nation) => nation.culture,
 };
 
-function groupThousands(value: number): string {
+/** Exported so `seasonReportViewModel.ts`'s reason-line numbers group the same way the dashboard's do. */
+export function groupThousands(value: number): string {
   return Math.abs(value)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -105,7 +112,8 @@ function metricDelta(report: SeasonReport | null, metric: SeasonMetric): number 
     .reduce((sum, entry) => sum + entry.delta, 0);
 }
 
-function deltaDirection(delta: number | null): MetricDirection {
+/** Exported so the season report's metric rows read the same up/down/flat as the dashboard's. */
+export function deltaDirection(delta: number | null): MetricDirection {
   if (delta === null) return "unknown";
   const rounded = Math.round(delta);
   if (rounded > 0) return "up";
@@ -113,8 +121,12 @@ function deltaDirection(delta: number | null): MetricDirection {
   return "flat";
 }
 
-/** A dash covers both "no season yet" and "this metric cancelled out"; `direction` tells them apart. */
-function formatDelta(delta: number | null): string {
+/**
+ * A dash covers both "no season yet" and "this metric cancelled out"; `direction` tells them apart.
+ * Exported so the season report's metric rows carry the same welded ▲+12/▼−6 glyph as the dashboard's —
+ * the two surfaces show the same numbers and must not disagree about how they read.
+ */
+export function formatDelta(delta: number | null): string {
   const direction = deltaDirection(delta);
   if (delta === null || direction === "flat") return "―";
   const magnitude = groupThousands(Math.round(delta));
