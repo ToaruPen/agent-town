@@ -34,10 +34,9 @@ import {
   runFacilityDay,
   runFacilityInterval,
 } from "../src/sim/facilityOperation.js";
-import { createTrailCells } from "../src/sim/traffic.js";
 import { makeAgentFixture } from "./agentFixture.js";
 import { makeFacilityFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 const WIDTH = 8;
 const HEIGHT = 3;
@@ -57,8 +56,7 @@ interface WorldOptions {
 }
 
 function createWorld(options: WorldOptions = {}): WorldState {
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width: WIDTH,
     height: HEIGHT,
     tiles: Array.from({ length: WIDTH * HEIGHT }, () => ({
@@ -67,22 +65,7 @@ function createWorld(options: WorldOptions = {}): WorldState {
     })),
     agents: options.residents ?? [makeResident("agent-1", { x: 1, y: 0 }, 100)],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: options.stockpileFood ?? 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: createTrailCells(WIDTH, HEIGHT),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 function addFacility(world: WorldState, kind: FacilityKind, pos: Position, food: number): Facility {

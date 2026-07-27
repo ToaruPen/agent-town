@@ -18,10 +18,9 @@ import {
   planFacilityTasks,
   withdrawFacilityTransfer,
 } from "../src/sim/construction.js";
-import { createTrailCells } from "../src/sim/traffic.js";
 import { makeAgentFixture } from "./agentFixture.js";
 import { makeDemandFixture, makeFacilityFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 interface SiteOptions {
   stockpileWood?: number;
@@ -31,33 +30,18 @@ interface SiteOptions {
 
 function createSite(options: SiteOptions = {}): { world: WorldState; facility: Facility } {
   const facility = makeFacilityFixture(options.facilityKind);
-  const world: WorldState = {
-    tick: 0,
+  const world = makeWorldFixture({
     width: 4,
     height: 1,
     tiles: Array.from({ length: 4 }, () => ({ terrain: "plains" as const, resource: null })),
-    agents: [],
     stockpile: {
       pos: { x: 0, y: 0 },
       wood: options.stockpileWood ?? 10,
       food: options.stockpileFood ?? 0,
     },
     buildings: [facility],
-    deaths: [],
-    collectives: [],
-    institutions: [],
     spatialDemands: [makeDemandFixture(options.facilityKind)],
-    trailCells: createTrailCells(4, 1),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
   return { world, facility };
 }
 

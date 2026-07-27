@@ -18,7 +18,7 @@ import {
   pathCostForTrail,
   recordTraversal,
 } from "../src/sim/traffic.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(
   width: number,
@@ -30,29 +30,12 @@ function createWorld(
     resource: null,
   }));
 
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
-    agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: createTrailCells(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  } satisfies WorldState;
+  });
 }
 
 /** Walks the same cell often enough to reach the given wear. */

@@ -19,8 +19,8 @@ import {
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
 import { makeAgentFixture as createAgent } from "./agentFixture.js";
-import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeFacilityFixture } from "./spatialFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(agent: AgentState): WorldState {
   const tiles: Tile[] = [
@@ -31,29 +31,13 @@ function createWorld(agent: AgentState): WorldState {
     { terrain: "rock", resource: null },
     { terrain: "plains", resource: null },
   ];
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width: 3,
     height: 2,
     tiles,
     agents: [agent],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(3, 2),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 function expectParseFailure(result: PlanParseResult): void {

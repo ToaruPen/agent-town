@@ -12,8 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { selectFacilitySite } from "../src/sim/siteSelection.js";
 import { makeAgentFixture } from "./agentFixture.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeTrailCellsFixture, makeWorldFixture } from "./worldFixture.js";
 
 interface WorldOptions {
   width: number;
@@ -66,29 +65,15 @@ function createWorld(options: WorldOptions): WorldState {
     makeTile({ x: index % width, y: Math.floor(index / width) }, options),
   );
 
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
     agents: (options.agents ?? []).map(makeResident),
     stockpile: { pos: options.stockpile ?? { x: 0, y: 0 }, wood: 0, food: 0 },
     buildings: (options.buildings ?? []).map(makeHouse),
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
     trailCells: makeWornTrailCells(options),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  } satisfies WorldState;
+  });
 }
 
 /**

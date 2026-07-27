@@ -16,8 +16,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildPlanPrompt } from "../src/llm/planPrompt.js";
 import { makeAgentFixture } from "./agentFixture.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createAgent(overrides: Partial<AgentState> = {}): AgentState {
   return makeAgentFixture({ pos: { x: 3, y: 1 }, ...overrides });
@@ -47,29 +46,14 @@ function createWorld(agent: AgentState): WorldState {
 
   for (const { x, y, tile } of resources) tiles[y * width + x] = tile;
 
-  return {
+  return makeWorldFixture({
     tick: 17,
     width,
     height,
     tiles,
     agents: [agent],
     stockpile: { pos: { x: 3, y: 3 }, wood: 7, food: 4 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 describe("buildPlanPrompt", () => {

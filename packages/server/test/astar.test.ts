@@ -2,8 +2,7 @@ import { type Position, type Terrain, TRAIL_LEVEL_WEAR, type WorldState } from "
 import { describe, expect, it } from "vitest";
 
 import { filterReachable, findNearestReachable, findPath, isWalkable } from "../src/sim/astar.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(
   width: number,
@@ -16,29 +15,12 @@ function createWorld(
     return { terrain: terrainAt.get(`${x},${y}`) ?? "plains", resource: null };
   });
 
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
-    agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  } satisfies WorldState;
+  });
 }
 
 describe("findPath", () => {

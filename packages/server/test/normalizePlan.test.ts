@@ -17,8 +17,8 @@ import {
   validatePlanExecutability,
 } from "../src/llm/planSchema.js";
 import { makeAgentFixture } from "./agentFixture.js";
-import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeFacilityFixture } from "./spatialFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createAgent(pos: Position = { x: 0, y: 0 }): AgentState {
   return makeAgentFixture({ pos });
@@ -32,8 +32,7 @@ function createWorld(agent: AgentState): WorldState {
     resource: null,
   }));
   tiles[2] = { terrain: "forest", resource: { kind: "wood", amount: 4 } };
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
@@ -47,21 +46,7 @@ function createWorld(agent: AgentState): WorldState {
         complete: true,
       },
     ],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 describe("normalizePlan", () => {

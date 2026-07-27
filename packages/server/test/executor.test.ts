@@ -39,8 +39,8 @@ import { describe, expect, it } from "vitest";
 import { stepAgent } from "../src/sim/executor.js";
 import { moveTicksForTrail, recordTraversal, type Traversal } from "../src/sim/traffic.js";
 import { makeAgentFixture as createAgent } from "./agentFixture.js";
-import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeDemandFixture, makeFacilityFixture } from "./spatialFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 interface TileOverride {
   pos: { x: number; y: number };
@@ -66,29 +66,12 @@ function createWorld(width: number, height: number, overrides: TileOverride[] = 
     };
   });
 
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
-    agents: [],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 function worldWithAgentAt(pos: Position): WorldState {

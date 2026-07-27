@@ -28,33 +28,17 @@ import { describe, expect, it } from "vitest";
 
 import { FakePlanner, woodTarget } from "../src/sim/fakePlanner.js";
 import { makeAgentFixture as createAgent } from "./agentFixture.js";
-import { makeDemandFixture, makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeDemandFixture, makeFacilityFixture } from "./spatialFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(agent: AgentState, tiles: Tile[]): WorldState {
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width: tiles.length,
     height: 1,
     tiles,
     agents: [agent],
     stockpile: { pos: { x: tiles.length - 1, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(tiles.length, 1),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 function seasonTick(index: number): number {

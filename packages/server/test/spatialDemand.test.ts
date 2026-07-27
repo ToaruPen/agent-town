@@ -12,8 +12,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { advanceSpatialDemands } from "../src/sim/spatialDemand.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(
   width: number,
@@ -26,29 +25,12 @@ function createWorld(
     resource: null,
   }));
 
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width,
     height,
     tiles,
-    agents: [],
     stockpile: { pos: stockpile, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(width, height),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  } satisfies WorldState;
+  });
 }
 
 function makeInstitution(kind: InstitutionKind): Institution {

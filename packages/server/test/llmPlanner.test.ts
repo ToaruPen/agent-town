@@ -12,8 +12,7 @@ import { LlmPlanner } from "../src/llm/llmPlanner.js";
 import type { LlmRunner } from "../src/llm/llmRunner.js";
 import type { Planner } from "../src/sim/fakePlanner.js";
 import { makeAgentFixture as createAgent } from "./agentFixture.js";
-import { makeTrailCellsFixture } from "./spatialFixture.js";
-import { makeWorldMapFixture } from "./worldMapFixture.js";
+import { makeWorldFixture } from "./worldFixture.js";
 
 function createWorld(agent: AgentState): WorldState {
   const tiles: Tile[] = [
@@ -21,29 +20,13 @@ function createWorld(agent: AgentState): WorldState {
     { terrain: "water", resource: null },
     { terrain: "forest", resource: { kind: "wood", amount: 4 } },
   ];
-  return {
-    tick: 0,
+  return makeWorldFixture({
     width: 3,
     height: 1,
     tiles,
     agents: [agent],
     stockpile: { pos: { x: 0, y: 0 }, wood: 0, food: 0 },
-    buildings: [],
-    deaths: [],
-    collectives: [],
-    institutions: [],
-    spatialDemands: [],
-    trailCells: makeTrailCellsFixture(3, 1),
-    history: {
-      startYear: 0,
-      currentYear: 0,
-      polities: [],
-      events: [],
-      landmarks: [],
-      settlementOrigin: null,
-      worldMap: makeWorldMapFixture(),
-    },
-  };
+  });
 }
 
 function validResponse(tasks: AgentTask[]): string {
