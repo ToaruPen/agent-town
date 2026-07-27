@@ -3,6 +3,8 @@ import {
   FOOD_PER_MEAL,
   HUNGER_DECAY_PER_DAY,
   HUNGER_PER_MEAL,
+  NATION_TICKS_PER_SEASON,
+  NATION_TICKS_PER_YEAR,
   TICKS_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
@@ -13,6 +15,8 @@ import {
   dayOfTick,
   foodDaysRemaining,
   isWinter,
+  nationSeasonOfTick,
+  nationYearOfTick,
   seasonOfTick,
   storedFoodTotal,
 } from "../src/time.js";
@@ -79,6 +83,24 @@ describe("calendar helpers", () => {
     expect(seasonOfTick(4 * DAYS_PER_SEASON * TICKS_PER_DAY)).toBe("spring");
     expect(isWinter(3 * DAYS_PER_SEASON * TICKS_PER_DAY - 1)).toBe(false);
     expect(isWinter(3 * DAYS_PER_SEASON * TICKS_PER_DAY)).toBe(true);
+  });
+});
+
+describe("nation calendar helpers", () => {
+  it("advances through one-based elapsed seasons at exact tick boundaries", () => {
+    expect(nationSeasonOfTick(0)).toBe("spring");
+    expect(nationSeasonOfTick(NATION_TICKS_PER_SEASON - 1)).toBe("spring");
+    expect(nationSeasonOfTick(NATION_TICKS_PER_SEASON)).toBe("summer");
+    expect(nationSeasonOfTick(2 * NATION_TICKS_PER_SEASON)).toBe("autumn");
+    expect(nationSeasonOfTick(3 * NATION_TICKS_PER_SEASON)).toBe("winter");
+  });
+
+  it("numbers elapsed years from one and returns to spring at rollover", () => {
+    expect(nationYearOfTick(0)).toBe(1);
+    expect(nationYearOfTick(NATION_TICKS_PER_YEAR - 1)).toBe(1);
+    expect(nationSeasonOfTick(NATION_TICKS_PER_YEAR - 1)).toBe("winter");
+    expect(nationYearOfTick(NATION_TICKS_PER_YEAR)).toBe(2);
+    expect(nationSeasonOfTick(NATION_TICKS_PER_YEAR)).toBe("spring");
   });
 });
 

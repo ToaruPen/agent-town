@@ -1,0 +1,126 @@
+import type { SEASONS } from "./constants.js";
+import type { WorldHistory } from "./history.js";
+
+export type NationId = string;
+export type DirectiveId = string;
+export type Season = (typeof SEASONS)[number];
+export type NationController = "player" | "agent";
+export type SpeedMultiplier = 0 | 1 | 2 | 4 | 8;
+
+export interface NationStocks {
+  food: number;
+  materials: number;
+  wealth: number;
+}
+
+export type DirectiveKind =
+  | "clearFarmland"
+  | "developTimber"
+  | "openMine"
+  | "growCity"
+  | "encourageStores"
+  | "holdFestival";
+
+export type DirectiveBlockedReason =
+  | "insufficientFood"
+  | "insufficientMaterials"
+  | "insufficientWealth"
+  | "missingTerrain"
+  | "cityAtMaxDevelopment"
+  | "taboo"
+  | "alreadyActive";
+
+export interface DirectiveOption {
+  kind: DirectiveKind;
+  targetCityId: string | null;
+  cost: NationStocks;
+  seasons: number;
+  /** Fit with the nation's cultural values, -1..1. Feeds stability and chancellor scoring. */
+  affinity: number;
+  blockedReason: DirectiveBlockedReason | null;
+}
+
+export interface ActiveDirective {
+  id: DirectiveId;
+  kind: DirectiveKind;
+  targetCityId: string | null;
+  issuedAtTick: number;
+  seasonsRemaining: number;
+}
+
+export interface NationCityState {
+  cityId: string;
+  population: number;
+  developmentLevel: number;
+}
+
+export type SeasonMetric = "food" | "materials" | "wealth" | "population" | "stability" | "culture";
+
+export type SeasonLedgerReason =
+  | "baseProduction"
+  | "tradeIncome"
+  | "directiveEffect"
+  | "directiveCost"
+  | "directiveUpkeep"
+  | "populationConsumption"
+  | "famine"
+  | "growth"
+  | "stabilityDrift"
+  | "cultureAffinity";
+
+export interface SeasonLedgerEntry {
+  metric: SeasonMetric;
+  delta: number;
+  reason: SeasonLedgerReason;
+  directiveId: DirectiveId | null;
+}
+
+export interface SeasonReport {
+  year: number;
+  season: Season;
+  entries: SeasonLedgerEntry[];
+  completedDirectiveIds: DirectiveId[];
+}
+
+export interface ProsperityScore {
+  population: number;
+  production: number;
+  wealth: number;
+  stability: number;
+  culture: number;
+  /** Weighted total, 0..1000. */
+  total: number;
+}
+
+export interface NationState {
+  id: NationId;
+  controller: NationController;
+  autoPilot: boolean;
+  stocks: NationStocks;
+  cities: NationCityState[];
+  territoryCellCount: number;
+  population: number;
+  /** 0..100. */
+  stability: number;
+  culture: number;
+  foodProduction: number;
+  materialProduction: number;
+  activeDirectives: ActiveDirective[];
+  prosperity: ProsperityScore;
+  lastReport: SeasonReport | null;
+}
+
+export interface NationWorldState {
+  tick: number;
+  year: number;
+  season: Season;
+  speed: SpeedMultiplier;
+  history: WorldHistory;
+  nations: NationState[];
+  playerNationId: NationId | null;
+}
+
+export interface WorldCellChange {
+  index: number;
+  polityId: string | null;
+}

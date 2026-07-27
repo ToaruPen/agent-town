@@ -3,6 +3,8 @@ import {
   FOOD_PER_MEAL,
   HUNGER_DECAY_PER_DAY,
   HUNGER_PER_MEAL,
+  NATION_TICKS_PER_SEASON,
+  NATION_TICKS_PER_YEAR,
   SEASONS,
   TICKS_PER_DAY,
 } from "./constants.js";
@@ -18,6 +20,17 @@ export function seasonOfTick(tick: number): (typeof SEASONS)[number] {
   const season = SEASONS[seasonIndex];
   if (season === undefined) throw new Error(`invalid season index: ${seasonIndex}`);
   return season;
+}
+
+export function nationSeasonOfTick(tick: number): (typeof SEASONS)[number] {
+  const seasonIndex = Math.floor(tick / NATION_TICKS_PER_SEASON) % SEASONS.length;
+  const season = SEASONS[seasonIndex];
+  if (season === undefined) throw new Error(`invalid nation season index: ${seasonIndex}`);
+  return season;
+}
+
+export function nationYearOfTick(tick: number): number {
+  return Math.floor(tick / NATION_TICKS_PER_YEAR) + 1;
 }
 
 export function isWinter(tick: number): boolean {

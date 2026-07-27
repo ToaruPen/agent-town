@@ -311,3 +311,9 @@ export const TRAIL_MOVE_TICK_MULTIPLIER = {
   trail: 0.8,
   establishedTrail: 0.65,
 } as const satisfies Readonly<Record<TrailLevel, number>>;
+
+export const NATION_TICKS_PER_SEASON = 300;
+export const NATION_TICKS_PER_YEAR = NATION_TICKS_PER_SEASON * SEASONS.length;
+export const SPEED_MULTIPLIERS = [0, 1, 2, 4, 8] as const;
+export const DEFAULT_SPEED: import("./nation.js").SpeedMultiplier = 1;
+export const CLOCK_BROADCAST_MS = 1000;
