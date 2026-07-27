@@ -4,6 +4,7 @@ import { Container, Graphics, Rectangle, Sprite, Text } from "pixi.js";
 import type { ThoughtBubble } from "../ui/inspectPanel.js";
 import { AGENT_LABEL_COLOR } from "./colors.js";
 import { TILE_SIZE } from "./mapLayer.js";
+import { shadowGraphic } from "./shadow.js";
 import {
   agentDepth,
   agentFacingScale,
@@ -13,6 +14,7 @@ import {
 } from "./sprites.js";
 
 const AGENT_HALF_SIZE = TILE_SIZE / 2;
+const AGENT_SHADOW_WIDTH_RATIO = 0.55;
 const LLM_RING_GAP = 2;
 const LLM_RING_WIDTH = 2;
 const LLM_RING_COLOR = 0xffd700;
@@ -84,6 +86,9 @@ function createAgentContainer(agent: AgentState, offset: { x: number; y: number 
   container.eventMode = "static";
   container.hitArea = new Rectangle(-AGENT_HALF_SIZE, -AGENT_HALF_SIZE, TILE_SIZE, TILE_SIZE);
   container.cursor = "pointer";
+  const shadow = shadowGraphic(AGENT_SHADOW_WIDTH_RATIO);
+  shadow.position.set(0, AGENT_HALF_SIZE - 2);
+  container.addChild(shadow);
   return container;
 }
 

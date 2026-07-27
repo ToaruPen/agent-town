@@ -1,6 +1,6 @@
 import { seasonOfTick, type Tile, type WorldState } from "@agent-town/shared";
 import { type Container, Graphics, Sprite } from "pixi.js";
-
+import { shadowGraphic } from "./shadow.js";
 import {
   objectDepth,
   resourceSpritePath,
@@ -20,6 +20,8 @@ export { TILE_SIZE } from "./sprites.js";
 const MAP_OBJECT_LABEL = "map-object";
 // Multiply tint cannot add gray, so winter pulls down autumn reds to mute the foliage.
 const WINTER_TREE_TINT = 0x88c4e8;
+const TREE_SHADOW_WIDTH_RATIO = 0.8;
+const TREE_SHADOW_DEPTH_OFFSET = 0.1;
 
 function createTileSprite(path: string, x: number, y: number): Sprite {
   const sprite = Sprite.from(path);
@@ -46,6 +48,14 @@ function clearMapObjects(layer: Container): void {
     layer.removeChild(child);
     child.destroy({ children: true });
   }
+}
+
+function addTreeShadow(layer: Container, x: number, y: number, tileY: number): void {
+  const shadow = shadowGraphic(TREE_SHADOW_WIDTH_RATIO);
+  shadow.position.set(x + TILE_SIZE / 2, y + TILE_SIZE - 2);
+  shadow.label = MAP_OBJECT_LABEL;
+  shadow.zIndex = objectDepth(tileY, "resource") - TREE_SHADOW_DEPTH_OFFSET;
+  layer.addChild(shadow);
 }
 
 function multiplyTint(left: number, right: number): number {
@@ -89,6 +99,9 @@ function renderTile(
     const resourceSprite = createTileSprite(resourcePath, x, y);
     if (tile.resource?.kind === "wood" && season === "winter") {
       resourceSprite.tint = WINTER_TREE_TINT;
+    }
+    if (tile.resource?.kind === "wood") {
+      addTreeShadow(objectLayer, x, y, tileY);
     }
     addMapObject(objectLayer, resourceSprite, tileY, "resource");
   }
