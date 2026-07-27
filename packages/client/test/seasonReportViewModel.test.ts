@@ -1,3 +1,4 @@
+import type { SeasonLedgerReason } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
 import type { DirectiveLogEntry } from "../src/ui/nationHudState.js";
@@ -124,6 +125,49 @@ describe("buildSeasonReportViewModel", () => {
 
       expect(stability?.reasons).toHaveLength(1);
       expect(stability?.reasons[0]?.reason).toBe("directiveEffect");
+    });
+
+    /**
+     * Every other assertion in this file reaches a reason's label only through the headline, which
+     * surfaces at most two of the ten (§4.5's largest loss and largest gain) — so eight of them would
+     * otherwise never have their Japanese text checked anywhere. This asserts the row-level label
+     * (`SeasonReportReasonLine.label`) the diff itself displays, for all ten.
+     */
+    it("labels every ledger reason on its own row, not only the two the headline can fit", () => {
+      const reasons: SeasonLedgerReason[] = [
+        "baseProduction",
+        "tradeIncome",
+        "directiveEffect",
+        "directiveCost",
+        "directiveUpkeep",
+        "populationConsumption",
+        "famine",
+        "growth",
+        "stabilityDrift",
+        "cultureAffinity",
+      ];
+      const report = reportFixture({
+        entries: reasons.map((reason, index) =>
+          ledgerEntry({ metric: "food", reason, delta: index + 1 }),
+        ),
+      });
+      const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, null, CURRENT_YEAR);
+      const labels = new Map(
+        view.metrics
+          .find((m) => m.metric === "food")
+          ?.reasons.map((line) => [line.reason, line.label]),
+      );
+
+      expect(labels.get("baseProduction")).toBe("基礎生産");
+      expect(labels.get("tradeIncome")).toBe("交易収入");
+      expect(labels.get("directiveEffect")).toBe("施策の効果");
+      expect(labels.get("directiveCost")).toBe("施策の支出");
+      expect(labels.get("directiveUpkeep")).toBe("施策の維持");
+      expect(labels.get("populationConsumption")).toBe("人口の消費");
+      expect(labels.get("famine")).toBe("飢饉");
+      expect(labels.get("growth")).toBe("人口成長");
+      expect(labels.get("stabilityDrift")).toBe("安定の自然変動");
+      expect(labels.get("cultureAffinity")).toBe("国柄との一致");
     });
   });
 
