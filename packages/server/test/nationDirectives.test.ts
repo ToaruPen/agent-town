@@ -82,6 +82,7 @@ function activeDirective(kind: DirectiveKind, targetCityId: string | null = null
     targetCityId,
     issuedAtTick: 300,
     seasonsRemaining: 0,
+    totalSeasons: 1,
   };
 }
 
@@ -210,6 +211,7 @@ describe("listDirectiveOptions", () => {
             targetCityId: null,
             issuedAtTick: 0,
             seasonsRemaining: 2,
+            totalSeasons: 3,
           },
         ],
       }),
@@ -262,6 +264,7 @@ describe("listDirectiveOptions", () => {
             targetCityId: null,
             issuedAtTick: 0,
             seasonsRemaining: 1,
+            totalSeasons: 2,
           },
         ],
       }),
@@ -283,6 +286,7 @@ describe("listDirectiveOptions", () => {
             targetCityId: null,
             issuedAtTick: 0,
             seasonsRemaining: 1,
+            totalSeasons: 3,
           },
         ],
       }),
@@ -303,6 +307,7 @@ describe("listDirectiveOptions", () => {
             targetCityId: "capital",
             issuedAtTick: 0,
             seasonsRemaining: 1,
+            totalSeasons: 3,
           },
         ],
       }),
@@ -322,6 +327,7 @@ describe("listDirectiveOptions", () => {
             targetCityId: null,
             issuedAtTick: 0,
             seasonsRemaining: 1,
+            totalSeasons: 2,
           },
         ],
       }),
@@ -366,6 +372,7 @@ describe("listDirectiveOptions", () => {
           targetCityId: "capital",
           issuedAtTick: 0,
           seasonsRemaining: 1,
+          totalSeasons: 3,
         },
       ],
     });

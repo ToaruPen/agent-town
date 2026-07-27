@@ -2,6 +2,14 @@ import {
   type CulturalValue,
   NATION_CAPITAL_POPULATION_WEIGHT,
   NATION_CITY_POPULATION_WEIGHT,
+  NATION_INITIAL_CULTURE_BASE,
+  NATION_INITIAL_CULTURE_MAX,
+  NATION_INITIAL_CULTURE_MIN,
+  NATION_INITIAL_CULTURE_PER_VALUE_WEIGHT,
+  NATION_INITIAL_STABILITY_BASE,
+  NATION_INITIAL_STABILITY_MAX,
+  NATION_INITIAL_STABILITY_MIN,
+  NATION_INITIAL_STABILITY_PER_HISTORY_POINT,
   NATION_POPULATION_PER_HISTORY_POINT,
   NATION_STARTING_FOOD_MUTUAL_AID_COEFFICIENT,
   NATION_STARTING_FOOD_PRODUCTION_MULTIPLIER,
@@ -22,14 +30,7 @@ import {
   type WorldMapCell,
 } from "@agent-town/shared";
 
-const ZERO_PROSPERITY = {
-  population: 0,
-  production: 0,
-  wealth: 0,
-  stability: 0,
-  culture: 0,
-  total: 0,
-} as const;
+import { computeProsperity } from "./prosperity.js";
 
 function historyPopulation(history: WorldHistory, polityId: NationId): number {
   return history.events
@@ -103,6 +104,19 @@ function initialStocks(
   };
 }
 
+function initialStability(populationPoints: number): number {
+  const stability =
+    NATION_INITIAL_STABILITY_BASE + populationPoints * NATION_INITIAL_STABILITY_PER_HISTORY_POINT;
+  return Math.max(NATION_INITIAL_STABILITY_MIN, Math.min(NATION_INITIAL_STABILITY_MAX, stability));
+}
+
+function initialCulture(polity: Polity): number {
+  const inheritedWeight = polity.values.reduce((total, value) => total + value.weight, 0);
+  const culture =
+    NATION_INITIAL_CULTURE_BASE + inheritedWeight * NATION_INITIAL_CULTURE_PER_VALUE_WEIGHT;
+  return Math.max(NATION_INITIAL_CULTURE_MIN, Math.min(NATION_INITIAL_CULTURE_MAX, culture));
+}
+
 function bootstrapNation(
   history: WorldHistory,
   polity: Polity,
@@ -114,7 +128,7 @@ function bootstrapNation(
   const foodProduction = terrainProduction(ownedCells, NATION_TERRAIN_FOOD_PRODUCTION);
   const materialProduction = terrainProduction(ownedCells, NATION_TERRAIN_MATERIAL_PRODUCTION);
   const cities = history.worldMap.cities.filter(({ polityId }) => polityId === polity.id);
-  return {
+  const nation: NationState = {
     id: polity.id,
     controller: polity.id === playerNationId ? "player" : "agent",
     autoPilot: true,
@@ -122,14 +136,22 @@ function bootstrapNation(
     cities: initialCities(cities, population),
     territoryCellCount: ownedCells.length,
     population,
-    stability: Math.max(0, Math.min(100, populationPoints)),
-    culture: polity.values.reduce((total, value) => total + value.weight, 0),
+    stability: initialStability(populationPoints),
+    culture: initialCulture(polity),
     foodProduction,
     materialProduction,
     activeDirectives: [],
-    prosperity: { ...ZERO_PROSPERITY },
+    prosperity: {
+      population: 0,
+      production: 0,
+      wealth: 0,
+      stability: 0,
+      culture: 0,
+      total: 0,
+    },
     lastReport: null,
   };
+  return { ...nation, prosperity: computeProsperity(nation) };
 }
 
 export function bootstrapNations(

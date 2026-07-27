@@ -46,6 +46,7 @@ export interface ActiveDirective {
   targetCityId: string | null;
   issuedAtTick: number;
   seasonsRemaining: number;
+  totalSeasons: number; // so progress is self-describing without the candidate list
 }
 
 export interface NationCityState {

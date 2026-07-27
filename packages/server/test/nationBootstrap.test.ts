@@ -103,21 +103,16 @@ describe("bootstrapNations", () => {
       { alive: [10], dead: [10] },
     );
 
-    expect(bootstrapNations(history, "alive")).toEqual([
+    const nations = bootstrapNations(history, "alive");
+
+    expect(nations).toEqual([
       expect.objectContaining({
         id: "alive",
         controller: "player",
         autoPilot: true,
-        prosperity: {
-          population: 0,
-          production: 0,
-          wealth: 0,
-          stability: 0,
-          culture: 0,
-          total: 0,
-        },
       }),
     ]);
+    expect(nations[0]?.prosperity.total).toBeGreaterThan(0);
   });
 
   it("folds population effects and conserves the scaled total across a capital-weighted split", () => {
@@ -135,7 +130,7 @@ describe("bootstrapNations", () => {
     const [nation] = bootstrapNations(history, null);
 
     expect(nation?.population).toBe(9_000);
-    expect(nation?.stability).toBe(90);
+    expect(nation?.stability).toBe(58);
     expect(nation?.cities).toEqual([
       { cityId: "town-b", population: 2_250, developmentLevel: 0 },
       { cityId: "capital", population: 4_500, developmentLevel: 0 },
@@ -184,5 +179,32 @@ describe("bootstrapNations", () => {
       wealth: { food: 12, materials: 5, wealth: 16 },
       materials: { food: 12, materials: 10, wealth: 4 },
     });
+  });
+
+  it("derives distinct initial stability and culture with headroom in both directions", () => {
+    const history = historyFixture(
+      [polity("scarred", { faith: 0.5 }), polity("flourishing", { commerce: 1, knowledge: 0.8 })],
+      [...cellsFor("scarred", ["plains"]), ...cellsFor("flourishing", ["plains"])],
+      [city("scarred-capital", "scarred", true), city("flourishing-capital", "flourishing", true)],
+      { scarred: [20], flourishing: [100] },
+    );
+
+    const byId = Object.fromEntries(
+      bootstrapNations(history, null).map(({ id, stability, culture }) => [
+        id,
+        { stability, culture },
+      ]),
+    );
+
+    expect(byId).toEqual({
+      scarred: { stability: 44, culture: 25 },
+      flourishing: { stability: 60, culture: 38 },
+    });
+    for (const { stability, culture } of Object.values(byId)) {
+      expect(stability).toBeGreaterThan(0);
+      expect(stability).toBeLessThan(100);
+      expect(culture).toBeGreaterThan(0);
+      expect(culture).toBeLessThan(100);
+    }
   });
 });

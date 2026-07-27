@@ -464,3 +464,70 @@ export const NATION_HOLD_FESTIVAL_CULTURE_BONUS = 5;
 export const NATION_CHANCELLOR_DEFICIT_BONUS = 0.5;
 /** Stability below this value makes festivals a chancellor priority. */
 export const NATION_CHANCELLOR_LOW_STABILITY = 40;
+
+/** Population contribution to the prosperity total. */
+export const NATION_PROSPERITY_POPULATION_WEIGHT = 0.3;
+/** Production-capacity contribution to the prosperity total. */
+export const NATION_PROSPERITY_PRODUCTION_WEIGHT = 0.25;
+/** Stored-wealth contribution to the prosperity total. */
+export const NATION_PROSPERITY_WEALTH_WEIGHT = 0.2;
+/** Stability contribution to the prosperity total. */
+export const NATION_PROSPERITY_STABILITY_WEIGHT = 0.15;
+/** Culture contribution to the prosperity total. */
+export const NATION_PROSPERITY_CULTURE_WEIGHT = 0.1;
+/** Population at which the prosperity population component reaches one. */
+export const NATION_PROSPERITY_POPULATION_REFERENCE = 20_000;
+/** Combined food and material capacity at which the production component reaches one. */
+export const NATION_PROSPERITY_PRODUCTION_REFERENCE = 1_000;
+/** Stored wealth at which the prosperity wealth component reaches one. */
+export const NATION_PROSPERITY_WEALTH_REFERENCE = 5_000;
+/** Stability at which the prosperity stability component reaches one. */
+export const NATION_PROSPERITY_STABILITY_REFERENCE = 100;
+/** Culture at which the prosperity culture component reaches one. */
+export const NATION_PROSPERITY_CULTURE_REFERENCE = 100;
+/** Maximum weighted prosperity total exposed to clients. */
+export const NATION_PROSPERITY_SCORE_MAX = 1_000;
+/** Neutral stability before the live nation's population history is applied. */
+export const NATION_INITIAL_STABILITY_BASE = 40;
+/** Initial stability added for each net population point in world history. */
+export const NATION_INITIAL_STABILITY_PER_HISTORY_POINT = 0.2;
+/** Lowest initial stability, leaving room for later decline. */
+export const NATION_INITIAL_STABILITY_MIN = 1;
+/** Highest initial stability, leaving room for later recovery. */
+export const NATION_INITIAL_STABILITY_MAX = 99;
+/** Initial culture before inherited cultural values are applied. */
+export const NATION_INITIAL_CULTURE_BASE = 20;
+/** Initial culture added for each inherited cultural-value weight. */
+export const NATION_INITIAL_CULTURE_PER_VALUE_WEIGHT = 10;
+/** Lowest initial culture, leaving room for later decline. */
+export const NATION_INITIAL_CULTURE_MIN = 1;
+/** Highest initial culture, leaving room for later growth. */
+export const NATION_INITIAL_CULTURE_MAX = 99;
+/** Seasonal food produced per resident and point of food-production capacity. */
+export const NATION_FOOD_PRODUCTION_PER_CAPITA = 0.0001;
+/** Food consumed by one resident each season. */
+export const NATION_FOOD_CONSUMPTION_PER_CAPITA = 0.05;
+/** Wealth earned each season for every inherited trade route touching the nation. */
+export const NATION_TRADE_ROUTE_INCOME = 10;
+/** Fraction by which a city grows each food-sufficient season while below capacity. */
+export const NATION_CITY_POPULATION_GROWTH_RATE = 0.01;
+/** Population capacity contributed by each territory cell. */
+export const NATION_CITY_CAPACITY_PER_TERRITORY_CELL = 50;
+/** Population capacity contributed by each city development level. */
+export const NATION_CITY_CAPACITY_PER_DEVELOPMENT_LEVEL = 500;
+/** Fraction of the population lost in a famine season. */
+export const NATION_FAMINE_POPULATION_LOSS_RATE = 0.05;
+/** Multiplier applied to famine population loss while encourageStores is active. */
+export const NATION_ENCOURAGE_STORES_FAMINE_LOSS_MULTIPLIER = 0.5;
+/** Stability lost whenever seasonal food demand cannot be met. */
+export const NATION_FAMINE_STABILITY_LOSS = 5;
+/** Lowest seasonal stability drift before the 0..100 state clamp. */
+export const NATION_STABILITY_DRIFT_MIN = -2;
+/** Highest seasonal stability drift before the 0..100 state clamp. */
+export const NATION_STABILITY_DRIFT_MAX = 1;
+/** Lowest valid live stability. */
+export const NATION_STABILITY_MIN = 0;
+/** Highest valid live stability. */
+export const NATION_STABILITY_MAX = 100;
+/** Culture gained per positive point of active-directive affinity each season. */
+export const NATION_CULTURE_GAIN_PER_AFFINITY = 1;

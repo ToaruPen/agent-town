@@ -65,6 +65,7 @@ describe("nation contracts", () => {
               targetCityId: option.targetCityId,
               issuedAtTick: 0,
               seasonsRemaining: 1,
+              totalSeasons: option.seasons,
             },
           ],
           prosperity: {
@@ -95,6 +96,7 @@ describe("nation contracts", () => {
     const change: WorldCellChange = { index: 7, polityId: "polity-1" };
 
     expect(state.nations[0]?.activeDirectives[0]?.kind).toBe(option.kind);
+    expect(state.nations[0]?.activeDirectives[0]?.totalSeasons).toBe(option.seasons);
     expect(state.nations[0]?.lastReport?.entries[0]?.reason).toBe("baseProduction");
     expect(change).toEqual({ index: 7, polityId: "polity-1" });
   });
