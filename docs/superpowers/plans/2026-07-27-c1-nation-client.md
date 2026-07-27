@@ -56,6 +56,16 @@ These were open in the design documents. They are decided here so no task re-ope
 
 **Prosperity components are normalised 0..1 ratios.** N1's Task 4 pins this and asserts it. The client renders each component's contribution as `weight × component × 1000`, importing the weights from `@agent-town/shared`, and displays `prosperity.total` verbatim. It never sums contributions into a total of its own — a view-model test asserts that no code path does.
 
+## Known gaps
+
+Both were found by the worker who built C1-1, by mutation-testing its own assertions rather than by review.
+
+**The banner palette's ΔE 26 acceptance bar is not load-bearing at four nations.** Mutating `MIN_SEPARATION` to 0 leaves every C1-1 test green: the shipped 40.86 floor comes from chroma priority plus hue proximity, not from the bar. The bar only binds at six nations or more, which C1-1's test list did not cover, so a future rise in `WORLD_POLITY_COUNT` or a populated override table would ship unguarded. A follow-up adds an enumeration at the counts where the bar binds, and the test has to be shown load-bearing by re-mutating.
+
+**The eight archival polity colours are duplicated into the client's test fixture, and drift would be silent.** `POLITY_TEMPLATES` is private to `packages/server/src/sim/historyGen.ts`, and the client cannot import from the server package, so the 1680-world separation guarantee is measured against a hand-copied colour list. Change a template's colour and the client's test keeps passing while guaranteeing nothing about the world the generator actually produces.
+
+This one belongs to the **simulation worker**, not the client. The cheap fix is a server-side test asserting the template colour set is exactly a declared list, with a comment naming the client test that depends on it, so a template edit fails loudly and points at what else needs re-measuring. Moving the palette into `shared` would also work and is a bigger change than the risk justifies today.
+
 ## Frozen client boundaries
 
 Do not rename these or change their shapes while executing this plan. If one looks wrong, stop and raise it with the supervisor.
