@@ -1,4 +1,4 @@
-import type { Position, WorldState } from "../../../shared/src/world.js";
+import type { Position, WorldState } from "@agent-town/shared";
 
 import { pathCostForTrail, trailLevelAt } from "./traffic.js";
 
