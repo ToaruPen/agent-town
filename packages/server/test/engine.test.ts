@@ -853,21 +853,16 @@ describe("createEngine", () => {
     expect(agent.lastThought).toBeNull();
   });
 
-  it("warns once and changes nothing when applying a plan to an unknown agent", () => {
+  it("rejects a plan for an unknown agent without changing state", () => {
     const rng = createRng(42);
     const engine = createEngine(generateWorld(42), new FakePlanner(rng), rng);
     const before = JSON.stringify(engine.world.agents);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    engine.applyPlan("missing-agent", [{ kind: "deposit" }], "llm");
+    expect(() => engine.applyPlan("missing-agent", [{ kind: "deposit" }], "llm")).toThrow(
+      "cannot apply plan to unknown agent: missing-agent",
+    );
 
     expect(JSON.stringify(engine.world.agents)).toBe(before);
-    expect(warn).toHaveBeenCalledOnce();
-    const warning = warn.mock.calls[0]?.[0];
-    expect(JSON.parse(String(warning))).toMatchObject({
-      at: "engine.applyPlan",
-      agent: "missing-agent",
-    });
   });
 
   it("uses fatigue slowdown only when fatigue is below the threshold after decay", () => {

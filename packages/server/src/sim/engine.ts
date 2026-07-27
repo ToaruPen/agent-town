@@ -267,12 +267,6 @@ export interface Engine {
   isDayBoundary(): boolean;
 }
 
-function warnUnknownAgent(agentId: string): void {
-  console.warn(
-    JSON.stringify({ at: "engine.applyPlan", agent: agentId, outcome: "unknown-agent" }),
-  );
-}
-
 /** A snapshot of the living, so a death partway through can never reshuffle the rest. */
 function stableLivingAgents(world: WorldState): AgentState[] {
   return world.agents.filter(({ health }) => health > 0);
@@ -348,8 +342,7 @@ export function createEngine(world: WorldState, planner: Planner, rng: () => num
     applyPlan(agentId: string, tasks: AgentTask[], source: PlanSource, reasoning?: string): void {
       const agent = world.agents.find(({ id }) => id === agentId);
       if (agent === undefined) {
-        warnUnknownAgent(agentId);
-        return;
+        throw new Error(`cannot apply plan to unknown agent: ${agentId}`);
       }
       if (agent.carrying !== null) {
         agent.thinking = false;
