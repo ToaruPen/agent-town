@@ -218,17 +218,17 @@ export const SPRITE_ASSETS = {
     "/assets/tiny-dungeon/Tiles/tile_0084.png",
     // Tiny Dungeon tile 85: brown-haired settler in a pale-blue tunic.
     "/assets/tiny-dungeon/Tiles/tile_0085.png",
-    // Tiny Dungeon tile 86: bald, bearded settler in a blue tunic.
+    // Tiny Dungeon tile 86: bald settler with a full brown beard, in a brown apron.
     "/assets/tiny-dungeon/Tiles/tile_0086.png",
     // Tiny Dungeon tile 88: brown-haired settler in a tan apron.
     "/assets/tiny-dungeon/Tiles/tile_0088.png",
-    // Tiny Dungeon tile 98: long-haired settler in purple.
+    // Tiny Dungeon tile 98: short-haired settler in gray armour.
     "/assets/tiny-dungeon/Tiles/tile_0098.png",
-    // Tiny Dungeon tile 99: gray-haired settler in brown.
+    // Tiny Dungeon tile 99: long-haired settler in purple.
     "/assets/tiny-dungeon/Tiles/tile_0099.png",
-    // Tiny Dungeon tile 100: bearded farmer with a green headband.
+    // Tiny Dungeon tile 100: gray-haired settler in brown.
     "/assets/tiny-dungeon/Tiles/tile_0100.png",
-    // Tiny Dungeon tile 112: short-haired settler in a brown tunic.
+    // Tiny Dungeon tile 112: bearded farmer with a green headband.
     "/assets/tiny-dungeon/Tiles/tile_0112.png",
   ],
 } as const;
