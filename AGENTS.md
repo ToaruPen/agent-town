@@ -17,3 +17,4 @@ The resident-scale colony simulation is frozen: it stays in the tree with its te
 - No `any`, no empty catch, cognitive complexity ≤ 10 (Biome enforces).
 - Do not add dependencies without a note in the commit body explaining why.
 - No absolute local paths in committed content.
+- No new asset files. Draw on the 16 px grid with procedural Graphics; the vendored Kenney packs (CC0) are the only sprite source. Asset policy: docs/superpowers/design/2026-07-27-asset-policy.md.
