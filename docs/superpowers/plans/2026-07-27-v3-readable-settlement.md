@@ -322,10 +322,11 @@ export function shadowGraphic(widthRatio: number): Graphics;
 **Contract:**
 
 The server broadcasts every tick, ten times a second, and a resident crosses a tile in three
-ticks on open ground and fewer on a worn trail. `renderAgentLayer` destroys and rebuilds every
-agent container on each of those updates, so a resident jumps a full sixteen pixels at a time
-and nothing can carry motion across updates. There is no `app.ticker` callback at all; the
-scene changes only when a message arrives.
+ticks on open ground and fewer on a worn trail. An existing `app.ticker` callback expires
+speech bubbles and renders dirty world layers, the active info bubble, and screen layers every
+frame. However, `renderAgentLayer` runs only when a server update sets `agentsDirty`; it then
+destroys and rebuilds every agent container at the authoritative tile position, so a resident
+jumps a full sixteen pixels at a time and nothing can carry motion across updates.
 
 ```ts
 /** Fraction of the remaining distance to close this frame, given how long the frame took. */
@@ -337,8 +338,9 @@ export const SNAP_DISTANCE_TILES: number;
 
 - `renderAgentLayer` keeps a `Map<string, Container>` keyed by `agent.id`, reuses the container
   for a resident who is still alive, and destroys only containers whose resident is gone.
-- A ticker callback in `main.ts` eases each container toward its authoritative position. The
-  authoritative position stays exactly what it is today: `agent.pos` plus the tile offset.
+- The existing ticker callback in `main.ts` eases each container toward its authoritative
+  position before rendering. The authoritative position stays exactly what it is today:
+  `agent.pos` plus the tile offset.
 - A jump larger than `SNAP_DISTANCE_TILES` snaps, so an immigrant appearing at the settlement
   edge does not slide across the map.
 - `easeFactor` is frame-rate independent: halving `deltaMs` twice must leave the same position
@@ -351,7 +353,8 @@ export const SNAP_DISTANCE_TILES: number;
 
 1. Write `motion.test.ts` for `easeFactor`: monotonic in `deltaMs`, capped at 1, and the
    frame-rate independence property above.
-2. Rework `renderAgentLayer` to reuse containers, then add the ticker callback in `main.ts`.
+2. Rework `renderAgentLayer` to reuse containers, then add interpolation to the existing ticker
+   callback in `main.ts`.
 3. Confirm by inspection that no test asserted the old destroy-everything behaviour; if one
    did, replace it with an assertion about the surviving container's identity.
 
