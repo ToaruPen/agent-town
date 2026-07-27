@@ -221,7 +221,21 @@ export const DEFAULT_SPEED: SpeedMultiplier = 1;
 export const CLOCK_BROADCAST_MS = 1000; // wall-clock heartbeat; stays ~1 Hz at every speed
 ```
 
-Add, in the same file, with clear names and a one-line comment each: base per-capita food production and consumption, terrain production coefficients, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, directive costs/durations/effects, culture gain, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference for each component. No number used by `sim/nation/` may be inlined.
+Those five are the whole of Task 1's constant work. They are frozen: exact names, exact values.
+
+Every other number this slice needs is added by **the task that consumes it**, in the same file, with a
+clear name and a one-line comment — never inlined in `sim/nation/`, and never invented ahead of the code
+and tests that justify it. The expected owners:
+
+| Task | Constants it appends |
+|---|---|
+| 2 | Population scaling from history effects, capital population weighting, value-driven starting-stock coefficients, terrain production coefficients |
+| 3 | Directive costs, durations, effects, city development cap, the kind → cultural-value affinity table |
+| 4 | Per-capita food production and consumption, trade-route income, city growth and capacity rates, famine population loss, stability drift bounds, culture gain, prosperity weights (population 0.30, production 0.25, wealth 0.20, stability 0.15, culture 0.10) and the fixed normalisation reference per component |
+| 7 | No new constants — tunes the values above |
+
+Only the prosperity weights are fixed in advance, because they define what the game rewards. Every other
+value is a first guess that Task 7 is expected to change.
 
 ### Determinism rules (apply to every task)
 
@@ -246,9 +260,16 @@ Tasks are sequential; each depends on the previous commit. One worker, one branc
 ### Task 1 — Contracts and constants
 
 - Create `packages/shared/src/nation.ts` exactly as frozen above and export it from `index.ts`.
-- Append nation-scale constants to `constants.ts`. Do not touch existing constants.
-- Add `nationSeasonOfTick(tick)` and `nationYearOfTick(tick)` to `time.ts` next to the existing resident helpers; do not modify `seasonOfTick`.
-- Tests: year/season boundaries at tick 0, at `NATION_TICKS_PER_SEASON - 1`, at exact multiples, and across a year rollover.
+- Append exactly the five nation-scale time and speed constants to `constants.ts`. Do not touch existing
+  constants and do not add economy constants — those belong to the tasks that consume them.
+- Add `nationSeasonOfTick(tick)` and `nationYearOfTick(tick)` to `time.ts` next to the existing resident
+  helpers; do not modify `seasonOfTick` or `dayOfTick`.
+- Years and seasons are **1-based and elapsed**, matching `dayOfTick` returning day 1 at tick 0:
+  `nationYearOfTick(0) === 1` and `nationSeasonOfTick(0) === SEASONS[0]`. `nationYearOfTick` counts game
+  years played, not calendar years. The calendar year shown to the player is
+  `history.currentYear + nationYearOfTick(tick) - 1`, computed at the display edge in Task 6, never here.
+- Tests: year/season boundaries at tick 0, at `NATION_TICKS_PER_SEASON - 1`, at exact multiples, and
+  across a year rollover.
 
 ### Task 2 — Nation bootstrap
 
