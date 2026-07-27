@@ -13,6 +13,11 @@ describe("panelActionForKey", () => {
     expect(panelActionForKey("D")).toBe("directives");
   });
 
+  it("opens the season report on R, in either case", () => {
+    expect(panelActionForKey("r")).toBe("report");
+    expect(panelActionForKey("R")).toBe("report");
+  });
+
   it("closes on Escape", () => {
     expect(panelActionForKey("Escape")).toBe("close");
   });

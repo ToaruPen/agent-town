@@ -13,9 +13,11 @@ import { createNationHud, type NationHudRoots } from "../src/ui/nationHud.js";
 import { bindNationKeys } from "../src/ui/nationKeyboard.js";
 import {
   historyFixture,
+  ledgerEntry,
   nationFixture,
   ordersFixture,
   polityFixture,
+  reportFixture,
   worldFixture,
 } from "./nationFixture.js";
 
@@ -51,9 +53,12 @@ function findRoots(doc: Document): NationHudRoots | null {
   const directives = doc.getElementById("directive-panel");
   const select = doc.getElementById("nation-select");
   const status = doc.getElementById("world-status");
+  const strip = doc.getElementById("nation-strip");
+  const report = doc.getElementById("season-report");
   if (clock === null || dashboard === null || ranking === null) return null;
   if (directives === null || select === null || status === null) return null;
-  return { clock, dashboard, ranking, directives, select, status };
+  if (strip === null || report === null) return null;
+  return { clock, dashboard, ranking, directives, select, status, strip, report };
 }
 
 /**
@@ -368,6 +373,9 @@ describe("the order desk's controls", () => {
       toggleDirectives: () => {
         hud.toggleDirectives();
       },
+      toggleReport: () => {
+        hud.toggleReport();
+      },
       closeTopPanel: () => hud.closeTopPanel(),
     });
     hud.applyWelcome(unclaimedWorld(), 1_000);
@@ -388,6 +396,255 @@ describe("the order desk's controls", () => {
     const alert = roots.directives.querySelector('[role="alert"]');
 
     expect(alert?.textContent).toBe("発令できませんでした：富が足りません");
+  });
+});
+
+/**
+ * The season report's DOM layer: the always-on strip (hud.md §4.1) and the on-demand panel it opens
+ * (§4.5). These are the claims the view model tests cannot make on their own — that the panel actually
+ * paints six rows, that the strip actually vanishes for a spectator, that a famine actually flips a real
+ * `hidden` attribute rather than merely setting `isFamine` on a view model nothing reads.
+ */
+describe("the season report", () => {
+  function boardedWithReport(report = reportFixture()) {
+    const mounted = mountAgainstIndexHtml();
+    mounted.hud.applyWelcome(unclaimedWorld(), 1_000);
+    mounted.hud.applyOrders(ordersFixture({ nationId: "polity-2" }));
+    mounted.hud.applyUpdate(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        nations: [nationFixture({ id: "polity-2", lastReport: report })],
+      }),
+      2_000,
+    );
+    return mounted;
+  }
+
+  it("keeps the strip and the panel out of the way for a spectator with no nation", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+
+    expect(roots.strip.hidden).toBe(true);
+    expect(roots.report.hidden).toBe(true);
+  });
+
+  it("shows the waiting headline in the strip as soon as a nation is held, before any report has resolved", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2" }));
+
+    expect(roots.strip.hidden).toBe(false);
+    expect(roots.strip.textContent).toContain("最初の決算を待っています");
+  });
+
+  /**
+   * hud.md §4.5: "This sentence, and only this sentence, goes to the always-on decision strip and the
+   * live region" — so a screen-reader user learns a season resolved without having to poll the strip.
+   */
+  it("announces the season's headline to the live region when a season resolves", () => {
+    const { roots } = boardedWithReport(reportFixture({ entries: [] }));
+
+    expect(roots.status.textContent).toBe("この季は目立った変化がありませんでした。");
+  });
+
+  /**
+   * The collision this guards: `applyWelcome`'s own "reconnected, orders were dropped" announcement runs
+   * right after the boundary check, and a live region only speaks whichever `textContent` write landed
+   * last. If the headline announced too, it would silently overwrite the reconnect notice — the more
+   * important of the two, since it is the one telling the player their queued order is gone.
+   */
+  it("does not let a headline announcement on reconnect crowd out the reconnect notice", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+
+    hud.applyWelcome(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        playerNationId: "polity-2",
+        nations: [
+          nationFixture({
+            id: "polity-2",
+            // A new boundary versus the one `boardedWithReport` already resolved, so the reconnect path
+            // actually has something to (not) announce.
+            lastReport: reportFixture({ year: 4, season: "winter", entries: [] }),
+          }),
+        ],
+      }),
+      5_000,
+    );
+
+    expect(roots.status.textContent).toBe("再接続しました。発令の履歴は失われました。");
+  });
+
+  /** The plan's third required test, at the DOM layer: no hole in the layout even for an empty season. */
+  it("opens the report on R and shows all six metric rows even when the season had nothing in it", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ entries: [] }));
+
+    expect(roots.report.hidden).toBe(true);
+
+    hud.toggleReport();
+
+    expect(roots.report.hidden).toBe(false);
+    expect(roots.report.querySelectorAll(".season-report__metric")).toHaveLength(6);
+  });
+
+  /** `R` itself, not just the controller method it calls — the two could disagree if the map ever did. */
+  it("opens the report from the actual R keypress", () => {
+    const { roots, hud } = boardedWithReport();
+    const unbind = bindNationKeys(hud.send, () => hud.state(), {
+      toggleDirectives: () => hud.toggleDirectives(),
+      toggleReport: () => hud.toggleReport(),
+      closeTopPanel: () => hud.closeTopPanel(),
+    });
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
+
+    expect(roots.report.hidden).toBe(false);
+    unbind();
+  });
+
+  /**
+   * hud.md §3.5/§4.2: opening a panel is a keyboard action, so it has to land somewhere a keyboard user
+   * can act from — otherwise `R` opens a panel that reads as on screen but is invisible to Tab.
+   */
+  it("moves focus to the close button when the report opens", () => {
+    const { roots, hud } = boardedWithReport();
+
+    hud.toggleReport();
+
+    expect(document.activeElement).toBe(roots.report.querySelector(".season-report__close"));
+  });
+
+  /**
+   * The panel body is rebuilt wholesale on every render (`replaceChildren`), which would otherwise eject
+   * focus to `<body>` the instant a season resolves while the player is reading the previous one —
+   * exactly the boundary re-render hud.md §4.2 says must not disturb focus.
+   */
+  it("keeps focus on the close button across a season boundary that lands while the report stays open", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    hud.toggleReport();
+    const firstClose = roots.report.querySelector(".season-report__close");
+    expect(document.activeElement).toBe(firstClose);
+
+    hud.applyUpdate(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        nations: [
+          nationFixture({
+            id: "polity-2",
+            lastReport: reportFixture({
+              year: 3,
+              season: "autumn",
+              entries: [ledgerEntry({ metric: "food", delta: 12 })],
+            }),
+          }),
+        ],
+      }),
+      4_000,
+    );
+
+    const secondClose = roots.report.querySelector(".season-report__close");
+    // A genuinely new node, not the one focus was already on — proof this is restored focus, not focus
+    // that simply never moved.
+    expect(secondClose).not.toBe(firstClose);
+    expect(document.activeElement).toBe(secondClose);
+  });
+
+  /**
+   * The hardest case, checked where it actually has to survive: inside the open panel, not just in the
+   * view model. A body that early-returns on `isEmpty` before reading `heldOrderNote` would silently drop
+   * this in exactly the quiet-season case the plan's own test targets.
+   */
+  it("shows the held-order note inside the panel even on an otherwise empty season", () => {
+    const mounted = mountAgainstIndexHtml();
+    mounted.hud.applyWelcome(unclaimedWorld(), 1_000);
+    mounted.hud.applyOrders(
+      ordersFixture({
+        nationId: "polity-2",
+        autoPilot: true,
+        queued: { id: "directive-9", kind: "holdFestival", targetCityId: null },
+      }),
+    );
+    mounted.hud.applyUpdate(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        nations: [
+          nationFixture({
+            id: "polity-2",
+            lastReport: reportFixture({ entries: [], completedDirectiveIds: [] }),
+          }),
+        ],
+      }),
+      2_000,
+    );
+    mounted.hud.toggleReport();
+
+    expect(mounted.roots.report.querySelector(".season-report__held")?.textContent).toContain(
+      "祭礼",
+    );
+  });
+
+  /** hud.md §4.5: famine "pins the report open… it does not require the player to press R." */
+  it("auto-opens the panel when a famine report resolves, without the player pressing R", () => {
+    const famine = reportFixture({
+      entries: [ledgerEntry({ metric: "population", delta: -200, reason: "famine" })],
+    });
+    const { roots } = boardedWithReport(famine);
+
+    expect(roots.report.hidden).toBe(false);
+    expect(roots.strip.classList.contains("nation-strip--famine")).toBe(true);
+  });
+
+  /**
+   * The risk in pinning on the report at all: if the pin fired on object identity rather than on the
+   * boundary the report belongs to, a `wsClient` that hands back a freshly built (but unchanged) world
+   * snapshot on an ordinary tick would reopen a panel the player just closed, every tick, for the rest of
+   * the famine season. This rebuilds the report as a new object with the same year and season to prove
+   * the pin is keyed on the boundary, not on reference equality.
+   */
+  it("does not reopen a closed panel on a later repaint of the same famine season", () => {
+    const famine = reportFixture({
+      entries: [ledgerEntry({ metric: "population", delta: -200, reason: "famine" })],
+    });
+    const { roots, hud } = boardedWithReport(famine);
+    expect(roots.report.hidden).toBe(false);
+
+    hud.toggleReport();
+    expect(roots.report.hidden).toBe(true);
+
+    hud.applyUpdate(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        nations: [
+          nationFixture({
+            id: "polity-2",
+            lastReport: { ...famine, entries: [...famine.entries] },
+          }),
+        ],
+      }),
+      3_000,
+    );
+
+    expect(roots.report.hidden).toBe(true);
+  });
+
+  /**
+   * No stack of open panels is tracked (`nationHud.ts`'s `closeTopPanel`), so this pins the fixed
+   * priority that decision was made with: the read-only report closes before the actionable directive
+   * panel when `Escape` finds both open.
+   */
+  it("closes the report before the directive panel when both are open", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    hud.toggleDirectives();
+    hud.toggleReport();
+
+    expect(roots.directives.hidden).toBe(false);
+    expect(roots.report.hidden).toBe(false);
+    expect(hud.closeTopPanel()).toBe(true);
+
+    expect(roots.report.hidden).toBe(true);
+    expect(roots.directives.hidden).toBe(false);
   });
 });
 

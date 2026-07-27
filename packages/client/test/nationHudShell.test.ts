@@ -15,6 +15,8 @@ describe("nation HUD shell", () => {
     expect(html).toContain('id="nation-ranking"');
     expect(html).toContain('id="directive-panel"');
     expect(html).toContain('id="nation-select"');
+    expect(html).toContain('id="nation-strip"');
+    expect(html).toContain('id="season-report"');
     // Announcements reuse the existing live region rather than adding a second one.
     expect(html).toContain('id="world-status"');
     expect(html).toMatch(/id="world-status"[\s\S]*?aria-live="polite"/);
@@ -29,12 +31,25 @@ describe("nation HUD shell", () => {
     expect(html).toMatch(/id="directive-panel"[\s\S]*?hidden[\s\S]*?>/);
   });
 
+  it("starts the season report closed, since it opens on demand", () => {
+    expect(html).toMatch(/id="season-report"[\s\S]*?hidden[\s\S]*?>/);
+  });
+
+  /** Unlike the on-demand panels, the strip is always-on chrome (hud.md §4.1) — it ships without `hidden`. */
+  it("starts the decision strip on screen rather than hidden", () => {
+    const tag = html.match(/<section id="nation-strip"[^>]*>/)?.[0];
+    expect(tag).not.toBeUndefined();
+    expect(tag).not.toContain("hidden");
+  });
+
   it("labels the HUD regions for a screen reader", () => {
     expect(html).toContain('aria-label="暦と進行速度"');
     expect(html).toContain('aria-label="自国の状況"');
     expect(html).toContain('aria-label="繁栄度の順位"');
     expect(html).toContain('aria-label="施策の選択"');
     expect(html).toContain('aria-label="国の選択"');
+    expect(html).toContain('aria-label="季の要約"');
+    expect(html).toContain('aria-labelledby="season-report-title"');
   });
 
   it("keeps the 44px touch target the rest of the UI already promises", () => {
@@ -42,6 +57,19 @@ describe("nation HUD shell", () => {
     expect(html).toMatch(/\.nation-select__option\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
     expect(html).toMatch(/\.nation-clock__autopilot\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
     expect(html).toMatch(/\.directive-panel__submit\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+    expect(html).toMatch(/\.nation-strip__toggle\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+    expect(html).toMatch(/\.season-report__close\s*\{[^}]*min-height:\s*44px[^}]*\}/s);
+  });
+
+  /** Famine's one privilege (hud.md §4.5): the strip is coloured, not just relabelled. */
+  it("gives the strip a colour of its own for a famine season", () => {
+    expect(html).toContain(".nation-strip--famine");
+  });
+
+  it("styles the season report's deltas by direction, matching the dashboard's own convention", () => {
+    expect(html).toContain(".season-report__delta--up");
+    expect(html).toContain(".season-report__delta--down");
+    expect(html).toContain(".season-report__delta--flat");
   });
 
   /**

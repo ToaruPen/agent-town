@@ -17,9 +17,12 @@ function findNationHudRoots(): NationHudRoots | null {
   const directives = document.getElementById("directive-panel");
   const select = document.getElementById("nation-select");
   const status = document.getElementById("world-status");
+  const strip = document.getElementById("nation-strip");
+  const report = document.getElementById("season-report");
   if (clock === null || dashboard === null || ranking === null) return null;
   if (directives === null || select === null || status === null) return null;
-  return { clock, dashboard, ranking, directives, select, status };
+  if (strip === null || report === null) return null;
+  return { clock, dashboard, ranking, directives, select, status, strip, report };
 }
 
 /**
@@ -74,6 +77,9 @@ function mountNationHud(roots: NationHudRoots): void {
   bindNationKeys(hud.send, () => hud.state(), {
     toggleDirectives: () => {
       hud.toggleDirectives();
+    },
+    toggleReport: () => {
+      hud.toggleReport();
     },
     closeTopPanel: () => hud.closeTopPanel(),
   });

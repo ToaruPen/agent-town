@@ -1,4 +1,4 @@
-import type { NationState, NationWorldState, Polity } from "@agent-town/shared";
+import type { NationState, NationWorldState, Polity, SeasonReport } from "@agent-town/shared";
 
 import type { SendClientMessage } from "../net/wsClient.js";
 import { createDirectivePanel, type DirectivePanelController } from "./directivePanel.js";
@@ -27,6 +27,7 @@ import {
 import { createNationSelect, type NationSelectController } from "./nationSelect.js";
 import { createProsperityRanking, type ProsperityRankingController } from "./prosperityRanking.js";
 import { buildProsperityRankingViewModel } from "./prosperityViewModel.js";
+import { createSeasonReportPanel, type SeasonReportPanelController } from "./seasonReportPanel.js";
 import { buildSeasonReportViewModel, type SeasonReportViewModel } from "./seasonReportViewModel.js";
 
 const SEND_REFUSED_ANNOUNCEMENT = "接続が切れています。送信できませんでした。";
@@ -41,6 +42,10 @@ export interface NationHudRoots {
   select: HTMLElement;
   /** The existing `#world-status` live region; announcements go through it, the countdown never does. */
   status: HTMLElement;
+  /** The always-on decision strip (hud.md §4.1), summarising the same report `report` shows in full. */
+  strip: HTMLElement;
+  /** The season report, opened on demand by `R` or by clicking the strip (hud.md §4.5). */
+  report: HTMLElement;
 }
 
 export interface NationHudController {
@@ -60,6 +65,7 @@ export interface NationHudController {
    */
   applyDisconnected(): void;
   toggleDirectives(): void;
+  toggleReport(): void;
   /** True when a panel was open and has now been closed, so `Escape` can stop there. */
   closeTopPanel(): boolean;
   /** Called from a `requestAnimationFrame` loop and short-circuited here, not by the caller. */
@@ -73,6 +79,7 @@ interface Panels {
   ranking: ProsperityRankingController;
   directives: DirectivePanelController;
   select: NationSelectController;
+  report: SeasonReportPanelController;
 }
 
 function ownPair(state: NationHudState): { nation: NationState; polity: Polity } | null {
@@ -134,6 +141,10 @@ export function seasonReportView(state: NationHudState): SeasonReportViewModel |
   );
 }
 
+function hasFamineEntry(report: SeasonReport): boolean {
+  return report.entries.some((entry) => entry.reason === "famine");
+}
+
 /**
  * Composes the always-on HUD and owns the state the panels read. The only nation module `main.ts`
  * talks to.
@@ -174,6 +185,7 @@ export function createNationHud(
     ranking: createProsperityRanking(roots.ranking),
     directives,
     select: createNationSelect(roots.select, post),
+    report: createSeasonReportPanel({ strip: roots.strip, panel: roots.report }),
   };
 
   const renderPanels = (): void => {
@@ -181,6 +193,7 @@ export function createNationHud(
     panels.dashboard.render(dashboardView(state), state.generation);
     panels.dashboard.renderCanSend(state.connected);
     panels.directives.render(directiveView(state), state.generation);
+    panels.report.render(seasonReportView(state), state.generation);
     panels.clock.renderAutoPilot(state.orders?.autoPilot ?? null);
     if (state.history !== null) {
       panels.ranking.render(
@@ -188,6 +201,45 @@ export function createNationHud(
         state.generation,
       );
     }
+  };
+
+  let lastSeenReportKey: string | null = null;
+
+  /**
+   * True exactly once per season boundary this report belongs to, as opposed to every repaint of an
+   * unchanged one — keyed on the report's own (year, season) rather than on object identity: `wsClient`
+   * is not guaranteed to hand back the same `SeasonReport` reference across an ordinary tick, and keying
+   * on reference equality would either never fire (if it does) or fire on every repaint of an unchanged
+   * season (if it does not). Advances `lastSeenReportKey` as a side effect, so a second caller checking
+   * the same still-current report later in the same boundary correctly sees it as not-new.
+   */
+  const isNewReportBoundary = (report: SeasonReport): boolean => {
+    const key = `${report.year}:${report.season}`;
+    if (key === lastSeenReportKey) return false;
+    lastSeenReportKey = key;
+    return true;
+  };
+
+  /**
+   * Runs the two things hud.md ties to a *new* season boundary:
+   * - §4.5: "any famine entry pins the report open… it does not require the player to press R."
+   * - §3.5 / §4.5: "This sentence, and only this sentence, goes to the always-on decision strip and
+   *   the live region" — the one-line headline, on every resolved season, not only a famine one.
+   *
+   * `announceHeadline` is false from `applyWelcome`: a reconnect already gets its own "you're back,
+   * queued orders were dropped" announcement immediately after this call, and a screen reader only
+   * speaks whichever `announce()` call landed last, so sending the headline first would just be
+   * overwritten in silence. The famine pin still runs on `applyWelcome` — reconnecting into an active
+   * famine should still open the report — only the audio announcement is withheld there.
+   *
+   * Called after `renderPanels`, so `panels.report` (and, for the headline, `seasonReportView`) already
+   * reflect this boundary before anything reacts to it.
+   */
+  const onReportBoundary = (announceHeadline: boolean): void => {
+    const report = ownPair(state)?.nation.lastReport ?? null;
+    if (report === null || !isNewReportBoundary(report)) return;
+    if (announceHeadline) announce(seasonReportView(state)?.headline ?? "");
+    if (!panels.report.isOpen() && hasFamineEntry(report)) panels.report.toggle();
   };
 
   const renderClock = (now: number): void => {
@@ -216,6 +268,7 @@ export function createNationHud(
       clockKey = null;
       announcedSpeed = state.speed;
       renderPanels();
+      onReportBoundary(false);
       renderClock(now);
       announce(reconnected ? "再接続しました。発令の履歴は失われました。" : "世界に接続しました。");
     },
@@ -223,6 +276,7 @@ export function createNationHud(
     applyUpdate(world: NationWorldState, now: number): void {
       state = applyUpdate(state, world, now);
       renderPanels();
+      onReportBoundary(true);
       renderClock(now);
       if (state.speed !== announcedSpeed) {
         announcedSpeed = state.speed;
@@ -253,7 +307,21 @@ export function createNationHud(
       panels.directives.toggle();
     },
 
+    toggleReport(): void {
+      panels.report.toggle();
+    },
+
+    /**
+     * No stack of open panels is tracked, so "topmost" is a fixed priority rather than most-recently-
+     * opened: the report is read-only and meant to be glanced at and dismissed, while the directive
+     * panel is where a decision may be mid-flight, so `Escape` clears the read-only one first and leaves
+     * the actionable one in place if both happen to be open.
+     */
     closeTopPanel(): boolean {
+      if (panels.report.isOpen()) {
+        panels.report.close();
+        return true;
+      }
       if (!panels.directives.isOpen()) return false;
       panels.directives.close();
       return true;

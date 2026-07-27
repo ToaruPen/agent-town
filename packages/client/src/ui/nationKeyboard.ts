@@ -5,6 +5,7 @@ import { nationKeyCommand } from "./nationHudState.js";
 /** The panel half of the §3.5 key map, kept separate because these act on the DOM, not the server. */
 export interface NationPanelKeys {
   toggleDirectives: () => void;
+  toggleReport: () => void;
   /** Returns true when it closed something, so `Escape` can stop rather than falling through. */
   closeTopPanel: () => boolean;
 }
@@ -20,9 +21,10 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /** The keys that act on a panel rather than on the server, so the two halves stay separable. */
-export function panelActionForKey(key: string): "close" | "directives" | null {
+export function panelActionForKey(key: string): "close" | "directives" | "report" | null {
   if (key === "Escape") return "close";
   if (key === "d" || key === "D") return "directives";
+  if (key === "r" || key === "R") return "report";
   return null;
 }
 
@@ -30,9 +32,16 @@ export function panelActionForKey(key: string): "close" | "directives" | null {
  * True when the key was consumed. `Escape` reports what it did: with nothing open it consumes nothing,
  * so a later slice can fall through to clearing the map selection without this having swallowed the key.
  */
-function runPanelAction(action: "close" | "directives", panels: NationPanelKeys): boolean {
+function runPanelAction(
+  action: "close" | "directives" | "report",
+  panels: NationPanelKeys,
+): boolean {
   if (action === "directives") {
     panels.toggleDirectives();
+    return true;
+  }
+  if (action === "report") {
+    panels.toggleReport();
     return true;
   }
   return panels.closeTopPanel();
