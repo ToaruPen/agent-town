@@ -1,4 +1,10 @@
-import type { AgentActivity, AgentTask, ResourceKind, Terrain } from "@agent-town/shared";
+import type {
+  AgentActivity,
+  AgentTask,
+  CropStage,
+  ResourceKind,
+  Terrain,
+} from "@agent-town/shared";
 
 const ACTIVITY_LABELS: Record<AgentActivity["kind"], string> = {
   building: "建設中",
@@ -40,6 +46,13 @@ const TERRAIN_LABELS: Record<Terrain, string> = {
   water: "水辺",
 };
 
+const CROP_STAGE_LABELS: Record<CropStage, string> = {
+  fallow: "休閑地",
+  sown: "播種済み",
+  growing: "生育中",
+  ripe: "実り",
+};
+
 export function activityLabel(kind: AgentActivity["kind"]): string {
   return ACTIVITY_LABELS[kind];
 }
@@ -50,6 +63,10 @@ export function taskLabel(kind: AgentTask["kind"]): string {
 
 export function resourceLabel(kind: ResourceKind): string {
   return RESOURCE_LABELS[kind];
+}
+
+export function cropStageLabel(stage: CropStage): string {
+  return CROP_STAGE_LABELS[stage];
 }
 
 export function terrainLabel(terrain: Terrain): string {

@@ -1,11 +1,13 @@
 import {
   type AgentState,
   dayOfTick,
+  type Field,
   type HistoricalLandmark,
   HOUSE_BUILD_TICKS,
   HOUSE_CAPACITY,
   type House,
   isFacility,
+  isField,
   isHouse,
   isWinter,
   type Position,
@@ -19,7 +21,7 @@ import { Container, type FederatedPointerEvent, Graphics, Rectangle, Text } from
 import { TILE_SIZE } from "../render/mapLayer.js";
 import { layoutAgentsFrontToBack } from "../render/sprites.js";
 import { wornLevel } from "../render/trailLayer.js";
-import { activityLabel, resourceLabel, terrainLabel } from "./displayText.js";
+import { activityLabel, cropStageLabel, resourceLabel, terrainLabel } from "./displayText.js";
 import type { InspectTarget } from "./inspectPanel.js";
 import { buildProviderBadge } from "./providerBadge.js";
 import { buildFacilityViewModel, buildTrailViewModel } from "./spatialViewModel.js";
@@ -49,6 +51,7 @@ export type InfoBubbleTarget =
   | { kind: "tombstone"; eventId: string }
   | { kind: "facility"; facilityId: string }
   | { kind: "house"; pos: Position }
+  | { kind: "field"; pos: Position }
   | { kind: "landmark"; landmarkId: string }
   | { kind: "stockpile" }
   | { kind: "resource"; tileIndex: number; resourceKind: ResourceKind }
@@ -125,6 +128,7 @@ const HIT_PRIORITIES: Record<InfoBubbleTarget["kind"], number> = {
   tombstone: 8,
   facility: 7,
   house: 6,
+  field: 6,
   landmark: 5,
   stockpile: 4,
   resource: 3,
@@ -325,6 +329,16 @@ function appendFacilityHits(
   }
 }
 
+function appendFieldHits(
+  hits: InfoBubbleTarget[],
+  buildings: WorldState["buildings"],
+  tilePosition: Position,
+): void {
+  for (const field of buildings.filter(isField).toReversed()) {
+    if (positionsEqual(field.pos, tilePosition)) hits.push({ kind: "field", pos: field.pos });
+  }
+}
+
 function appendLandmarkHits(
   hits: InfoBubbleTarget[],
   landmarks: WorldHistory["landmarks"],
@@ -353,6 +367,7 @@ export function resolveInfoBubbleTarget(
   appendTombstoneHits(hits, deathEvents, tilePosition);
   appendFacilityHits(hits, world.buildings, tilePosition);
   appendHouseHits(hits, world.buildings, tilePosition);
+  appendFieldHits(hits, world.buildings, tilePosition);
   appendLandmarkHits(hits, world.history.landmarks, tilePosition);
   if (positionsEqual(world.stockpile.pos, tilePosition)) hits.push({ kind: "stockpile" });
   const resourceKind = resourceKindAt(tile, tileIndex, knownResourceKinds);
@@ -531,6 +546,26 @@ function houseBubble(
     : textBubble(buildHouseBubbleText(house), tilePlacement(house.pos));
 }
 
+function fieldBubble(
+  target: Extract<InfoBubbleTarget, { kind: "field" }>,
+  world: WorldState,
+): InfoBubbleViewModel | null {
+  const field = world.buildings.filter(isField).find(({ pos }) => positionsEqual(pos, target.pos));
+  if (field === undefined) return null;
+  return {
+    title: "畑",
+    badge: "",
+    lines: [fieldBubbleLine(field)],
+    inspectTarget: null,
+    anchor: { kind: "world", placement: tilePlacement(field.pos) },
+  };
+}
+
+function fieldBubbleLine(field: Field): string {
+  const stage = cropStageLabel(field.stage);
+  return field.stage === "ripe" ? `${stage} · 収穫可能` : stage;
+}
+
 function tombstoneBubble(
   target: Extract<InfoBubbleTarget, { kind: "tombstone" }>,
   deathEvents: DeathEvent[],
@@ -573,6 +608,7 @@ export function buildInfoBubbleViewModel(
   if (target.kind === "stockpile") return stockpileBubble(world);
   if (target.kind === "facility") return facilityBubble(target, world);
   if (target.kind === "house") return houseBubble(target, world);
+  if (target.kind === "field") return fieldBubble(target, world);
   if (target.kind === "tombstone") return tombstoneBubble(target, deathEvents);
   if (target.kind === "landmark") return landmarkBubble(target, world);
   if (target.kind === "trail") return trailBubble(target, world);

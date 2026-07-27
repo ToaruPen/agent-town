@@ -7,6 +7,7 @@ import {
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 import { createDoubleTapHistory } from "../src/render/worldViewport.js";
+import { cropStageLabel } from "../src/ui/displayText.js";
 import {
   activateInfoBubble,
   beginInfoBubbleInteraction,
@@ -184,6 +185,29 @@ describe("info bubble text builders", () => {
     ).toBe("家 — 定員2人");
   });
 
+  it("explains a field's stage in Japanese", () => {
+    const world = makeWorld({
+      buildings: [
+        {
+          kind: "field",
+          pos: { x: 3, y: 3 },
+          progress: 30,
+          complete: true,
+          stage: "ripe",
+        },
+      ],
+    });
+    const view = buildInfoBubbleViewModel({ kind: "field", pos: { x: 3, y: 3 } }, world, []);
+
+    expect(view?.lines.join("")).toContain("実り");
+  });
+
+  it("labels every field stage in Japanese", () => {
+    expect(
+      (["fallow", "sown", "growing", "ripe"] as const).map((stage) => cropStageLabel(stage)),
+    ).toEqual(["休閑地", "播種済み", "生育中", "実り"]);
+  });
+
   it("reuses the HUD food-days forecast for the stockpile", () => {
     expect(buildStockpileBubbleText(makeWorld())).toBe("貯蔵庫 — 木材8 · 食料25 · 3.0日分");
   });
@@ -248,6 +272,30 @@ describe("resolveHitPriority", () => {
 });
 
 describe("resolveInfoBubbleTarget", () => {
+  it("selects a field and anchors its explanation to the field tile", () => {
+    const field = {
+      kind: "field" as const,
+      pos: { x: 0, y: 0 },
+      progress: 30,
+      complete: true,
+      stage: "ripe" as const,
+    };
+    const world = makeWorld({
+      agents: [],
+      stockpile: { pos: { x: 1, y: 1 }, wood: 0, food: 0 },
+      buildings: [field],
+    });
+    const target = resolveInfoBubbleTarget(world, [], new Map(), { x: 8, y: 8 });
+
+    expect(target).toEqual({ kind: "field", pos: field.pos });
+    if (target === null) throw new Error("missing field target");
+    expect(buildInfoBubbleViewModel(target, world, [])).toMatchObject({
+      title: "畑",
+      lines: ["実り · 収穫可能"],
+      anchor: { kind: "world", placement: { x: 8, top: 0, bottom: 16 } },
+    });
+  });
+
   it("selects the visually frontmost agent when five same-tile hit areas overlap", () => {
     const agents = Array.from({ length: 5 }, (_, index) =>
       makeAgent({ id: `agent-${index}`, pos: { x: 0, y: 0 } }),
