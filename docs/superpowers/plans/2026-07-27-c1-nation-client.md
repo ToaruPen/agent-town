@@ -119,7 +119,7 @@ Every renderer keeps taking the types it takes today. `synthesizeCityScene` retu
 
 ## Task List
 
-C1-1 and C1-2 depend on no protocol and can run immediately, in parallel with the simulation worker's N1 tasks. C1-3 onwards need N1 Task 5's reshaped protocol on `main`.
+C1-1, C1-2 and C1-6a depend on no protocol and can run in parallel with the simulation worker's N1 tasks. C1-3 onwards need N1 Task 5's reshaped protocol on `main`. C1-6 was split because only its second half needs the HUD layout: territory borders and city tiers paint on the chronicle canvas where the world map already lives, which is what the design's V-2 assumed anyway.
 
 One branch per task, commit locally, never push. The supervisor verifies independently and merges. Parallel work needs its own worktree under `.worktrees/`, and a fresh worktree needs `pnpm install` before the gates run.
 
@@ -130,10 +130,11 @@ One branch per task, commit locally, never push. The supervisor verifies indepen
 | C1-3 | N1 Task 5 | Nation HUD shell: dashboard, ranking with breakdown, speed control, clock and countdown | `c1-03-hud-shell` |
 | C1-4 | C1-3 | The order desk: directive panel, queued and rejected feedback, autopilot as a following mode | `c1-04-order-desk` |
 | C1-5 | C1-3 | Season report as a diff with reasons | `c1-05-season-report` |
-| C1-6 | C1-1, C1-3 | World map as the permanent primary surface: territory borders, city tiers, player distinction | `c1-06-world-map` |
-| C1-7 | C1-2, C1-6 | Mount the city view as a docked pane; open, close, and redraw gating | `c1-07-city-view` |
+| C1-6a | C1-1 | Territory borders and city tiers, painted on the chronicle canvas where it already lives | `c1-06a-territory-tiers` |
+| C1-6b | C1-6a, C1-3 | Lift the world map into a permanent host; player distinction | `c1-06b-world-map-host` |
+| C1-7 | C1-2, C1-6b | Mount the city view as a docked pane; open, close, and redraw gating | `c1-07-city-view` |
 | C1-8 | C1-7 | Make directives visible in the city view | `c1-08-directive-scenery` |
-| C1-9 | C1-6 | Change made visible and kept calm | `c1-09-change-visible` |
+| C1-9 | C1-6b | Change made visible and kept calm | `c1-09-change-visible` |
 
 N1 is demonstrable in a browser once C1-1 through C1-5 have landed.
 
@@ -191,16 +192,25 @@ Read `hud.md` §4.5.
 - `completedDirectiveIds` is what explains changes the ledger cannot carry — production capacity and city development are not `SeasonMetric` values, so a completed directive is their only explanation.
 - Tests: entries group by metric and sum to the displayed delta per metric; a season with a famine entry reads as a famine rather than as an unexplained population drop; an empty report renders without a hole in the layout.
 
-### C1-6 — World map as the primary surface
+### C1-6a — Territory borders and city tiers
 
-Read `visual.md` §2.2, §2.3, §2.6 and §2.7.
+Read `visual.md` §2.2, §2.3 and §2.7. This half needs no protocol: it paints on the chronicle canvas where the world map already lives, which is exactly what the design's V-2 specifies.
+
+- Territory: edges extracted **in the view model**, not in the paint function. Sea and off-map count as different owners. Interior edges are not emitted. Border casing goes only where territory meets sea or unowned land, never at a nation-nation frontier — at a 6 px cell, casing on both sides of a shared frontier put 4 px of dark across it and left no terrain visible, and two banners are ≥40 apart by construction so a seam between them separates nothing.
+- City tiers: population radius, the capital as a distinct shape, a development core, a prosperity ring. Tier boundaries are absolute, so a rival's collapse cannot change your city's tier.
+- Do not fork `worldMapView.ts` and do not restructure the chronicle — that is C1-6b.
+- Tests: a single-cell nation emits four edges; interior edges are absent; casing appears against sea and unowned land and not at a nation-nation frontier; tier boundaries are absolute; a rival's collapse leaves another nation's tier unchanged.
+- Judgement for the owner in a browser, stated in the report: whether 1 px border plus 1 px casing is enough at a 6 px cell, and whether the moss-on-plains case the design flagged is genuinely rescued by the casing.
+
+### C1-6b — The world map as the primary surface
+
+Read `visual.md` §2.5 and §2.6, and `traversal.md` §2.2 for the layout this has to fit.
 
 - Lift `renderWorldMapCanvas` out of `mapPanel()` in `worldChronicle.ts` into a persistent host element. This is a restructure of the chronicle, which currently owns the canvas, its click handler and its `mapView` closure — it is **not** a fork of `worldMapView.ts`, whose exports stay as they are.
-- Territory: edges extracted in the view model, not in the paint function. Sea and off-map count as different owners. Interior edges are not emitted.
-- City tiers: population radius, the capital as a distinct shape, a development core, a prosperity ring. Tier boundaries are absolute, so a rival's collapse cannot change your city's tier.
-- The player's nation is distinguishable at a glance without the map becoming one highlighted nation and three others. When `playerNationId` is null, none is marked.
-- Tests: a single-cell nation emits four edges; interior edges are absent; tier boundaries are absolute; exactly one nation carries the player rule, or none when there is no player nation.
-- Judgement the owner has to make in a browser, so state it in the report: whether the map still reads as four nations rather than one nation plus three others, and whether 6 px cells carry territory, tier and change now that the map is permanently on screen rather than opened on demand.
+- The canvas currently repaints only on pointer events, so anything whose phase is a function of tick would never animate. Drive the repaint from the server `update` instead.
+- The player's nation is distinguishable at a glance without the map becoming one highlighted nation and three others. Fill alpha 0.32 for the player against 0.28 for rivals — 0.36 was measured and rejected, because through the full layer stack it drops terrain discrimination to ΔE 7.9 and hills stop separating from forest under a blue banner. When `playerNationId` is null, no nation is marked.
+- Tests: exactly one nation carries the player rule, or none when there is no player nation; the repaint fires on an update rather than only on a pointer event.
+- Judgement for the owner in a browser, stated in the report: whether the map still reads as four nations rather than one nation plus three others, and whether 6 px cells carry territory, tier and change now that the map is permanently on screen rather than opened on demand.
 
 ### C1-7 — Mount the city view
 
