@@ -1,25 +1,23 @@
 import {
+  accessibleFoodTotal,
   DAYS_PER_SEASON,
+  dayOfTick,
   FOOD_PER_MEAL,
+  foodDaysRemaining,
   HUNGER_DECAY_PER_DAY,
   HUNGER_PER_MEAL,
+  isWinter,
   NATION_TICKS_PER_SEASON,
   NATION_TICKS_PER_YEAR,
+  nationSeasonOfTick,
+  nationYearOfTick,
+  seasonOfTick,
+  storedFoodTotal,
   TICKS_PER_DAY,
   type WorldState,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import {
-  accessibleFoodTotal,
-  dayOfTick,
-  foodDaysRemaining,
-  isWinter,
-  nationSeasonOfTick,
-  nationYearOfTick,
-  seasonOfTick,
-  storedFoodTotal,
-} from "../src/time.js";
 import { makeFacilityFixture, makeTrailCellsFixture } from "./spatialFixture.js";
 import { makeWorldMapFixture } from "./worldMapFixture.js";
 

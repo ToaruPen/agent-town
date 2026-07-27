@@ -1,6 +1,12 @@
+import {
+  type Building,
+  type FacilityKind,
+  type Field,
+  isFacility,
+  isField,
+  isHouse,
+} from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
-import type { FacilityKind } from "../src/spatial.js";
-import { type Building, type Field, isFacility, isField, isHouse } from "../src/world.js";
 
 describe("building predicates", () => {
   it("does not treat a field as a facility", () => {

@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
-
-import type { NationState, NationWorldState } from "../src/nation.js";
 import {
   decodeClientMessage,
   decodeServerMessage,
   encodeMessage,
+  type NationState,
+  type NationWorldState,
   type ServerMessage,
-} from "../src/protocol.js";
+} from "@agent-town/shared";
+import { describe, expect, it } from "vitest";
 
 function nationFixture(): NationState {
   return {
