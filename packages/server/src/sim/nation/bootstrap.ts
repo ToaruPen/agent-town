@@ -160,8 +160,8 @@ export function bootstrapNations(
 ): NationState[] {
   return history.polities.flatMap((polity) => {
     const ownedCells = history.worldMap.cells.filter(({ polityId }) => polityId === polity.id);
-    return ownedCells.length === 0
-      ? []
-      : [bootstrapNation(history, polity, playerNationId, ownedCells)];
+    if (ownedCells.length === 0) return [];
+    const nation = bootstrapNation(history, polity, playerNationId, ownedCells);
+    return nation.population > 0 ? [nation] : [];
   });
 }

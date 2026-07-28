@@ -115,6 +115,20 @@ describe("bootstrapNations", () => {
     expect(nations[0]?.prosperity.total).toBeGreaterThan(0);
   });
 
+  it("excludes a polity with territory but no population from live nations", () => {
+    const history = historyFixture(
+      [polity("survivor"), polity("extinct")],
+      [
+        { terrain: "plains", polityId: "survivor" },
+        { terrain: "forest", polityId: "extinct" },
+      ],
+      [city("survivor-capital", "survivor", true), city("extinct-capital", "extinct", true)],
+      { survivor: [10], extinct: [] },
+    );
+
+    expect(bootstrapNations(history, null).map(({ id }) => id)).toEqual(["survivor"]);
+  });
+
   it("folds population effects and conserves the scaled total across a capital-weighted split", () => {
     const history = historyFixture(
       [polity("realm")],

@@ -331,12 +331,14 @@ export function resolveSeason(
   const polityById = new Map(polities.map((polity) => [polity.id, polity]));
   const sorted = nations.toSorted((left, right) => left.id.localeCompare(right.id));
   const reports = new Map<NationId, SeasonReport>();
-  const resolved = sorted.map((nation) => {
-    const polity = polityById.get(nation.id);
-    if (polity === undefined) throw new Error(`missing polity for nation ${nation.id}`);
-    const result = resolveNation(nation, polity, worldMap, tick);
-    reports.set(nation.id, result.report);
-    return result.nation;
-  });
+  const resolved = sorted
+    .map((nation) => {
+      const polity = polityById.get(nation.id);
+      if (polity === undefined) throw new Error(`missing polity for nation ${nation.id}`);
+      const result = resolveNation(nation, polity, worldMap, tick);
+      reports.set(nation.id, result.report);
+      return result.nation;
+    })
+    .filter(({ population }) => population > 0);
   return { nations: resolved, reports };
 }

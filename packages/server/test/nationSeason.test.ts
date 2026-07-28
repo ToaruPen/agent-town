@@ -245,6 +245,28 @@ describe("resolveSeason", () => {
     expect(alone?.prosperity).toEqual(withRival?.prosperity);
   });
 
+  it("removes a nation from live state when famine reduces its population to zero", () => {
+    const dying = nationFixture("a", {
+      stocks: { food: 0, materials: 0, wealth: 0 },
+      cities: [{ cityId: "a-capital", population: 1, developmentLevel: 0 }],
+      population: 1,
+      stability: 1,
+      culture: 0,
+      foodProduction: 0,
+      materialProduction: 0,
+    });
+
+    const result = resolveSeason([dying], [polityFixture("a")], worldMapFixture(), 300);
+
+    expect(result.nations).toEqual([]);
+    expect(result.reports.get("a")?.entries).toContainEqual({
+      metric: "population",
+      delta: -1,
+      reason: "famine",
+      directiveId: null,
+    });
+  });
+
   it("applies famine losses and halves population loss while encourageStores remains active", () => {
     const base = nationFixture("a", {
       stocks: { food: 0, materials: 0, wealth: 0 },

@@ -352,14 +352,32 @@ describe("nation server runtime", () => {
   it("rejects an unaffordable directive without changing nation state", () => {
     const runtime = createNationServerRuntime(26);
     const session = runtime.createSession();
-    const selected = runtime.handleClientMessage(session, {
+    runtime.handleClientMessage(session, {
       type: "selectNation",
-      nationId: "polity-3",
+      nationId: "polity-4",
     });
-    runtime.handleClientMessage(session, { type: "setAutoPilot", enabled: false });
-    const insufficient = firstOrders(selected).options.find(
-      ({ kind, blockedReason }) =>
-        kind === "clearFarmland" && blockedReason === "insufficientMaterials",
+    let orders = firstOrders(
+      runtime.handleClientMessage(session, { type: "setAutoPilot", enabled: false }),
+    );
+    for (let season = 0; season < 36; season += 1) {
+      const affordable = orders.options.find(
+        ({ kind, blockedReason }) => kind === "holdFestival" && blockedReason === null,
+      );
+      if (affordable === undefined) throw new Error("missing affordable directive fixture");
+      const accepted = firstOrders(
+        runtime.handleClientMessage(session, {
+          type: "issueDirective",
+          kind: affordable.kind,
+          targetCityId: affordable.targetCityId,
+        }),
+      );
+      expect(accepted.rejected).toBeNull();
+      orders = firstOrders(
+        runtime.advanceTicks(NATION_TICKS_PER_SEASON).map(({ message }) => message),
+      );
+    }
+    const insufficient = orders.options.find(
+      ({ kind, blockedReason }) => kind === "holdFestival" && blockedReason === "insufficientFood",
     );
     if (insufficient === undefined) throw new Error("missing unaffordable directive fixture");
     const before = structuredClone(runtime.worldState());

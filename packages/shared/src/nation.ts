@@ -100,6 +100,7 @@ export interface NationState {
   stocks: NationStocks;
   cities: NationCityState[];
   territoryCellCount: number;
+  /** Strictly positive while this polity is present in a live-nation collection. */
   population: number;
   /** 0..100. */
   stability: number;
@@ -117,6 +118,7 @@ export interface NationWorldState {
   season: Season;
   speed: SpeedMultiplier;
   history: WorldHistory; // unchanged contract, carries worldMap
+  /** Living nations only. A zero-population polity remains in history but is absent here. */
   nations: NationState[];
   playerNationId: NationId | null;
 }
