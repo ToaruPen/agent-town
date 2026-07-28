@@ -278,7 +278,11 @@ describe("the commit slot", () => {
       ordersFixture({
         autoPilot: false,
         queued: null,
-        chancellorChoice: { kind: "holdFestival", targetCityId: null },
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+        },
       }),
     );
 

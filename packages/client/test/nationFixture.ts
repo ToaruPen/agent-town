@@ -155,7 +155,11 @@ export function ordersFixture(overrides: Partial<NationOrders> = {}): NationOrde
     autoPilot: true,
     options: optionsFixture(),
     queued: null,
-    chancellorChoice: { kind: "encourageStores", targetCityId: null },
+    chancellorChoice: {
+      id: "chancellor-polity-1-300",
+      kind: "encourageStores",
+      targetCityId: null,
+    },
     rejected: null,
     ...overrides,
   };

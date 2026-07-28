@@ -182,7 +182,11 @@ describe("buildDirectiveListViewModel", () => {
 
   it("stars nothing when the chancellor's pick names a city that is not this card's", () => {
     const orders = ordersFixture({
-      chancellorChoice: { kind: "growCity", targetCityId: "city-elsewhere" },
+      chancellorChoice: {
+        id: "chancellor-polity-1-300",
+        kind: "growCity",
+        targetCityId: "city-elsewhere",
+      },
     });
 
     expect(build(orders).cards.some((card) => card.isChancellorChoice)).toBe(false);
