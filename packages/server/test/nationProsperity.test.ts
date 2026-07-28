@@ -85,6 +85,84 @@ describe("computeProsperity", () => {
     });
   });
 
+  it("returns zero for every component whose field maximum is zero", () => {
+    const populationOnly = nationFixture({
+      stocks: { food: 0, materials: 0, wealth: 0 },
+      stability: 0,
+      culture: 0,
+      foodProduction: 0,
+      materialProduction: 0,
+    });
+
+    expect(computeProsperity(populationOnly, [populationOnly])).toEqual({
+      population: 1,
+      production: 0,
+      wealth: 0,
+      stability: 0,
+      culture: 0,
+      total: NATION_PROSPERITY_POPULATION_WEIGHT * NATION_PROSPERITY_SCORE_MAX,
+    });
+  });
+
+  it("defends every component against negative raw inputs", () => {
+    const negative = nationFixture({
+      stocks: { food: 0, materials: 0, wealth: -1 },
+      population: -1,
+      stability: -1,
+      culture: -1,
+      foodProduction: -1,
+      materialProduction: -1,
+    });
+    const positive = nationFixture({ id: "positive" });
+
+    expect(computeProsperity(negative, [positive])).toEqual({
+      population: 0,
+      production: 0,
+      wealth: 0,
+      stability: 0,
+      culture: 0,
+      total: 0,
+    });
+  });
+
+  it("keeps every component and the total within their public ranges", () => {
+    const outlier = nationFixture({
+      stocks: { food: 0, materials: 0, wealth: 1_000_000 },
+      population: 1_000_000,
+      stability: 1_000_000,
+      culture: 1_000_000,
+      foodProduction: 1_000_000,
+      materialProduction: 1_000_000,
+    });
+    const score = computeProsperity(outlier, [nationFixture({ id: "smaller" })]);
+
+    for (const component of [
+      score.population,
+      score.production,
+      score.wealth,
+      score.stability,
+      score.culture,
+    ]) {
+      expect(component).toBeGreaterThanOrEqual(0);
+      expect(component).toBeLessThanOrEqual(1);
+    }
+    expect(score.total).toBeGreaterThanOrEqual(0);
+    expect(score.total).toBeLessThanOrEqual(NATION_PROSPERITY_SCORE_MAX);
+  });
+
+  it("includes the target nation when it is omitted from livingField", () => {
+    const target = nationFixture();
+
+    expect(computeProsperity(target, [])).toEqual({
+      population: 1,
+      production: 1,
+      wealth: 1,
+      stability: 1,
+      culture: 1,
+      total: NATION_PROSPERITY_SCORE_MAX,
+    });
+  });
+
   it("preserves the magnitude difference between a close field and a blowout", () => {
     const leader = nationFixture({ id: "leader", population: 1_000 });
     const close = nationFixture({ id: "close", population: 970 });

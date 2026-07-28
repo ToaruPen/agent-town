@@ -115,6 +115,32 @@ describe("bootstrapNations", () => {
     expect(nations[0]?.prosperity.total).toBeGreaterThan(0);
   });
 
+  it("normalizes every nation against the same bootstrapped field maxima", () => {
+    const history = historyFixture(
+      [polity("smaller"), polity("larger", { commerce: 1, knowledge: 1 })],
+      [...cellsFor("smaller", ["plains"]), ...cellsFor("larger", ["plains", "forest"])],
+      [city("smaller-capital", "smaller", true), city("larger-capital", "larger", true)],
+      { smaller: [10], larger: [20] },
+    );
+
+    const nations = bootstrapNations(history, null);
+    const smaller = nations.find(({ id }) => id === "smaller");
+    const larger = nations.find(({ id }) => id === "larger");
+
+    expect(smaller?.prosperity.population).toBeCloseTo(Math.log1p(1_000) / Math.log1p(2_000));
+    expect(smaller?.prosperity.production).toBeCloseTo(Math.log1p(0.45) / Math.log1p(1.85));
+    expect(smaller?.prosperity.wealth).toBeCloseTo(Math.log1p(2) / Math.log1p(16));
+    expect(smaller?.prosperity.stability).toBeCloseTo(Math.log1p(42) / Math.log1p(44));
+    expect(smaller?.prosperity.culture).toBeCloseTo(Math.log1p(20) / Math.log1p(40));
+    expect(larger?.prosperity).toMatchObject({
+      population: 1,
+      production: 1,
+      wealth: 1,
+      stability: 1,
+      culture: 1,
+    });
+  });
+
   it("excludes a polity with territory but no population from live nations", () => {
     const history = historyFixture(
       [polity("survivor"), polity("extinct")],

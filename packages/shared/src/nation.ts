@@ -90,7 +90,7 @@ export interface ProsperityScore {
   wealth: number;
   stability: number;
   culture: number;
-  /** Weighted total, 0..1000; 1000 means matching every positive field-component maximum. */
+  /** Weighted total, 0..1000; 1000 requires five positive field maxima and matching all five. */
   total: number;
 }
 

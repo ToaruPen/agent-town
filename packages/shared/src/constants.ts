@@ -481,7 +481,7 @@ export const NATION_PROSPERITY_WEALTH_WEIGHT = 0.2;
 export const NATION_PROSPERITY_STABILITY_WEIGHT = 0.15;
 /** Culture contribution to the prosperity total. */
 export const NATION_PROSPERITY_CULTURE_WEIGHT = 0.1;
-/** Maximum weighted total; reached by matching every positive component maximum in the field. */
+/** Maximum weighted total; requires five positive field maxima and matching all five. */
 export const NATION_PROSPERITY_SCORE_MAX = 1_000;
 /** Neutral stability before the live nation's population history is applied. */
 export const NATION_INITIAL_STABILITY_BASE = 40;
