@@ -39,6 +39,10 @@ interface DirectiveSelection {
   consumedQueuedDirectiveId: DirectiveId | null;
 }
 
+export function chancellorDirectiveId(nationId: NationId, tick: number): DirectiveId {
+  return `chancellor-${nationId}-${tick}`;
+}
+
 function matchingOption(
   options: readonly DirectiveOption[],
   kind: DirectiveKind,
@@ -82,7 +86,7 @@ function chancellorSelection(
   if (option === null) return null;
   return {
     directive: {
-      id: `chancellor-${nation.id}-${tick}`,
+      id: chancellorDirectiveId(nation.id, tick),
       kind: option.kind,
       targetCityId: option.targetCityId,
       issuedAtTick: tick,

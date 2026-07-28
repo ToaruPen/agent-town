@@ -30,7 +30,11 @@ export type ServerMessage =
       autoPilot: boolean;
       options: DirectiveOption[];
       queued: { id: DirectiveId; kind: DirectiveKind; targetCityId: string | null } | null;
-      chancellorChoice: { kind: DirectiveKind; targetCityId: string | null } | null;
+      chancellorChoice: {
+        id: DirectiveId;
+        kind: DirectiveKind;
+        targetCityId: string | null;
+      } | null;
       rejected: DirectiveBlockedReason | "notYourNation" | "unknownNation" | null;
     };
 
@@ -111,6 +115,10 @@ function isDirectiveKind(value: unknown): value is DirectiveKind {
   }
 }
 
+function hasChancellorChoiceId(value: unknown): boolean {
+  return value === null || (isRecord(value) && typeof value.id === "string");
+}
+
 function isTickMessage(value: Record<string, unknown>): boolean {
   return typeof value.tick === "number" && typeof value.year === "number" && isSeason(value.season);
 }
@@ -140,7 +148,8 @@ function isOrdersMessage(value: Record<string, unknown>): boolean {
     typeof value.tick === "number" &&
     typeof value.nationId === "string" &&
     typeof value.autoPilot === "boolean" &&
-    Array.isArray(value.options)
+    Array.isArray(value.options) &&
+    hasChancellorChoiceId(value.chancellorChoice)
   );
 }
 

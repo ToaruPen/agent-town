@@ -94,6 +94,37 @@ describe("nation server runtime", () => {
     expect(boundary[1]?.session).toBe(session);
   });
 
+  it("uses the chancellor choice wire id for the directive cost and effect ledger", () => {
+    const runtime = createNationServerRuntime(6);
+    const session = runtime.createSession();
+    const nationId = runtime.worldState().nations[0]?.id;
+    if (nationId === undefined) throw new Error("missing nation");
+    const selected = firstOrders(
+      runtime.handleClientMessage(session, { type: "selectNation", nationId }),
+    );
+    const choice = selected.chancellorChoice;
+    if (choice === null) throw new Error("missing chancellor choice");
+    const wireId = choice.id;
+
+    expect(choice.kind).toBe("holdFestival");
+    expect(wireId).toBe(`chancellor-${nationId}-${NATION_TICKS_PER_SEASON}`);
+
+    const season = runtime
+      .advanceTicks(NATION_TICKS_PER_SEASON)
+      .find(({ message }) => message.type === "season")?.message;
+    if (season?.type !== "season") throw new Error("missing season");
+    const report = season.nations.find(({ id }) => id === nationId)?.lastReport;
+    if (report === null || report === undefined) throw new Error("missing season report");
+    const ledgerReasons = new Set(
+      report.entries
+        .filter(({ directiveId }) => directiveId === wireId)
+        .map(({ reason }) => reason),
+    );
+
+    expect(ledgerReasons).toEqual(new Set(["directiveCost", "directiveEffect"]));
+    expect(report.completedDirectiveIds).toContain(wireId);
+  });
+
   it("acknowledges every order mutation, mints the id immediately, and preserves queue on rejection", () => {
     const runtime = createNationServerRuntime(42);
     const session = runtime.createSession();

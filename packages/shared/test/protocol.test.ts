@@ -114,7 +114,11 @@ describe("wire protocol", () => {
         },
       ],
       queued: { id: "directive-1", kind: "clearFarmland", targetCityId: null },
-      chancellorChoice: { kind: "clearFarmland", targetCityId: null },
+      chancellorChoice: {
+        id: "chancellor-realm-300",
+        kind: "clearFarmland",
+        targetCityId: null,
+      },
       rejected: null,
     };
 
@@ -186,6 +190,23 @@ describe("wire protocol", () => {
           autoPilot: true,
           queued: null,
           chancellorChoice: null,
+          rejected: null,
+        }),
+      ),
+    ).toThrow("invalid server message");
+  });
+
+  it("rejects an orders message whose chancellor choice has no id", () => {
+    expect(() =>
+      decodeServerMessage(
+        JSON.stringify({
+          type: "orders",
+          tick: 0,
+          nationId: "realm",
+          autoPilot: true,
+          options: [],
+          queued: null,
+          chancellorChoice: { kind: "clearFarmland", targetCityId: null },
           rejected: null,
         }),
       ),

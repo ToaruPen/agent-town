@@ -9,6 +9,7 @@ import {
   type DirectiveOption,
   decodeClientMessage,
   encodeMessage,
+  NATION_TICKS_PER_SEASON,
   type NationId,
   type NationState,
   type NationWorldState,
@@ -27,6 +28,7 @@ import { chooseDirective } from "../sim/nation/chancellor.js";
 import { listDirectiveOptions } from "../sim/nation/directives.js";
 import {
   advanceNationEngine,
+  chancellorDirectiveId,
   type NationEngineState,
   type QueuedDirective,
 } from "../sim/nation/engine.js";
@@ -64,6 +66,10 @@ export interface NationServerRuntime {
 }
 
 type OrderRejection = DirectiveBlockedReason | "notYourNation" | "unknownNation" | null;
+
+function nextSeasonBoundaryTick(tick: number): number {
+  return tick - (tick % NATION_TICKS_PER_SEASON) + NATION_TICKS_PER_SEASON;
+}
 
 class DefaultNationServerRuntime implements NationServerRuntime {
   private readonly history;
@@ -148,7 +154,13 @@ class DefaultNationServerRuntime implements NationServerRuntime {
       options,
       queued,
       chancellorChoice:
-        choice === null ? null : { kind: choice.kind, targetCityId: choice.targetCityId },
+        choice === null
+          ? null
+          : {
+              id: chancellorDirectiveId(nation.id, nextSeasonBoundaryTick(this.engineState.tick)),
+              kind: choice.kind,
+              targetCityId: choice.targetCityId,
+            },
       rejected,
     };
   }
