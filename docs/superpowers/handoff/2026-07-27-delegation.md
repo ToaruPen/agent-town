@@ -556,6 +556,31 @@ fresh-claim and reconnect paths both work. `nationHudState.test.ts` pins that th
 because `applyUpdate` spreading the previous state is the only thing keeping it — a mutation copying the
 payload id fails that test.
 
+## `dev-city.html` is a build artifact now, and it serves as a static site
+
+`a9863b3` names both pages in `vite.config.ts`'s `build.rollupOptions.input`. Vite's default input is
+`index.html` alone, so the resident-scale page had been built by nobody and existed only under `vite dev` —
+which is why it could not be published. It is the only page that can be: `devCityScene.ts` opens no socket,
+while `main.ts:56` connects a WebSocket, so `index.html` is inert without the simulation server behind it.
+
+**Verify a static build by serving the artifact, not by trusting `vite dev`.** `npx wrangler pages dev
+packages/client/dist --port <free>` runs the real Pages runtime over the real output with no Cloudflare
+account involved. Three things only that surfaced:
+
+- **Pages strips `.html`.** `/dev-city.html` answers `308 → /dev-city`. The deployed page lives at
+  `/dev-city`, and `/` will be the inert `index.html`, so a blank root is expected, not a regression.
+- **Bind to a port with no listener, and confirm the answer is wrangler's.** `8788` was already held by an
+  unrelated local service on `127.0.0.1`; wrangler reported "Ready" on `::` and every request still went to
+  the other process. A 404 whose `Server:` header names something else is a port collision, not a bad build.
+- All 12 JS chunks and all 25 sprite paths baked into the bundle answer 200 over that server.
+
+Do not use `vite preview` for this: the IPv6 fix in `vite.config.ts` is on `server.host`, and `preview` reads
+a separate `preview.host` that still defaults to single-address `localhost`.
+
+Publishing is the owner's, twice over: `wrangler login` is interactive OAuth, and `wrangler pages deploy`
+against a project that does not exist prompts for a project name — creating one is persistent configuration
+on their Cloudflare account, so the name is theirs to choose.
+
 ## Queued cleanups
 
 Small, independent, and none of them blocking. Each is here because it was found while verifying something
