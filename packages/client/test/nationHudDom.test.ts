@@ -550,6 +550,40 @@ describe("the season report", () => {
   });
 
   /**
+   * The strip is always-on chrome that repaints on every server update (§4.1), not only at a season
+   * boundary — its own toggle button is rebuilt every time just like the panel's close button is, so it
+   * needs the identical focus-preserving treatment, with the panel left closed throughout.
+   */
+  it("keeps focus on the strip's own toggle button across an ordinary repaint", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    const firstToggle = roots.strip.querySelector(".nation-strip__toggle");
+    (firstToggle as HTMLElement | null)?.focus();
+    expect(document.activeElement).toBe(firstToggle);
+
+    hud.applyUpdate(
+      worldFixture({
+        history: historyFixture(POLITIES),
+        nations: [
+          nationFixture({
+            id: "polity-2",
+            lastReport: reportFixture({
+              year: 3,
+              season: "autumn",
+              entries: [ledgerEntry({ metric: "food", delta: 12 })],
+            }),
+          }),
+        ],
+      }),
+      4_000,
+    );
+
+    const secondToggle = roots.strip.querySelector(".nation-strip__toggle");
+    expect(secondToggle).not.toBe(firstToggle);
+    expect(document.activeElement).toBe(secondToggle);
+    expect(roots.report.hidden).toBe(true);
+  });
+
+  /**
    * The hardest case, checked where it actually has to survive: inside the open panel, not just in the
    * view model. A body that early-returns on `isEmpty` before reading `heldOrderNote` would silently drop
    * this in exactly the quiet-season case the plan's own test targets.
@@ -592,6 +626,22 @@ describe("the season report", () => {
 
     expect(roots.report.hidden).toBe(false);
     expect(roots.strip.classList.contains("nation-strip--famine")).toBe(true);
+  });
+
+  /**
+   * The pin shows the report — it does not get to move the caret. hud.md §4.5 gives famine the right to
+   * open the panel on its own, not to steal focus out from under a player who may be mid-decision
+   * elsewhere (the directive panel, say) when the season happens to resolve.
+   */
+  it("does not steal focus when a famine season auto-opens the panel", () => {
+    const famine = reportFixture({
+      entries: [ledgerEntry({ metric: "population", delta: -200, reason: "famine" })],
+    });
+    const { roots } = boardedWithReport(famine);
+
+    expect(roots.report.hidden).toBe(false);
+    expect(document.activeElement).not.toBe(roots.report.querySelector(".season-report__close"));
+    expect(document.activeElement === null || document.activeElement === document.body).toBe(true);
   });
 
   /**

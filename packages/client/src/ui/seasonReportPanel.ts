@@ -7,7 +7,16 @@ import { element } from "./worldChronicle.js";
 
 export interface SeasonReportPanelController {
   render(view: SeasonReportViewModel | null, generation: number): void;
+  /** Player-initiated open/close (the `R` key, the strip's own button) — moves focus to the close button. */
   toggle(): void;
+  /**
+   * Server-initiated open: hud.md §4.5's famine privilege. Deliberately not routed through `toggle()` —
+   * a famine season resolving is not a keypress, and stealing focus out from under a player who is, say,
+   * mid-decision in the directive panel would be the pin doing more than "show itself" (§4.5's own
+   * phrasing). A no-op once already open, so a second famine entry in the same boundary cannot re-steal
+   * focus either.
+   */
+  pin(): void;
   close(): void;
   isOpen(): boolean;
 }
@@ -114,19 +123,38 @@ function stripBody(view: SeasonReportViewModel, open: boolean, onToggle: () => v
  * for free, the same way it already does for the candidate list.
  */
 const CLOSE_BUTTON_SELECTOR = ".season-report__close";
+const STRIP_TOGGLE_SELECTOR = ".nation-strip__toggle";
+
+/** Which of the two roots holds focus right now, or neither — read before either is rebuilt. */
+type FocusOwner = "strip" | "panel" | null;
+
+function focusOwner(roots: SeasonReportRoots): FocusOwner {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return null;
+  if (roots.panel.contains(active)) return "panel";
+  if (roots.strip.contains(active)) return "strip";
+  return null;
+}
 
 export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportPanelController {
   let renderedKey: string | null = null;
   let open = false;
   let latest: SeasonReportViewModel | null = null;
-  // Set by `toggle()` when it opens the panel, consumed by the next `paint()`. The panel has no
-  // per-row focusable content (hud.md §4.5's rows are read-only diff lines, unlike `directivePanel`'s
-  // cards), so the close button is the one focus target worth managing — both moving focus into it on
-  // open and, below, keeping focus there across a re-render while the panel stays open.
+  // Set by `toggle()` when it opens the panel, consumed by the next `paint()`. Not set by `pin()` —
+  // a famine pin is server-initiated, and moving focus for it would be the pin doing more than hud.md
+  // §4.5 gives it the right to do ("show itself", not move the caret).
   let focusCloseButtonOnNextPaint = false;
 
-  const focusIsInsidePanel = (): boolean =>
-    document.activeElement instanceof HTMLElement && roots.panel.contains(document.activeElement);
+  /** Split out of `paint()` purely to keep its complexity under the linter's limit. */
+  const restoreFocusAfterPaint = (restoreTo: FocusOwner): void => {
+    if (restoreTo === "panel" && open) {
+      roots.panel.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR)?.focus();
+      return;
+    }
+    if (restoreTo === "strip") {
+      roots.strip.querySelector<HTMLButtonElement>(STRIP_TOGGLE_SELECTOR)?.focus();
+    }
+  };
 
   const paint = (): void => {
     if (latest === null) {
@@ -139,19 +167,18 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
       focusCloseButtonOnNextPaint = false;
       return;
     }
-    // Read before `replaceChildren` below tears the old close button out of the DOM — otherwise a
-    // season boundary that lands while the player is tabbed onto it would silently eject focus to
-    // `<body>` (hud.md §4.2's "focus preserved across a boundary re-render", applied to this panel).
-    const restoreFocus = focusCloseButtonOnNextPaint || (open && focusIsInsidePanel());
+    // Read before either root is rebuilt below — both are torn down and replaced wholesale on every
+    // paint (the strip on every repaint, the panel whenever it is open), which would otherwise eject
+    // focus to `<body>` the instant a season resolves while the player is tabbed onto either one
+    // (hud.md §4.2's "focus preserved across a boundary re-render", applied to both surfaces here).
+    const restoreTo: FocusOwner = focusCloseButtonOnNextPaint ? "panel" : focusOwner(roots);
     focusCloseButtonOnNextPaint = false;
     roots.strip.hidden = false;
     roots.strip.classList.toggle("nation-strip--famine", latest.isFamine);
     roots.strip.replaceChildren(stripBody(latest, open, () => controller.toggle()));
     roots.panel.hidden = !open;
     roots.panel.replaceChildren(...(open ? panelBody(latest, () => controller.close()) : []));
-    if (open && restoreFocus) {
-      roots.panel.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR)?.focus();
-    }
+    restoreFocusAfterPaint(restoreTo);
   };
 
   const controller: SeasonReportPanelController = {
@@ -166,6 +193,13 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
     toggle(): void {
       open = !open;
       if (open) focusCloseButtonOnNextPaint = true;
+      renderedKey = null;
+      paint();
+    },
+
+    pin(): void {
+      if (open) return;
+      open = true;
       renderedKey = null;
       paint();
     },

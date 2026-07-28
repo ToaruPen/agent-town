@@ -239,7 +239,10 @@ export function createNationHud(
     const report = ownPair(state)?.nation.lastReport ?? null;
     if (report === null || !isNewReportBoundary(report)) return;
     if (announceHeadline) announce(seasonReportView(state)?.headline ?? "");
-    if (!panels.report.isOpen() && hasFamineEntry(report)) panels.report.toggle();
+    // `pin()`, not `toggle()`: this is server-initiated, and stealing focus for it — e.g. out of the
+    // directive panel mid-decision — would be the pin doing more than hud.md §4.5 gives it the right
+    // to do ("show itself", not move the caret).
+    if (hasFamineEntry(report)) panels.report.pin();
   };
 
   const renderClock = (now: number): void => {
