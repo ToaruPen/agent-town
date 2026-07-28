@@ -18,7 +18,7 @@ question — the reasoning behind each is in its own section below.
 | # | question | decision | what it costs |
 |---|---|---|---|
 | 1 | Autopilot: spec 184 says fill-the-gap, `engine.ts:104` implements always-chancellor | **Spec wins.** The chancellor decides only in a season with no queued order | One server change plus `bootstrap.ts:134`; one test in `nationDashboardViewModel.test.ts` flips. Also closes the silent hold on a new player's first order |
-| 2 | Prosperity ceiling: every living nation pins 4 of 5 components by year 10–40 | **Stop using fixed references.** Normalize by rank within the field, or log-scale | `prosperity.ts` and its tests. Ends the unwinnable "how big should the reference be" tuning loop |
+| 2 | Prosperity ceiling: every living nation pins 4 of 5 components by year 10–40 | **Stop using fixed references.** Normalize by rank within the field, or log-scale | **landed `f99dbde`.** `log1p(value) / log1p(field maximum)`; rank was measured and rejected — it reported a constant 80 % spread at both year 40 and year 120 |
 | 3 | A nation with population 0 still scores 443.6 | **Death must read as death.** A dead nation leaves the ranking; the spread is measured over survivors | Must land *before* #2 can be measured — today's spread number is propped up by a corpse |
 | 4 | `orders.chancellorChoice` carries no `id`, so a chancellor's festival shows 発令者不明 | **Add the id to the protocol.** The server already knows | `shared` + `server` — **landed `cde6b42`.** The cost line originally read "the client's existing path then attributes it with no change"; that was wrong, and 発令者不明 is still on screen. See below |
 | 5 | The first game year renders as 紀元0年 | **Give the generator a real epoch** | `historyGen.ts:615`; the client is already correct and needs nothing |
@@ -57,15 +57,46 @@ for a nation it cannot find, and the client's `ownPair` and `ownBreakdown` both 
 vanishes, the ranking row disappears, and nothing says why. Strictly better than a corpse outranking the
 living, and not finished. Queued separately; it was not folded into #3.
 
-**`n1-13-prosperity-scale` was dispatched before the pre-commit rule existed** and its brief does not carry
-it. It will therefore produce a commit that never went through `ai-slop-cleaner`. That is not a reason to
-wave it through: run the cleanup pass and the independent review on its branch as follow-up commits before
-merging, and say in the merge record that the order was reversed.
+**#2 landed at `f99dbde`, and it is the first task to go through the new pre-commit rule** — though in the
+wrong order, because it was dispatched before the rule existed. Cleanup and review ran as follow-ups
+instead of before the commit. Recorded rather than hidden: the sequence for every task after this one is
+cleanup first.
 
-**`n1-08-balance-horizon` is superseded, not pending.** It raises `NATION_PROSPERITY_POPULATION_REFERENCE`
-from 10,000 to 12,000, which the #2 decision discards outright — the whole point is that fixed references
-are the problem. Once #2 lands, delete the branch rather than leaving `git branch --no-merged` to report it
-as outstanding work forever.
+The passes earned their place. `ai-slop-cleaner` returned **zero `REMOVE`** across eleven candidates — an
+empty result, which the brief said explicitly was allowed, and which is the correct answer here. The
+independent review returned **request changes** with four findings, none of them in the normalization:
+the design documents still described the contract the commit replaced, `bootstrapNations` had no test that
+it normalizes against the shared field, the `maximum <= 0` branch was untested, and the `SCORE_MAX` comment
+was wrong. All four were fixed in `2fd7ccc` with the regression proved by breaking each behaviour and
+watching the new test fail.
+
+**`n1-08-balance-horizon` is now dead.** It raises `NATION_PROSPERITY_POPULATION_REFERENCE` from 10,000 to
+12,000; that constant no longer exists. Deleting it needs the owner — `git branch -D` is refused by this
+supervisor's permission layer.
+
+## What the relative scale costs, in the owner's words
+
+Worth keeping separate from the merge record, because it is a live property and not a defect.
+
+The spec used to say fixed references existed **to avoid a nation's score rising merely because another
+nation died**. The new scale does exactly that, and the rewritten paragraph explained why fixed references
+were dropped without saying their stated purpose had been abandoned. `f99dbde` writes the trade down where
+the decision lives, so the next reader meets an accepted cost rather than an oversight to fix.
+
+Three consequences, all arithmetic rather than opinion:
+
+- A nation's score moves when other nations move, with no action of its own.
+- If the whole world declines together the leader still reads 1000; absolute prosperity is invisible.
+- 1000 requires **all five component maxima to be positive** and the nation to match all five. A lone
+  survivor with only population positive tops out at 300 — an earlier report to the owner said a sole
+  survivor always scores 1000, which was wrong.
+
+And what the widening spread actually is: at year 40 and beyond the field is a fixed three nations, so the
+growth from 6.25 % to 10.50 % is not an artifact of nations dying. It is **one nation stalling against two
+growing** — the top two sit flat near 979 and 959 while the last falls 918 → 877. `polity-1`'s raw
+production stops at 678.375 because the chancellor runs out of directives worth taking, while the leader's
+climbs to 38,648. That satisfies "the ranking still says something at year 120". Whether it is a *good
+game* is a different question and the owner has not been asked it.
 
 ## Package ownership boundary
 
