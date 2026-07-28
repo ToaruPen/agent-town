@@ -57,6 +57,16 @@ for a nation it cannot find, and the client's `ownPair` and `ownBreakdown` both 
 vanishes, the ranking row disappears, and nothing says why. Strictly better than a corpse outranking the
 living, and not finished. Queued separately; it was not folded into #3.
 
+**`n1-13-prosperity-scale` was dispatched before the pre-commit rule existed** and its brief does not carry
+it. It will therefore produce a commit that never went through `ai-slop-cleaner`. That is not a reason to
+wave it through: run the cleanup pass and the independent review on its branch as follow-up commits before
+merging, and say in the merge record that the order was reversed.
+
+**`n1-08-balance-horizon` is superseded, not pending.** It raises `NATION_PROSPERITY_POPULATION_REFERENCE`
+from 10,000 to 12,000, which the #2 decision discards outright — the whole point is that fixed references
+are the problem. Once #2 lands, delete the branch rather than leaving `git branch --no-merged` to report it
+as outstanding work forever.
+
 ## Package ownership boundary
 
 The owner split the work by package on 2026-07-27: Codex owns the simulation and the wire contracts,
@@ -696,10 +706,14 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 
 1. Supervisor hands the worker one task from the plan's task list (prompt template below).
 2. Worker branches from the previous task's commit, works TDD, commits locally, never pushes.
-3. Reviewer (a separate Codex pass) reviews the diff against the task brief and the frozen contracts.
-4. Supervisor verifies independently: `just check`, `just test`, diff scope matches the task, contracts
+3. **Before that commit**, the worker runs `polishment` steps 1–5 with `ai-slop-cleaner` as the cleanup
+   path — see "Before every code commit" in `AGENTS.md`. Step 6 is replaced by commit-and-report.
+4. **The supervisor dispatches a separate Codex instance** to review the committed diff against the task
+   brief and the frozen contracts. Separate means a distinct process the supervisor starts, not a role the
+   author adopts and not a sub-agent the author spawns.
+5. Supervisor verifies independently: `just check`, `just test`, diff scope matches the task, contracts
    unchanged, no forbidden imports in `sim/nation/`.
-5. Supervisor fast-forward merges into the slice branch and pushes; CI must go green before the next task.
+6. Supervisor fast-forward merges into the slice branch and pushes; CI must go green before the next task.
 
 Simulation tasks are sequential, so Codex needs one worktree at a time. A client task running alongside
 a simulation task needs its own worktree; see the ownership boundary above.
@@ -736,8 +750,15 @@ A client worker gets the same rules as a simulation worker, plus:
 > stop and report instead of editing it. Do not dispatch reviewer sub-agents. The commit is part of your
 > task; never end your turn with uncommitted work. Do not push.
 >
-> Report: the commit hash, the files touched, the tests you added, and anything in the plan you found
-> ambiguous or wrong.
+> Before you commit, run the `polishment` skill, steps 1–5, using `ai-slop-cleaner` as the cleanup path —
+> not `simplify`, and not both. Skip step 6 entirely: there is no PR here and you do not push. Step 3's
+> independent review is arranged by the supervisor against your committed diff, so do not spawn a reviewer
+> yourself; that is what "do not dispatch reviewer sub-agents" above means and it is not a licence to skip
+> review. Report what `ai-slop-cleaner` classified `REMOVE`, `RETAIN`, and `DEFECT`. A `DEFECT` is reported,
+> never fixed inside a cleanup edit.
+>
+> Report: the commit hash, the files touched, the tests you added, the cleanup classifications, and
+> anything in the plan you found ambiguous or wrong.
 
 ## Verification checklist (supervisor, every task)
 
