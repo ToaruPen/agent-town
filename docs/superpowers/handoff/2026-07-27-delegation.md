@@ -34,20 +34,28 @@ result against a spread that a corpse is holding up. Land #3 first, then re-meas
 A decision recorded in this table is not an assignment. All eight sat here for a day as settled-but-unowned
 because the row was written and no worker was given the work — write the dispatch down at the same time.
 
-| branch | decision | why it is alone in its own worktree |
+| branch | decision | outcome |
 |---|---|---|
-| `n1-10-mortality` | #3 dead nation | `prosperity.ts` / `season.ts` / ranking |
-| `n1-11-chancellor-id` | #4 `chancellorChoice` id | `protocol.ts` / `engine.ts` — the only task licensed to change the wire contract |
-| `n1-12-epoch` | #5 real epoch | `historyGen.ts` |
+| `n1-12-epoch` | #5 real epoch | **merged `f6e21df`.** Fixed epoch 1043, no extra RNG draws, same seed → same world |
+| `n1-11-chancellor-id` | #4 `chancellorChoice` id | **merged `cde6b42`.** The wire half only — 発令者不明 has not moved; see its own section |
+| `n1-10-mortality` | #3 dead nation | **merged `e0a9398`.** A zero-population polity is absent from `NationWorldState.nations` |
 
-Held back deliberately, not forgotten:
+All three stopped at the package boundary rather than reaching into `packages/client/`. Only #4 had client
+cost: three fixtures needed the now-required `id`, done separately in `cde6b42` as conformance, not design.
 
-- **#2 (ceiling)** waits on #3 *and on a re-measurement between them*. Dispatching both together would
-  measure the new normalization against the same corpse-propped spread the decision exists to remove.
-- **#1 (autopilot)** collides with #4 in `engine.ts`, and it is the one task that crosses the package
-  boundary: the server change flips a test in `nationDashboardViewModel.test.ts`, which a simulation worker
-  may not edit. Each dispatched task is told to stop and report on a failing client test rather than reach
-  across, so #1 needs a client worker on the same branch afterwards — sequentially, never concurrently.
+Still held:
+
+- **#2 (ceiling)** was waiting on #3 *and on the measurement between them*. That measurement now exists —
+  see "Re-measured on `e0a9398`". Its brief must carry those numbers, because the target changed: the
+  problem is no longer a spread that is too small, it is a field that **converges**.
+- **#1 (autopilot)** collided with #4 in `engine.ts`; #4 has landed, so that reason is gone. What remains is
+  the boundary — the server change flips a test in `nationDashboardViewModel.test.ts`, which a simulation
+  worker may not edit. Server change first, then a client pass on the same branch, sequentially.
+
+**A player whose nation dies gets no explanation.** Nothing crashes — the server's `orders()` returns null
+for a nation it cannot find, and the client's `ownPair` and `ownBreakdown` both guard — but the dashboard
+vanishes, the ranking row disappears, and nothing says why. Strictly better than a corpse outranking the
+living, and not finished. Queued separately; it was not folded into #3.
 
 ## Package ownership boundary
 
@@ -406,6 +414,37 @@ climbs forever, and `production` keeps 0.32 from `materialProduction` alone with
 Any spread floor measured across all four nations is therefore measuring a dead one. This is the exact
 failure the supervision skill names — *a floor on a spread can be satisfied by one permanently crippled
 member while the rest are pinned at a ceiling* — showing up in live data.
+
+### Re-measured on `e0a9398`, with the corpse gone
+
+The reason #3 had to land first. Same seed 12345, same 120 years, survivors only. Removing the dead nation
+did not shift the number — it reversed which way it points.
+
+```
+year | alive | spread/max | spread/min | pinned | what is still moving
+   5 |     4 |     24.88% |     33.12% |  0 / 4 | everything
+  10 |     4 |     54.31% |    118.84% |  0 / 4 | polity-2 is dying, and that is the whole spread
+  20 |     4 |     67.84% |    210.96% |  0 / 4 | polity-2 at population 383
+  40 |     3 |      6.78% |      7.27% |  1 / 3 | culture, on one nation
+ 120 |     3 |      2.84% |      2.93% |  1 / 3 | culture, on one nation
+```
+
+**The field converges instead of diverging.** With the corpse counted, the spread looked large and growing;
+over survivors it collapses from 24.88 % to 2.84 %, and it is still shrinking at year 120. The longer a game
+runs, the less the nations differ.
+
+By year 40 every survivor holds `pop 1.00, prod ~1.00, wealth 1.00, stability 1.00`, so the score is
+`900 + 100 × culture` and nothing else. `polity-1` and `polity-4` reach culture 1.00 there and never move
+again — 80 further years of play changes neither. `polity-3` is the only nation still climbing (0.32 → 0.72),
+which means the ranking's eventual state is a **three-way tie at 1000**, reached by waiting.
+
+One oddity worth not smoothing over: `polity-1`'s production sits at **0.97 and never reaches 1.00** across
+115 years, while its every other component is pinned. It is the only sub-ceiling component in the field that
+is not culture, and nothing in the current model explains why it stops there. Do not tune it away without
+finding out what it is.
+
+Quote spreads with a denominator. This repo has reported both `(max−min)/max` and `(max−min)/min`; at year
+120 those are 2.84 % and 2.93 %, and at year 10 they are 54 % and 119 %. The two are not comparable.
 
 **A correction to an earlier report.** Figures of "14.43 % spread at year 80, 3 of 4 nations pinned at 1000"
 were given to the owner during this session. They do not reproduce on main: `n1-08-balance-horizon` raises
