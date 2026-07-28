@@ -17,6 +17,7 @@ Each of these cost real time before it was written down.
 - Run the gate from the worktree you are working in. `.worktrees/` siblings are full checkouts, so a run from the wrong root collects other people's tests.
 - Never run a build, a test, an install, or a git operation inside a worktree another agent is working in. `tsc` and `vitest` compile whatever is on disk at that instant, so reading a live worktree with a build is not a read — it can produce an error from a tree no commit ever contained. To verify someone else's branch, check the tip out elsewhere.
 - A failure report is evidence about a working tree, not about a commit. Before changing code to fix a reported error, compare its line numbers against the committed file.
+- **A branch `git branch --no-merged` lists may be fully merged.** Merging here rebases, which changes every hash, and a later refactor on top changes the patch-id — so `git cherry` marks the commits `+` as well. Both tools then report finished, superseded work as outstanding. Before concluding a branch is unmerged, `git diff <tip> main -- <the files it touches>`: if main is a superset, the branch is stale, not pending.
 
 ## Rules
 - TDD: failing test → implement → green → commit (Conventional Commits).

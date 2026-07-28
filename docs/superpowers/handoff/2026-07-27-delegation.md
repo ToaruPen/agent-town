@@ -472,6 +472,22 @@ by reading `protocol.ts` directly.
 - It filed the missing return-focus-to-opener (hud.md §3.5) as consistency with `directivePanel.ts`'s
   precedent. The reasoning is sound but the state is **two panels both owe it**, not "settled by precedent".
 
+## Two of the three "unmerged" branches are not unmerged
+
+`git branch --no-merged main` lists four branches plus `__diag_merge_test`. Only **two** hold work main lacks:
+`c1-06b-world-map-host` (`89ba3df`) and `n1-08-balance-horizon` (`cb58162`). The other two are finished:
+
+- `c1-05-season-report` — merged as `38be255..77798e1`. `git cherry` marks all five commits `-`.
+- `c1-06a-territory-tiers` (`03e0bf1`) — **superseded, not pending.** Its work is in main as `3fb4d8d`, and
+  `5852137` then refactored `worldCityViewModel.ts` onto the shared city-tier thresholds, which is why main is
+  25 lines shorter there. `git diff 03e0bf1 main` over the branch's own files shows main as a strict superset:
+  the two territory files are byte-identical and only the refactored city model differs. Nothing is lost.
+
+The trap is that `git cherry` marked `03e0bf1` as `+`, i.e. *not applied*. Merging here rebases, so the hash
+changes; a later refactor changes the patch-id too; and both tools then report superseded work as outstanding.
+Diff the tip against main over the branch's files before believing either of them. This cost a false alarm
+raised to the owner and then retracted.
+
 ## `world.playerNationId` looks authoritative and is not
 
 The C1-6b probe caught this rather than confirming the work, and any future surface needing the player's
