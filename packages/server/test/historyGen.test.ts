@@ -95,6 +95,21 @@ function playerFacingHistoryStrings(history: ReturnType<typeof generateWorldHist
 }
 
 describe("generateWorldHistory", () => {
+  it("anchors the generated chronology to epoch 1043 without stretching its span", () => {
+    const history = generateWorldHistory(42);
+    const eventYears = history.events.map(({ year }) => year);
+
+    expect(history.currentYear).toBe(1_043);
+    expect(history.startYear).toBe(843);
+    expect(history.currentYear - history.startYear).toBe(200);
+    expect(Math.min(...eventYears)).toBe(history.startYear);
+    expect(Math.max(...eventYears)).toBe(history.currentYear - 1);
+  });
+
+  it("replays the same epoch and world from the same seed", () => {
+    expect(generateWorldHistory(42)).toEqual(generateWorldHistory(42));
+  });
+
   it("keeps the private polity template colour set synchronized with its client dependent", () => {
     const generatedColors = new Set(
       Array.from({ length: 16 }, (_, seed) => generateWorldHistory(seed).polities).flatMap(

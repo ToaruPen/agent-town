@@ -10,6 +10,7 @@ import {
   type Position,
   type SettlementOrigin,
   type Tile,
+  WORLD_EPOCH_YEAR,
   WORLD_HISTORY_TURN_YEARS,
   WORLD_HISTORY_YEARS,
   WORLD_LANDMARK_FALLBACK_DISTANCE,
@@ -609,12 +610,16 @@ export function generateWorldHistory(seed: number, map?: HistoryMap): WorldHisto
   simulateTurns(rng, polities, relations, events);
   const settlementOrigin = createDeparture(rng, polities, events);
   const landmarks = createLandmarks(rng, map, polities, events);
+  const datedEvents = events.map((event) => ({
+    ...event,
+    year: WORLD_EPOCH_YEAR + event.year,
+  }));
 
   const history = {
-    startYear: -WORLD_HISTORY_YEARS,
-    currentYear: 0,
+    startYear: WORLD_EPOCH_YEAR - WORLD_HISTORY_YEARS,
+    currentYear: WORLD_EPOCH_YEAR,
     polities: polities.map(publicPolity),
-    events,
+    events: datedEvents,
     landmarks,
     settlementOrigin,
   } satisfies Omit<WorldHistory, "worldMap">;
