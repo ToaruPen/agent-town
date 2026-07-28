@@ -572,7 +572,10 @@ account involved. Three things only that surfaced:
 - **Bind to a port with no listener, and confirm the answer is wrangler's.** `8788` was already held by an
   unrelated local service on `127.0.0.1`; wrangler reported "Ready" on `::` and every request still went to
   the other process. A 404 whose `Server:` header names something else is a port collision, not a bad build.
-- All 12 JS chunks and all 25 sprite paths baked into the bundle answer 200 over that server.
+- All 12 JS chunks and all 41 asset paths baked into the bundle answer 200 over that server. Grep the
+  bundle for `/assets/` rather than for one pack — a first pass matched only `tiny-town` and silently
+  skipped `tiny-farm` and `tiny-dungeon`. The count is exhaustive because every path in
+  `render/sprites.ts` is a string literal; a templated filename would not survive this check.
 
 Do not use `vite preview` for this: the IPv6 fix in `vite.config.ts` is on `server.host`, and `preview` reads
 a separate `preview.host` that still defaults to single-address `localhost`.
