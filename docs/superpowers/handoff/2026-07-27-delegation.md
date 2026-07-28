@@ -407,7 +407,9 @@ the inner rule, not the alpha); the hover-only change is to be made deliberately
 - **Rebase.** `89ba3df` is based on `ce37717`; main has since moved to `77798e1` through the player-alpha
   constant, two docs commits and all five of C1-5's. C1-5 touched `index.html`, `main.ts`, `nationHud.ts` and
   `nationHudState.ts` — the same four files the map host mounts through — so this rebase, unlike C1-5's, will
-  conflict, and it is the branch author's to do.
+  conflict. **Unowned.** Both client workers stood down on the owner's stop order, so nobody holds this branch;
+  whoever picks it up rebases it themselves rather than having it rebased under them. The nine-piece table
+  above is the whole brief, and the four unstarted pieces have their decisions recorded.
 - **The constant swap.** `MAP_PLAYER_POLITY_ALPHA = 0.32` is at `client/src/render/colors.ts:47` with five
   references: `src/ui/worldMapView.ts:16` and `:113`, `test/worldMapView.test.ts:10` and `:243`,
   `test/worldMapHost.test.ts:10`, `:160` and `:170`. Swap to `WORLD_MAP_PLAYER_POLITY_ALPHA` from
