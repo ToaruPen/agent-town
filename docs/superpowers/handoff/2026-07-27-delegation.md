@@ -10,6 +10,25 @@ The owner moved the game from a colony sim to a real-time contest between nation
 | Client worker | Claude subagents | `packages/client/` — UI design and its implementation, tests, local commits |
 | Reviewer | Codex | Review of each finished task before the supervisor merges, on either side of the boundary |
 
+## Owner decisions, settled 2026-07-28
+
+Eight questions had been accumulating for the owner. All eight are answered. Each is now a task, not a
+question — the reasoning behind each is in its own section below.
+
+| # | question | decision | what it costs |
+|---|---|---|---|
+| 1 | Autopilot: spec 184 says fill-the-gap, `engine.ts:104` implements always-chancellor | **Spec wins.** The chancellor decides only in a season with no queued order | One server change plus `bootstrap.ts:134`; one test in `nationDashboardViewModel.test.ts` flips. Also closes the silent hold on a new player's first order |
+| 2 | Prosperity ceiling: every living nation pins 4 of 5 components by year 10–40 | **Stop using fixed references.** Normalize by rank within the field, or log-scale | `prosperity.ts` and its tests. Ends the unwinnable "how big should the reference be" tuning loop |
+| 3 | A nation with population 0 still scores 443.6 | **Death must read as death.** A dead nation leaves the ranking; the spread is measured over survivors | Must land *before* #2 can be measured — today's spread number is propped up by a corpse |
+| 4 | `orders.chancellorChoice` carries no `id`, so a chancellor's festival shows 発令者不明 | **Add the id to the protocol.** The server already knows | `shared` + `server`; the client's existing path then attributes it with no change |
+| 5 | The first game year renders as 紀元0年 | **Give the generator a real epoch** | `historyGen.ts:615`; the client is already correct and needs nothing |
+| 6 | `AGENTS.md` bans new assets; `asset-policy.md` allows generated art off the 16 px grid | **The design document wins.** Update `AGENTS.md` | Depends on the conformance gate actually working — see the `assetConformance.test.ts:409` entry in Queued cleanups, which is currently a no-op |
+| 7 | Push | **Done.** `origin/main` is at `a863690` | — |
+| 8 | Cleanup | **Done for worktrees**, 16 removed, 7.7 GB → 531 MB. The two `__diag_*` branches are **still there** — the command was refused by the permission layer, so it is the owner's to run | `git branch -D __diag_merge_test __diag_main_snapshot` |
+
+**Order matters for 2 and 3.** Fixing the ceiling while a dead nation still scores 443 means measuring the
+result against a spread that a corpse is holding up. Land #3 first, then re-measure, then do #2.
+
 ## Package ownership boundary
 
 The owner split the work by package on 2026-07-27: Codex owns the simulation and the wire contracts,
@@ -335,6 +354,43 @@ This is a spec/implementation divergence, not a client question. Spec line 184 �
 `プレイヤーの国も、指示がない季は宰相が決める` — reads as fill-the-gap; `engine.ts` implements
 always-chancellor. **One of the two is wrong and it is the owner's call which.** If the engine changes, one
 test in `nationDashboardViewModel.test.ts` is what flips.
+
+## The prosperity ceiling, measured on today's main
+
+Measured 2026-07-28 against `a863690`, **seed 12345**, chancellor governing, no queued directives, 120 years.
+This is a different seed from the year-20 balance figures above, and it shows a different failure — record
+both, and state the seed whenever quoting either.
+
+```
+year | nation   |  pop  prod wealth stab  cult | total
+  10 | polity-1 | 1.00 0.97 1.00 1.00 0.33 |  925.1
+  10 | polity-2 | 0.30 0.47 1.00 0.00 0.14 |  422.7   population 3050
+  10 | polity-3 | 1.00 1.00 1.00 1.00 0.18 |  917.5
+  10 | polity-4 | 1.00 1.00 0.95 1.00 0.33 |  923.4
+  40 | polity-2 | 0.00 0.32 1.00 0.10 0.14 |  308.6   population 0
+  40 | polity-4 | 1.00 1.00 1.00 1.00 1.00 | 1000.0
+ 120 | polity-1 | 1.00 0.97 1.00 1.00 1.00 |  992.3   unchanged since year 40
+ 120 | polity-2 | 0.00 0.32 1.00 1.00 0.14 |  443.6   population 0, wealth 64124
+ 120 | polity-3 | 1.00 1.00 1.00 1.00 0.72 |  971.6   culture is the only thing moving
+ 120 | polity-4 | 1.00 1.00 1.00 1.00 1.00 | 1000.0   unchanged since year 40
+```
+
+**The measuring stick is too short.** Population, wealth and stability are all at 1.00 by **year 10**. From
+year 40 the only component still moving anywhere is culture, so a 120-year game is decided by one of five
+components carrying 10 % of the weight. The scale of the mismatch: population reads 23 598 against a
+reference of 10 000, wealth 64 124 against 5 000. Raising the references buys years, not a fix.
+
+**And the spread is held up by a corpse.** `polity-2` loses its population entirely by year 40 and still
+scores 443.6, because a nation with nobody in it is perfectly stable (1.00), its wealth is never spent and
+climbs forever, and `production` keeps 0.32 from `materialProduction` alone with zero people to produce it.
+Any spread floor measured across all four nations is therefore measuring a dead one. This is the exact
+failure the supervision skill names — *a floor on a spread can be satisfied by one permanently crippled
+member while the rest are pinned at a ceiling* — showing up in live data.
+
+**A correction to an earlier report.** Figures of "14.43 % spread at year 80, 3 of 4 nations pinned at 1000"
+were given to the owner during this session. They do not reproduce on main: `n1-08-balance-horizon` raises
+`NATION_PROSPERITY_POPULATION_REFERENCE` from 10 000 to 12 000 and branches from a much older main, so that
+measurement described that tree, not this one. Quote the seed and the commit with any balance number.
 
 ## C1-4 landed, and the transport was the interesting part
 
