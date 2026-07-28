@@ -43,9 +43,10 @@ nothing made optional.
   through that proxy — the path the browser actually takes, not a direct socket: `welcome` arrives with four
   nations, the five HUD roots (`nation-clock`, `nation-dashboard`, `nation-ranking`, `nation-select`,
   `world-status`) are present in the served markup, and the client bundles. What renders is the clock, the
-  nation picker, then the dashboard and the prosperity ranking once a nation is chosen. Still unmounted: the
-  world map (C1-6b), the directive panel (C1-4) and the season report (C1-5). `dev-city.html` remains the
-  only page showing the resident scale.
+  nation picker, then the dashboard and the prosperity ranking once a nation is chosen. The directive panel
+  (C1-4) and the season report (C1-5) have since mounted. Still unmounted: the world map, whose branch is
+  green but unmerged — see "Where C1-6b stopped". `dev-city.html` remains the only page showing the resident
+  scale.
 - **A fresh connect carries no player nation, and only `orders` ever names one.** Measured directly:
   `welcome` gives `playerNationId = null` with all four nations at `controller: "agent"`, and
   `wsServer.ts:161`'s `selectNation` returns `[orders]` and never a second `welcome`. So `orders.nationId` is
@@ -403,7 +404,10 @@ the inner rule, not the alpha); the hover-only change is to be made deliberately
 
 **Owed before more work lands, both:**
 
-- **Rebase.** `7d39e36` is not an ancestor of `89ba3df`.
+- **Rebase.** `89ba3df` is based on `ce37717`; main has since moved to `77798e1` through the player-alpha
+  constant, two docs commits and all five of C1-5's. C1-5 touched `index.html`, `main.ts`, `nationHud.ts` and
+  `nationHudState.ts` — the same four files the map host mounts through — so this rebase, unlike C1-5's, will
+  conflict, and it is the branch author's to do.
 - **The constant swap.** `MAP_PLAYER_POLITY_ALPHA = 0.32` is at `client/src/render/colors.ts:47` with five
   references: `src/ui/worldMapView.ts:16` and `:113`, `test/worldMapView.test.ts:10` and `:243`,
   `test/worldMapHost.test.ts:10`, `:160` and `:170`. Swap to `WORLD_MAP_PLAYER_POLITY_ALPHA` from
@@ -424,6 +428,47 @@ the inner rule, not the alpha); the hover-only change is to be made deliberately
   `selectedPolityId` belongs, and it has room for `hoveredPolityId` when the hover change lands.
 - The canvas class is a **required** host option, not a default: the chronicle's CSS keys off
   `world-chronicle__map-canvas`, and a shared default would silently restyle whichever surface was written second.
+
+## C1-5 landed, and it found a hole in the wire format
+
+Merged at **`77798e1`**, five commits, `packages/client` only: 15 files, +1810/−16, two new files
+(`seasonReportViewModel.ts`, `seasonReportPanel.ts`). Verified independently of the author's report, by
+rebasing a *copy* onto main in the supervisor's own tree rather than touching the live worktree: `just check`
+exit 0, `just test` **79 files / 1131 tests**, matching the author's numbers exactly. Only four lines were
+deleted from any test file — three imports and one destructuring return — so no assertion was weakened.
+
+**The finding, which is the owner's and not the client's.** `orders.chancellorChoice` (`protocol.ts:33`) is
+`{ kind, targetCityId } | null` — it carries **no `id`**. `holdFestival` is the one one-season directive:
+`activateBoundaryDirectives` creates and resolves it inside the same boundary, so a chancellor-picked festival
+is never observed sitting in `activeDirectives` and the client has no id to log it against. It therefore
+renders as 発令者不明 rather than 宰相の決定, even though the server knew who chose it. The report computes
+nothing the server did not send, so this cannot be fixed in `packages/client/`. Degrading gracefully is
+covered ("still renders a completed directive whose kind was never observed, rather than throwing"). Verified
+by reading `protocol.ts` directly.
+
+**Where the plan was silent, the design decided,** and both choices are worth keeping in mind:
+
+- One controller and one view model serve both `#nation-strip` (always-on, §4.1) and `#season-report`
+  (on-demand, §4.5), rather than building the diff-with-reasons view twice.
+- **Famine's auto-open is keyed on `(year, season)`, not object identity.** A `wsClient` snapshot that is a
+  fresh-but-identical object on an ordinary tick must not reopen a panel the player just closed. Regression
+  test: "does not reopen a closed panel on a later repaint of the same famine season".
+- `HUD_ALERT_COLOR` could not be reused — it is a module-private Pixi hex in the frozen `render/hudLayer.ts`
+  — so the strip uses `--world-ember` from the existing CSS palette. Confirmed: the constant is unexported.
+- §3.6's reconnect rule is now honoured in full. `ownDirectiveIds` resets on `applyWelcome` while
+  `directiveLog` survives, and the announcement is the spec's own string, 再接続しました。発令の履歴は失われました。
+  Verified against §3.6, which names both the drop and the 宰相 misattribution as the accepted consequence.
+
+**Two corrections to the author's own report,** neither affecting the merge:
+
+- It described the surviving `lint/complexity/useOptionalChain` warning on `seasonReportViewModel.ts:296` as
+  "pre-existing and present before this ticket". It cannot be: `git log --diff-filter=A` puts that file's
+  creation on this branch. The warning is **introduced here** and deliberately left, which is a defensible
+  call — Biome's fix is unsafe-only because `report?.entries.some(…)` is `boolean | undefined` where the code
+  needs `boolean` — but it is the branch's warning, and `just check` now carries one where main carried none.
+  The clean form is `report?.entries.some(…) === true`.
+- It filed the missing return-focus-to-opener (hud.md §3.5) as consistency with `directivePanel.ts`'s
+  precedent. The reasoning is sound but the state is **two panels both owe it**, not "settled by precedent".
 
 ## `world.playerNationId` looks authoritative and is not
 
@@ -452,6 +497,8 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Deepen `decodeServerMessage`'s validation to match its contract | `shared/src/protocol.ts` | It accepts `nations: [null]`, an all-`null` world map, and a history missing required fields. Needs shape-level work and a decision about how strict the boundary should be, so it is a task rather than a chore |
 | Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
 | Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
+| Return focus to the opener when a panel closes | `client/src/ui/directivePanel.ts`, `seasonReportPanel.ts` | hud.md §3.5 names the behaviour and neither panel does it. C1-5 read the existing gap as precedent; recorded here so it is one item against both panels rather than a settled question. **Unowned** |
+| Clear the one lint warning `just check` now carries | `client/src/ui/seasonReportViewModel.ts:296` | `useOptionalChain`, introduced by C1-5 and left because Biome's fix changes the type to `boolean \| undefined`. `report?.entries.some(…) === true` satisfies both. **Unowned** |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
 | Bring the repo root under `tsc` | root `vitest.config.ts`, `test/` | `pnpm-workspace.yaml` lists only `packages/*`, so `pnpm -r exec tsc` never reaches the root |
 | Make server's Node types a direct dependency | `server/package.json` | Resolves `node:*` only transitively via `@types/ws`; drop or bump that and server tests silently lose Node types |
