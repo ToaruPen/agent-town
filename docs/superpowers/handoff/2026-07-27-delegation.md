@@ -29,6 +29,26 @@ question — the reasoning behind each is in its own section below.
 **Order matters for 2 and 3.** Fixing the ceiling while a dead nation still scores 443 means measuring the
 result against a spread that a corpse is holding up. Land #3 first, then re-measure, then do #2.
 
+### In flight, dispatched 2026-07-29
+
+A decision recorded in this table is not an assignment. All eight sat here for a day as settled-but-unowned
+because the row was written and no worker was given the work — write the dispatch down at the same time.
+
+| branch | decision | why it is alone in its own worktree |
+|---|---|---|
+| `n1-10-mortality` | #3 dead nation | `prosperity.ts` / `season.ts` / ranking |
+| `n1-11-chancellor-id` | #4 `chancellorChoice` id | `protocol.ts` / `engine.ts` — the only task licensed to change the wire contract |
+| `n1-12-epoch` | #5 real epoch | `historyGen.ts` |
+
+Held back deliberately, not forgotten:
+
+- **#2 (ceiling)** waits on #3 *and on a re-measurement between them*. Dispatching both together would
+  measure the new normalization against the same corpse-propped spread the decision exists to remove.
+- **#1 (autopilot)** collides with #4 in `engine.ts`, and it is the one task that crosses the package
+  boundary: the server change flips a test in `nationDashboardViewModel.test.ts`, which a simulation worker
+  may not edit. Each dispatched task is told to stop and report on a failing client test rather than reach
+  across, so #1 needs a client worker on the same branch afterwards — sequentially, never concurrently.
+
 ## Package ownership boundary
 
 The owner split the work by package on 2026-07-27: Codex owns the simulation and the wire contracts,
