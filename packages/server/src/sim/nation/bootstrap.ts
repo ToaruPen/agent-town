@@ -151,17 +151,21 @@ function bootstrapNation(
     },
     lastReport: null,
   };
-  return { ...nation, prosperity: computeProsperity(nation) };
+  return nation;
 }
 
 export function bootstrapNations(
   history: WorldHistory,
   playerNationId: NationId | null,
 ): NationState[] {
-  return history.polities.flatMap((polity) => {
+  const nations = history.polities.flatMap((polity) => {
     const ownedCells = history.worldMap.cells.filter(({ polityId }) => polityId === polity.id);
     if (ownedCells.length === 0) return [];
     const nation = bootstrapNation(history, polity, playerNationId, ownedCells);
     return nation.population > 0 ? [nation] : [];
   });
+  return nations.map((nation) => ({
+    ...nation,
+    prosperity: computeProsperity(nation, nations),
+  }));
 }

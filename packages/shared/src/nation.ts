@@ -84,12 +84,13 @@ export interface SeasonReport {
 }
 
 export interface ProsperityScore {
+  /** Each component is a 0..1 log ratio against the living field maximum. */
   population: number;
   production: number;
   wealth: number;
   stability: number;
   culture: number;
-  /** Weighted total, 0..1000. */
+  /** Weighted total, 0..1000; 1000 means matching every positive field-component maximum. */
   total: number;
 }
 

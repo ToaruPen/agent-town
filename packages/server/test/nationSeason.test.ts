@@ -231,9 +231,17 @@ describe("resolveSeason", () => {
     expect([...reverse.reports]).toEqual([...forward.reports]);
   });
 
-  it("does not make one nation's prosperity depend on whether a rival is present", () => {
+  it("normalizes prosperity against the other living nations in the field", () => {
     const a = nationFixture("a");
-    const b = nationFixture("b");
+    const b = nationFixture("b", {
+      stocks: { food: 1_000, materials: 1_000, wealth: 1_000 },
+      cities: [{ cityId: "b-capital", population: 1_000, developmentLevel: 0 }],
+      population: 1_000,
+      stability: 100,
+      culture: 100,
+      foodProduction: 100,
+      materialProduction: 50,
+    });
     const polities = [polityFixture("a"), polityFixture("b")];
     const worldMap = worldMapFixture();
 
@@ -242,7 +250,9 @@ describe("resolveSeason", () => {
     );
     const alone = resolveSeason([a], polities, worldMap, 300).nations[0];
 
-    expect(alone?.prosperity).toEqual(withRival?.prosperity);
+    expect(alone?.prosperity.total).toBe(1_000);
+    expect(withRival?.prosperity.population).toBeLessThan(1);
+    expect(withRival?.prosperity.total).toBeLessThan(alone?.prosperity.total ?? 0);
   });
 
   it("removes a nation from live state when famine reduces its population to zero", () => {
@@ -265,6 +275,30 @@ describe("resolveSeason", () => {
       reason: "famine",
       directiveId: null,
     });
+  });
+
+  it("excludes a nation that dies this season from the prosperity field", () => {
+    const survivor = nationFixture("a");
+    const dying = nationFixture("b", {
+      stocks: { food: 0, materials: 10_000, wealth: 10_000 },
+      cities: [{ cityId: "b-capital", population: 1, developmentLevel: 0 }],
+      population: 1,
+      stability: 100,
+      culture: 10_000,
+      foodProduction: 0,
+      materialProduction: 10_000,
+    });
+
+    const result = resolveSeason(
+      [survivor, dying],
+      [polityFixture("a"), polityFixture("b")],
+      worldMapFixture(),
+      300,
+    );
+
+    expect(result.nations).toHaveLength(1);
+    expect(result.nations[0]?.id).toBe("a");
+    expect(result.nations[0]?.prosperity.total).toBe(1_000);
   });
 
   it("applies famine losses and halves population loss while encourageStores remains active", () => {

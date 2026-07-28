@@ -311,7 +311,6 @@ function resolveNation(
   applyConsumption(context);
   applyPopulation(context);
   applyStabilityAndCulture(context, polity, worldMap);
-  context.nation.prosperity = computeProsperity(context.nation);
   const report: SeasonReport = {
     year: nationYearOfTick(tick),
     season: nationSeasonOfTick(tick),
@@ -331,7 +330,7 @@ export function resolveSeason(
   const polityById = new Map(polities.map((polity) => [polity.id, polity]));
   const sorted = nations.toSorted((left, right) => left.id.localeCompare(right.id));
   const reports = new Map<NationId, SeasonReport>();
-  const resolved = sorted
+  const living = sorted
     .map((nation) => {
       const polity = polityById.get(nation.id);
       if (polity === undefined) throw new Error(`missing polity for nation ${nation.id}`);
@@ -340,5 +339,9 @@ export function resolveSeason(
       return result.nation;
     })
     .filter(({ population }) => population > 0);
+  const resolved = living.map((nation) => ({
+    ...nation,
+    prosperity: computeProsperity(nation, living),
+  }));
   return { nations: resolved, reports };
 }

@@ -481,17 +481,7 @@ export const NATION_PROSPERITY_WEALTH_WEIGHT = 0.2;
 export const NATION_PROSPERITY_STABILITY_WEIGHT = 0.15;
 /** Culture contribution to the prosperity total. */
 export const NATION_PROSPERITY_CULTURE_WEIGHT = 0.1;
-/** Population at which the prosperity population component reaches one. */
-export const NATION_PROSPERITY_POPULATION_REFERENCE = 10_000;
-/** Combined food and material capacity at which the production component reaches one. */
-export const NATION_PROSPERITY_PRODUCTION_REFERENCE = 700;
-/** Stored wealth at which the prosperity wealth component reaches one. */
-export const NATION_PROSPERITY_WEALTH_REFERENCE = 5_000;
-/** Stability at which the prosperity stability component reaches one. */
-export const NATION_PROSPERITY_STABILITY_REFERENCE = 100;
-/** Culture at which the prosperity culture component reaches one. */
-export const NATION_PROSPERITY_CULTURE_REFERENCE = 500;
-/** Maximum weighted prosperity total exposed to clients. */
+/** Maximum weighted total; reached by matching every positive component maximum in the field. */
 export const NATION_PROSPERITY_SCORE_MAX = 1_000;
 /** Neutral stability before the live nation's population history is applied. */
 export const NATION_INITIAL_STABILITY_BASE = 40;

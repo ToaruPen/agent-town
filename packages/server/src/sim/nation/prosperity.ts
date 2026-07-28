@@ -1,35 +1,61 @@
 import {
   NATION_FOOD_PRODUCTION_PER_CAPITA,
-  NATION_PROSPERITY_CULTURE_REFERENCE,
   NATION_PROSPERITY_CULTURE_WEIGHT,
-  NATION_PROSPERITY_POPULATION_REFERENCE,
   NATION_PROSPERITY_POPULATION_WEIGHT,
-  NATION_PROSPERITY_PRODUCTION_REFERENCE,
   NATION_PROSPERITY_PRODUCTION_WEIGHT,
   NATION_PROSPERITY_SCORE_MAX,
-  NATION_PROSPERITY_STABILITY_REFERENCE,
   NATION_PROSPERITY_STABILITY_WEIGHT,
-  NATION_PROSPERITY_WEALTH_REFERENCE,
   NATION_PROSPERITY_WEALTH_WEIGHT,
   type NationState,
   type ProsperityScore,
 } from "@agent-town/shared";
 
-function normalized(value: number, reference: number): number {
-  return Math.max(0, Math.min(1, value / reference));
+interface ProsperityComponents {
+  population: number;
+  production: number;
+  wealth: number;
+  stability: number;
+  culture: number;
 }
 
-export function computeProsperity(nation: NationState): ProsperityScore {
-  const population = normalized(nation.population, NATION_PROSPERITY_POPULATION_REFERENCE);
+function rawComponents(nation: NationState): ProsperityComponents {
   const seasonalFoodProduction =
     nation.foodProduction * nation.population * NATION_FOOD_PRODUCTION_PER_CAPITA;
-  const production = normalized(
-    seasonalFoodProduction + nation.materialProduction,
-    NATION_PROSPERITY_PRODUCTION_REFERENCE,
-  );
-  const wealth = normalized(nation.stocks.wealth, NATION_PROSPERITY_WEALTH_REFERENCE);
-  const stability = normalized(nation.stability, NATION_PROSPERITY_STABILITY_REFERENCE);
-  const culture = normalized(nation.culture, NATION_PROSPERITY_CULTURE_REFERENCE);
+  return {
+    population: Math.max(0, nation.population),
+    production: Math.max(0, seasonalFoodProduction + nation.materialProduction),
+    wealth: Math.max(0, nation.stocks.wealth),
+    stability: Math.max(0, nation.stability),
+    culture: Math.max(0, nation.culture),
+  };
+}
+
+function maximumComponents(field: readonly NationState[]): ProsperityComponents {
+  const components = field.map(rawComponents);
+  return {
+    population: Math.max(...components.map(({ population }) => population)),
+    production: Math.max(...components.map(({ production }) => production)),
+    wealth: Math.max(...components.map(({ wealth }) => wealth)),
+    stability: Math.max(...components.map(({ stability }) => stability)),
+    culture: Math.max(...components.map(({ culture }) => culture)),
+  };
+}
+
+function normalizedOnLogScale(value: number, maximum: number): number {
+  return maximum <= 0 ? 0 : Math.log1p(value) / Math.log1p(maximum);
+}
+
+export function computeProsperity(
+  nation: NationState,
+  livingField: readonly NationState[],
+): ProsperityScore {
+  const raw = rawComponents(nation);
+  const maximum = maximumComponents([nation, ...livingField]);
+  const population = normalizedOnLogScale(raw.population, maximum.population);
+  const production = normalizedOnLogScale(raw.production, maximum.production);
+  const wealth = normalizedOnLogScale(raw.wealth, maximum.wealth);
+  const stability = normalizedOnLogScale(raw.stability, maximum.stability);
+  const culture = normalizedOnLogScale(raw.culture, maximum.culture);
   const weightedTotal =
     (population * NATION_PROSPERITY_POPULATION_WEIGHT +
       production * NATION_PROSPERITY_PRODUCTION_WEIGHT +
