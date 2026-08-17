@@ -293,10 +293,28 @@ describe("the order desk's controls", () => {
 
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     expect(toggle.textContent).toBe("自動運転 ●ON");
+    expect(toggle.getAttribute("aria-label")).toBe(
+      "自動運転を切る（A）。今は実行可能なあなたの発令があればそれが優先され、なければ宰相が決めます",
+    );
 
     toggle.click();
 
     expect(sent).toEqual([{ type: "setAutoPilot", enabled: false }]);
+  });
+
+  /**
+   * The OFF-state aria-label, pinned directly rather than left to the ON test above: nothing else in this
+   * file exercises the toggle with autopilot off, so a regression there would otherwise pass unnoticed.
+   */
+  it("names what turning autopilot on would do in the OFF-state aria-label", () => {
+    const { roots } = openDesk(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const toggle = roots.clock.querySelector(".nation-clock__autopilot");
+    if (!(toggle instanceof HTMLButtonElement)) throw new Error("no autopilot control");
+
+    expect(toggle.textContent).toBe("自動運転 ○OFF");
+    expect(toggle.getAttribute("aria-label")).toBe(
+      "自動運転を入れる（A）。今はあなたの発令だけが実行されます",
+    );
   });
 
   /**
@@ -584,10 +602,11 @@ describe("the season report", () => {
   });
 
   /**
-   * `heldOrderNote` is always null now that a queued order commits in either autopilot mode
+   * `heldOrderNote` is always null: a legal queued order commits in either autopilot mode
    * (`sim/nation/engine.ts` `selectDirective` runs `queuedSelection` before it looks at `autoPilot`,
-   * pinned by the five state tests atop `nationEngine.test.ts`). Checked in the mounted panel, not just
-   * the view model, in the same otherwise-quiet-season fixture the old held-order state used.
+   * pinned by the five state tests atop `nationEngine.test.ts`), and an illegal one is held but never
+   * reported — the client judges no directive's legality. Checked in the mounted panel, not just the view
+   * model, in the same otherwise-quiet-season fixture the old held-order state used.
    */
   it("renders no held-order element even with autopilot on and an order queued", () => {
     const mounted = mountAgainstIndexHtml();

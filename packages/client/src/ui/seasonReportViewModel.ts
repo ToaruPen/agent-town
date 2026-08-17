@@ -264,9 +264,10 @@ function completedDirectiveRow(
 
 /**
  * `sim/nation/engine.ts:104` `selectDirective` runs `queuedSelection` before it ever looks at
- * `autoPilot`, pinned by the five state tests atop `nationEngine.test.ts`: a queued order commits in
- * either autopilot mode, and the chancellor only fills a season with nothing queued. There is no state
- * left where a queued order is held rather than obeyed, so this never has one to report.
+ * `autoPilot`, pinned by the five state tests atop `nationEngine.test.ts`: a legal queued order commits
+ * in either autopilot mode, and the chancellor only fills a season with no legal order queued. An illegal
+ * queued order is still held rather than obeyed (`queuedSelection` does not consume it), but the client
+ * judges no directive's legality, so it never attempts to report that state — this always returns null.
  */
 function heldOrderNote(_orders: NationOrders | null): string | null {
   return null;

@@ -33,8 +33,10 @@ export interface NationActiveDirectiveRow {
 }
 
 /**
- * `chancellor` is reached only when nothing is queued: a queued order commits in either autopilot mode
- * and reports as `queued`, so `chancellor` means the chancellor is genuinely filling an empty season.
+ * `chancellor` is reached when nothing is queued, or — invisibly to the client — when what is queued
+ * turns out illegal (`selectDirective` does not consume it, so it never reaches `activeDirectives`). The
+ * client judges no directive's legality, so a present `queued` always reports as `queued`: this type
+ * describes the legal-order path, which is the only one the client can see.
  */
 export type CommitSlotKind = "queued" | "chancellor" | "idle" | "unknown";
 
@@ -46,7 +48,7 @@ export interface NationCommitSlotViewModel {
   detail: string | null;
   /** True only for the warning state: no autopilot and nothing queued, so the season is wasted. */
   emphasis: boolean;
-  /** Non-null whenever an order is queued — a queued order stays cancellable up to the boundary that commits it. */
+  /** Non-null whenever an order is queued — it stays cancellable up to the boundary that would commit it. */
   cancelDirectiveId: DirectiveId | null;
 }
 
@@ -182,12 +184,14 @@ function chancellorSlot(orders: NationOrders): NationCommitSlotViewModel {
 }
 
 /**
- * What commits at the next boundary — hud.md §3.2's table.
+ * What commits at the next boundary — hud.md §3.2's table, for the legal-order case.
  *
  * The branch order is the *server's*, read off `sim/nation/engine.ts` `selectDirective`: `queuedSelection`
  * runs before the function ever looks at `autoPilot`, and only falls through to the chancellor when there
- * is nothing queued or the queued order was rejected. A queued order therefore commits in either autopilot
- * mode, and the chancellor's branch is reached only for a genuinely empty season.
+ * is nothing queued or the queued order is illegal. A legal queued order therefore commits in either
+ * autopilot mode; the chancellor's branch is reached whenever there is no legal order to run — an empty
+ * season or an illegal queued one, which the client cannot tell apart and does not try to (it judges no
+ * directive's legality, so a present `queued` is always read as the thing that will commit).
  */
 function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
   if (orders === null) return unknownSlot();

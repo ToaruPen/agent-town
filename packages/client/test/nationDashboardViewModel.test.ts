@@ -198,11 +198,12 @@ describe("buildNationDashboardViewModel", () => {
 });
 
 /**
- * The four states of 次の決算, matching hud.md §3.2's table now that the server implements it.
+ * The four states of 次の決算, matching hud.md §3.2's table now that the server implements it, for the
+ * legal-order case — the only one the client can see.
  *
  * `sim/nation/engine.ts` `selectDirective` runs `queuedSelection` before it ever looks at `autoPilot`,
- * pinned by the five state tests atop `nationEngine.test.ts`: a queued order commits in either autopilot
- * mode, and the chancellor only fills a season with nothing queued.
+ * pinned by the five state tests atop `nationEngine.test.ts`: a legal queued order commits in either
+ * autopilot mode, and the chancellor only fills a season with no legal order queued.
  */
 describe("the commit slot", () => {
   const slotFor = (orders: NationOrders | null) =>
@@ -218,8 +219,8 @@ describe("the commit slot", () => {
     expect(slot.detail).toBeNull();
   });
 
-  /** A queued order wins in either autopilot mode — the state a fresh player is dropped into. */
-  it("says the player's order commits even while autopilot is on, since a queued order wins", () => {
+  /** A legal queued order wins in either autopilot mode — the state a fresh player is dropped into. */
+  it("says the player's order commits even while autopilot is on, since a legal queued order wins", () => {
     const slot = slotFor(ordersFixture({ autoPilot: true, queued }));
 
     expect(slot.kind).toBe("queued");

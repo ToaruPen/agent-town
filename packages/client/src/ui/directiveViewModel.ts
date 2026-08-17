@@ -228,7 +228,7 @@ function buildCard(
 }
 
 const AUTOPILOT_ON_DESCRIPTION =
-  "自動運転が入っていても、あなたの発令があればそのまま実行されます。発令がない季だけ、宰相が代わりに決めます。";
+  "自動運転が入っていても、実行可能なあなたの発令があればそれが優先されます。発令がない季だけ、宰相が代わりに決めます。";
 const AUTOPILOT_OFF_DESCRIPTION =
   "あなたの発令がそのまま実行されます。発令がない季は何も実行されません。";
 const AUTOPILOT_UNKNOWN_DESCRIPTION =
@@ -236,7 +236,7 @@ const AUTOPILOT_UNKNOWN_DESCRIPTION =
 
 function autoPilotLabel(autoPilot: boolean | null): string {
   if (autoPilot === null) return "自動運転 同期中";
-  return autoPilot ? "自動運転 ON（宰相が決めます）" : "自動運転 OFF（あなたが決めます）";
+  return autoPilot ? "自動運転 ON（実行可能な発令を優先）" : "自動運転 OFF（あなたが決めます）";
 }
 
 function autoPilotDescription(autoPilot: boolean | null): string {
@@ -265,8 +265,8 @@ export function ordersAnnouncement(
   if (previous === null) return null;
   if (previous.autoPilot !== next.autoPilot) {
     return next.autoPilot
-      ? "自動運転を入れました。これから毎季、宰相が決めます。"
-      : "自動運転を切りました。あなたの発令が実行されます。";
+      ? "自動運転を入れました。実行可能な発令があればそれを優先し、なければ宰相が決めます。"
+      : "自動運転を切りました。発令があればそれが実行され、なければ何も実行されません。";
   }
   const before = previous.queued;
   const after = next.queued;

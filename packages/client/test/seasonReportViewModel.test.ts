@@ -279,11 +279,12 @@ describe("buildSeasonReportViewModel", () => {
   /**
    * The truth table `sim/nation/engine.ts:104` `selectDirective` implements, pinned by the five state
    * tests atop `nationEngine.test.ts`: `queuedSelection` runs before the function ever looks at
-   * `autoPilot`, so a queued order commits in either autopilot mode and the chancellor only fills a
-   * season with nothing queued. There is no state left where a queued order is held rather than obeyed.
+   * `autoPilot`, so a legal queued order commits in either autopilot mode and the chancellor only fills a
+   * season with no legal order queued. An illegal queued order is still held rather than obeyed, but the
+   * client judges no directive's legality, so it never reports that state either.
    */
-  describe("the held order — no current state produces one", () => {
-    it("has no held-order note when autopilot is on and an order is queued, since the order commits", () => {
+  describe("the held order — always null, since the client cannot judge legality", () => {
+    it("has no held-order note when autopilot is on and an order is queued, since a legal order commits", () => {
       const report = reportFixture({ entries: [], completedDirectiveIds: [] });
       const orders = ordersFixture({
         autoPilot: true,

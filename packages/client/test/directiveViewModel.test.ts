@@ -196,15 +196,17 @@ describe("buildDirectiveListViewModel", () => {
 describe("the autopilot mode text", () => {
   /**
    * The label says which state the nation is in and the description says what that costs, because
-   * "自動運転 ON" alone does not tell a player that their own order still takes precedence over the
-   * chancellor.
+   * "自動運転 ON" alone does not tell a player that their own legal order still takes precedence over
+   * the chancellor. "Legal" because the client cannot judge a directive's legality (`engine.ts:64` fails
+   * `queuedSelection` for an order matching no legal option) — the text names a selection order, not an
+   * unconditional promise.
    */
   it("says the player's own order still wins while autopilot is on", () => {
     const view = build(ordersFixture({ autoPilot: true }));
 
     expect(view.autoPilot).toBe(true);
-    expect(view.autoPilotLabel).toBe("自動運転 ON（宰相が決めます）");
-    expect(view.autoPilotDescription).toContain("発令があればそのまま実行されます");
+    expect(view.autoPilotLabel).toBe("自動運転 ON（実行可能な発令を優先）");
+    expect(view.autoPilotDescription).toContain("実行可能なあなたの発令があればそれが優先されます");
     expect(view.autoPilotDescription).toContain("発令がない季だけ");
   });
 
@@ -476,10 +478,10 @@ describe("ordersAnnouncement", () => {
     const off = ordersFixture({ autoPilot: false });
 
     expect(ordersAnnouncement(off, on, [])).toBe(
-      "自動運転を入れました。これから毎季、宰相が決めます。",
+      "自動運転を入れました。実行可能な発令があればそれを優先し、なければ宰相が決めます。",
     );
     expect(ordersAnnouncement(on, off, [])).toBe(
-      "自動運転を切りました。あなたの発令が実行されます。",
+      "自動運転を切りました。発令があればそれが実行され、なければ何も実行されません。",
     );
   });
 });
