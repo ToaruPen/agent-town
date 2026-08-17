@@ -105,10 +105,12 @@ function selectDirective(
   tick: number,
 ): DirectiveSelection | null {
   const options = listDirectiveOptions(nation, polity, history.worldMap);
-  if (nation.controller === "agent" || nation.autoPilot) {
+  if (nation.controller === "agent") {
     return chancellorSelection(nation, polity, options, tick);
   }
-  return queuedSelection(nation, options, queuedDirectives);
+  const queued = queuedSelection(nation, options, queuedDirectives);
+  if (queued !== null) return queued;
+  return nation.autoPilot ? chancellorSelection(nation, polity, options, tick) : null;
 }
 
 function activateBoundaryDirectives(

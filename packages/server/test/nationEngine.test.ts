@@ -137,6 +137,30 @@ describe("advanceNationEngine", () => {
     );
   });
 
+  it("commits and consumes a queued player directive while autopilot is enabled", () => {
+    const history = historyFixture();
+    const state: NationEngineState = {
+      tick: 299,
+      nations: [nationFixture({ autoPilot: true })],
+    };
+    const queued: QueuedDirective = {
+      id: "player-directive",
+      nationId: "realm",
+      kind: "developTimber",
+      targetCityId: null,
+      issuedAtTick: 250,
+    };
+
+    const result = advanceNationEngine(state, history, [queued]);
+
+    expect(result.state.nations[0]?.activeDirectives[0]).toMatchObject({
+      id: "player-directive",
+      kind: "developTimber",
+      issuedAtTick: 250,
+    });
+    expect(result.consumedQueuedDirectiveIds).toEqual(["player-directive"]);
+  });
+
   it("activates the chancellor choice for an agent nation at a boundary", () => {
     const history = historyFixture();
     const state: NationEngineState = {
