@@ -35,13 +35,9 @@ export const MAP_ACCENT_COLOR = 0xfff176;
 /** The world map's city fill before nations owned a banner colour; now only the unclaimed fallback. */
 export const MAP_CITY_FILL_COLOR = 0xf1e8ce;
 /**
- * The player's territory fill, one step above `WORLD_MAP_POLITY_ALPHA = 0.28` (visual.md §2.6). Measured
- * through the full stack it moves nation separation from ΔE 8.4 to 10.1 while terrain falls from 9.8 to
- * 9.0. That is the ceiling: 0.36 buys 1.1 more separation for 1.1 of terrain and lands terrain at 7.9,
- * where hills stop separating from forest under a blue banner.
- *
- * Deliberately here rather than beside its sibling in `packages/shared/src/constants.ts`, where §2.2.1
- * implies it belongs: it decides how this client paints, not how the world behaves, and no server or
- * protocol reads it. One import moves it if that call goes the other way.
+ * The player's frontier gets this as a second line just inside their own banner — visual.md §2.6 calls
+ * it "the key move": a double line the eye finds pre-attentively while scanning, which no rival's
+ * border ever becomes. Drawn regardless of casing, so it is still what separates the player's own edge
+ * at a nation-nation frontier, where there is no casing at all.
  */
-export const MAP_PLAYER_POLITY_ALPHA = 0.32;
+export const MAP_PLAYER_INNER_RULE_COLOR = 0xfff8dc;

@@ -1,7 +1,7 @@
 import { WORLD_MAP_CELL_SIZE_PX } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { MAP_CASING_COLOR } from "../src/render/colors.js";
+import { MAP_CASING_COLOR, MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
 import {
   type BorderPaintContext,
   drawTerritoryBorders,
@@ -46,8 +46,9 @@ function edge(
   side: WorldMapTerritoryEdgeViewModel["side"],
   hasCasing: boolean,
   pos = { x: 1, y: 1 },
+  isPlayer = false,
 ): WorldMapTerritoryEdgeViewModel {
-  return { pos, side, polityId: "polity-1", hasCasing, bannerColor: BANNER };
+  return { pos, side, polityId: "polity-1", hasCasing, bannerColor: BANNER, isPlayer };
 }
 
 function casings(painted: readonly PaintedRect[]): PaintedRect[] {
@@ -56,6 +57,10 @@ function casings(painted: readonly PaintedRect[]): PaintedRect[] {
 
 function banners(painted: readonly PaintedRect[]): PaintedRect[] {
   return painted.filter(({ fillStyle }) => fillStyle === BANNER);
+}
+
+function innerRules(painted: readonly PaintedRect[]): PaintedRect[] {
+  return painted.filter(({ fillStyle }) => fillStyle === hexColor(MAP_PLAYER_INNER_RULE_COLOR));
 }
 
 describe("drawTerritoryBorders", () => {
@@ -145,5 +150,48 @@ describe("drawTerritoryBorders", () => {
 
     expect(casings(painted).map(({ alpha }) => alpha)).toEqual([0.55]);
     expect(banners(painted).map(({ alpha }) => alpha)).toEqual([1]);
+  });
+
+  /**
+   * The inner rule (visual.md §2.6) is what makes the player's frontier a *double* line — the "key
+   * move" that the eye finds pre-attentively without an arms race of brightness. A rival's edge never
+   * gets one, no matter which side it faces.
+   */
+  it("draws a warm inner rule just inside the player's own banner, and none for a rival", () => {
+    const { context, painted } = recorder();
+
+    drawTerritoryBorders(context, [
+      edge("top", true, undefined, true),
+      edge("top", true, { x: 3, y: 1 }),
+    ]);
+
+    expect(innerRules(painted)).toHaveLength(1);
+    expect(innerRules(painted)[0]?.rect).toEqual([CELL, CELL + 1, CELL, 1]);
+    expect(innerRules(painted)[0]?.alpha).toBe(0.85);
+  });
+
+  /** Load-bearing: there is no casing at a nation-nation frontier, so the inner rule is what still
+   *  separates the player's own border there — it must not be conditioned on `hasCasing`. */
+  it("draws the inner rule at a frontier too, where there is no casing at all", () => {
+    const { context, painted } = recorder();
+
+    drawTerritoryBorders(context, [edge("left", false, undefined, true)]);
+
+    expect(casings(painted)).toEqual([]);
+    expect(innerRules(painted)).toHaveLength(1);
+  });
+
+  it("keeps the inner rule inside the banner rather than overlapping it", () => {
+    const { context, painted } = recorder();
+
+    drawTerritoryBorders(context, [
+      edge("bottom", true, undefined, true),
+      edge("right", true, undefined, true),
+    ]);
+
+    expect(innerRules(painted).map(({ rect }) => rect)).toEqual([
+      [CELL, CELL * 2 - 2, CELL, 1],
+      [CELL * 2 - 2, CELL, 1, CELL],
+    ]);
   });
 });

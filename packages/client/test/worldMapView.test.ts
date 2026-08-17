@@ -1,15 +1,12 @@
 import {
+  WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
   WORLD_MAP_SELECTED_POLITY_ALPHA,
   type WorldHistory,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import {
-  MAP_CITY_FILL_COLOR,
-  MAP_PLAYER_POLITY_ALPHA,
-  NATION_BANNER_RING,
-} from "../src/render/colors.js";
+import { MAP_CITY_FILL_COLOR, NATION_BANNER_RING } from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
 import {
   buildWorldMapViewModel,
@@ -240,7 +237,7 @@ describe("buildWorldMapViewModel", () => {
     expect(rivals.length).toBeGreaterThan(0);
     expect(new Set(player.map(({ polityId }) => polityId))).toEqual(new Set(["polity-2"]));
     expect(new Set(player.map(({ polityAlpha }) => polityAlpha))).toEqual(
-      new Set([MAP_PLAYER_POLITY_ALPHA]),
+      new Set([WORLD_MAP_PLAYER_POLITY_ALPHA]),
     );
     expect(new Set(rivals.map(({ polityAlpha }) => polityAlpha))).toEqual(
       new Set([WORLD_MAP_POLITY_ALPHA]),
@@ -368,6 +365,27 @@ describe("world map territory outline", () => {
       expect(edge.bannerColor).toBe(banners.get(edge.polityId));
     }
   });
+
+  /**
+   * The inner rule (visual.md §2.6) needs to know which edges are the player's own, independent of
+   * `hasCasing` — it draws at a nation-nation frontier too, where there is never any casing.
+   */
+  it("marks a player's own edges and no rival's, regardless of casing", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: "polity-1" });
+
+    const owned = view.territoryEdges.filter(({ isPlayer }) => isPlayer);
+    const rivals = view.territoryEdges.filter(({ isPlayer }) => !isPlayer);
+    expect(owned.length).toBeGreaterThan(0);
+    expect(rivals.length).toBeGreaterThan(0);
+    expect(owned.every(({ polityId }) => polityId === "polity-1")).toBe(true);
+    expect(rivals.every(({ polityId }) => polityId !== "polity-1")).toBe(true);
+  });
+
+  it("marks no edge as the player's when nobody holds one", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+
+    expect(view.territoryEdges.some(({ isPlayer }) => isPlayer)).toBe(false);
+  });
 });
 
 describe("world map city tiers", () => {
@@ -413,6 +431,20 @@ describe("world map city tiers", () => {
     ]);
 
     expect(known.cities.map(({ glyph }) => glyph.shape)).toEqual(["diamond", "diamond"]);
+  });
+
+  /** The cross-hatch's input (visual.md §2.6): only the player's own cities carry it. */
+  it("marks a city as the player's own and no one else's", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: "polity-1" });
+
+    expect(view.cities.find(({ id }) => id === "city-polity-1-1")?.isPlayer).toBe(true);
+    expect(view.cities.find(({ id }) => id === "city-polity-2-1")?.isPlayer).toBe(false);
+  });
+
+  it("marks no city as the player's when nobody holds one", () => {
+    const view = buildWorldMapViewModel(historyFixture(), null);
+
+    expect(view.cities.some(({ isPlayer }) => isPlayer)).toBe(false);
   });
 });
 

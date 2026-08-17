@@ -2,13 +2,15 @@
 
 import {
   type NationCityState,
+  WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
   type WorldHistory,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
 
-import { MAP_PLAYER_POLITY_ALPHA } from "../src/render/colors.js";
+import { MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
 import { createWorldMapHost, type WorldMapSnapshot } from "../src/ui/worldMapHost.js";
+import { hexColor } from "../src/ui/worldMapView.js";
 import { historyFixture, polityFixture } from "./nationFixture.js";
 
 /**
@@ -19,10 +21,12 @@ interface PaintLog {
   fills: { style: string; alpha: number }[];
   /** City glyphs are arcs, not rects, and their radius is the population tier. */
   arcs: { radius: number }[];
+  /** Each committed stroke, tagged with the colour it was drawn in — the cross-hatch's only channel. */
+  strokes: { style: string }[];
 }
 
 function stubCanvasPainting(): PaintLog {
-  const log: PaintLog = { fills: [], arcs: [] };
+  const log: PaintLog = { fills: [], arcs: [], strokes: [] };
   const proto = HTMLCanvasElement.prototype as unknown as {
     getContext: (kind: string) => unknown;
   };
@@ -47,7 +51,9 @@ function stubCanvasPainting(): PaintLog {
       },
       closePath: () => undefined,
       fill: () => undefined,
-      stroke: () => undefined,
+      stroke: () => {
+        log.strokes.push({ style: String(context.strokeStyle) });
+      },
       fillText: () => undefined,
     };
     return context;
@@ -157,7 +163,7 @@ describe("the world map's persistent host", () => {
     host.render(snapshot({ playerPolityId: "polity-2" }));
 
     const alphas = new Set(log.fills.map(({ alpha }) => alpha));
-    expect(alphas).toContain(MAP_PLAYER_POLITY_ALPHA);
+    expect(alphas).toContain(WORLD_MAP_PLAYER_POLITY_ALPHA);
     expect(alphas).toContain(WORLD_MAP_POLITY_ALPHA);
   });
 
@@ -167,7 +173,9 @@ describe("the world map's persistent host", () => {
 
     host.render(snapshot({ playerPolityId: null }));
 
-    expect(new Set(log.fills.map(({ alpha }) => alpha))).not.toContain(MAP_PLAYER_POLITY_ALPHA);
+    expect(new Set(log.fills.map(({ alpha }) => alpha))).not.toContain(
+      WORLD_MAP_PLAYER_POLITY_ALPHA,
+    );
   });
 
   /**
@@ -234,5 +242,38 @@ describe("the host's city states", () => {
 
     expect(smallest.length).toBeGreaterThan(0);
     expect(log.arcs.map(({ radius }) => radius)).not.toEqual(smallest);
+  });
+});
+
+/**
+ * Bullet 6 (visual.md §2.6): the player's capital is a diamond plus a cross-hatch, reusing
+ * `drawSettlement`'s idiom. `drawSettlement` itself always strokes one cream cross for "現在地", so the
+ * count below is relative to that baseline rather than to zero.
+ */
+describe("the player's capital", () => {
+  function creamStrokes(log: PaintLog): number {
+    return log.strokes.filter(({ style }) => style === hexColor(MAP_PLAYER_INNER_RULE_COLOR))
+      .length;
+  }
+
+  it("adds one cross-hatch stroke over the player's own capital, and none for a rival's", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+
+    host.render(snapshot({ playerPolityId: null }));
+    const baseline = creamStrokes(log);
+    log.strokes.length = 0;
+
+    // polity-1 owns the capital in the fixture.
+    host.render(snapshot({ playerPolityId: "polity-1" }));
+    const withPlayerCapital = creamStrokes(log);
+    log.strokes.length = 0;
+
+    // polity-2 owns only the non-capital city.
+    host.render(snapshot({ playerPolityId: "polity-2" }));
+    const withPlayerNonCapital = creamStrokes(log);
+
+    expect(withPlayerCapital).toBe(baseline + 1);
+    expect(withPlayerNonCapital).toBe(baseline);
   });
 });

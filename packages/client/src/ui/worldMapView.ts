@@ -2,6 +2,7 @@ import {
   type NationCityState,
   type Position,
   WORLD_MAP_CELL_SIZE_PX,
+  WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
   WORLD_MAP_SELECTED_POLITY_ALPHA,
   WORLD_MAP_SETTLEMENT_RADIUS_PX,
@@ -13,7 +14,7 @@ import {
   MAP_ACCENT_COLOR,
   MAP_CASING_COLOR,
   MAP_CITY_FILL_COLOR,
-  MAP_PLAYER_POLITY_ALPHA,
+  MAP_PLAYER_INNER_RULE_COLOR,
 } from "../render/colors.js";
 import { assignNationBanners } from "../render/nationBanner.js";
 import { type CityGlyph, chronicleCityGlyph } from "./worldCityViewModel.js";
@@ -49,6 +50,9 @@ export interface WorldMapCityViewModel {
   bannerColor: string;
   isCapital: boolean;
   isHighlighted: boolean;
+  /** Whether this city belongs to the player's own nation — the capital cross-hatch's input (visual.md
+   *  §2.6). Only meaningful together with `isCapital`; a non-capital city never draws it. */
+  isPlayer: boolean;
   /** Population tier, capital shape and the development ratio, decided in `worldCityViewModel`. */
   glyph: CityGlyph;
 }
@@ -56,6 +60,9 @@ export interface WorldMapCityViewModel {
 /** An outline edge with the colour to paint it in, so the paint pass makes no colour decisions. */
 export interface WorldMapTerritoryEdgeViewModel extends TerritoryEdge {
   bannerColor: string;
+  /** Whether this edge belongs to the player's own territory — the inner rule's input (visual.md §2.6).
+   *  Independent of `hasCasing`: the inner rule draws at a nation-nation frontier too. */
+  isPlayer: boolean;
 }
 
 export interface WorldMapRouteViewModel {
@@ -110,7 +117,7 @@ function cellAlpha(
 ): number {
   if (polityId === null) return 0;
   if (polityId === selectedPolityId) return WORLD_MAP_SELECTED_POLITY_ALPHA;
-  return polityId === playerPolityId ? MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
+  return polityId === playerPolityId ? WORLD_MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
 }
 
 /**
@@ -152,6 +159,7 @@ function buildCities(
   selectedPolityId: string | null,
   banners: ReadonlyMap<string, string>,
   cityStates: ReadonlyMap<string, NationCityState>,
+  playerPolityId: string | null,
 ): WorldMapCityViewModel[] {
   return history.worldMap.cities.map(({ id, name, pos, polityId, isCapital }) => ({
     id,
@@ -161,6 +169,7 @@ function buildCities(
     bannerColor: banners.get(polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
     isCapital,
     isHighlighted: polityId === selectedPolityId,
+    isPlayer: polityId === playerPolityId,
     glyph: chronicleCityGlyph(cityStates.get(id) ?? null, { isCapital }),
   }));
 }
@@ -168,10 +177,12 @@ function buildCities(
 function buildTerritoryEdges(
   history: WorldHistory,
   banners: ReadonlyMap<string, string>,
+  playerPolityId: string | null,
 ): WorldMapTerritoryEdgeViewModel[] {
   return extractTerritoryEdges(history.worldMap).map((edge) => ({
     ...edge,
     bannerColor: banners.get(edge.polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
+    isPlayer: edge.polityId === playerPolityId,
   }));
 }
 
@@ -219,8 +230,9 @@ export function buildWorldMapViewModel(
       selectedPolityId,
       banners,
       new Map(cityStates.map((state) => [state.cityId, state] as const)),
+      marks.playerPolityId,
     ),
-    territoryEdges: buildTerritoryEdges(history, banners),
+    territoryEdges: buildTerritoryEdges(history, banners, marks.playerPolityId),
     tradeRoutes: buildRoutes(history, selectedPolityId),
     settlement: {
       pos: history.worldMap.settlementFrontierPos,
@@ -311,21 +323,26 @@ function drawPolityOverlays(
 const BORDER_WIDTH_PX = 1;
 const CASING_WIDTH_PX = 1;
 const CASING_ALPHA = 0.55;
+/** visual.md §2.6: one band further in than the banner, on the player's own edges only. */
+const INNER_RULE_WIDTH_PX = 1;
+const INNER_RULE_ALPHA = 0.85;
 
 /**
- * The rectangle to fill for one edge. `fillRect` rather than `stroke` because a stroked path centres
- * on the line and lands on half pixels, which at a 6 px cell blurs the only identity channel there is.
+ * The rectangle to fill for one edge, offset `insetPx` from the cell's own side. `fillRect` rather than
+ * `stroke` because a stroked path centres on the line and lands on half pixels, which at a 6 px cell
+ * blurs the only identity channel there is. Negative sits outside the cell (the casing), zero sits
+ * flush with the cell's own side (the banner), positive sits further inside it (the player's inner
+ * rule, one band past the banner).
  */
 function edgeRect(
   edge: WorldMapTerritoryEdgeViewModel,
   width: number,
-  outward: boolean,
+  insetPx: number,
 ): [number, number, number, number] {
   const origin = cellOrigin(edge.pos);
   const cell = WORLD_MAP_CELL_SIZE_PX;
-  // A band either just inside the cell's own side, or just outside it for the casing behind it.
-  const near = outward ? -width : 0;
-  const far = outward ? cell : cell - width;
+  const near = insetPx;
+  const far = cell - width - insetPx;
   switch (edge.side) {
     case "top":
       return [origin.x, origin.y + near, cell, width];
@@ -360,16 +377,28 @@ export function drawTerritoryBorders(
   context.fillStyle = hexColor(MAP_CASING_COLOR);
   for (const edge of edges) {
     if (!edge.hasCasing) continue;
-    const [x, y, width, height] = edgeRect(edge, CASING_WIDTH_PX, true);
+    const [x, y, width, height] = edgeRect(edge, CASING_WIDTH_PX, -CASING_WIDTH_PX);
     context.fillRect(x, y, width, height);
   }
   context.globalAlpha = previousAlpha;
 
   for (const edge of edges) {
     context.fillStyle = edge.bannerColor;
-    const [x, y, width, height] = edgeRect(edge, BORDER_WIDTH_PX, false);
+    const [x, y, width, height] = edgeRect(edge, BORDER_WIDTH_PX, 0);
     context.fillRect(x, y, width, height);
   }
+
+  // The player's own edges get a second, warm-white line one band past the banner — visual.md §2.6's
+  // "key move". Unconditioned on `hasCasing`: it is what still separates the player's border at a
+  // nation-nation frontier, where there is never any casing.
+  context.globalAlpha = INNER_RULE_ALPHA;
+  context.fillStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
+  for (const edge of edges) {
+    if (!edge.isPlayer) continue;
+    const [x, y, width, height] = edgeRect(edge, INNER_RULE_WIDTH_PX, BORDER_WIDTH_PX);
+    context.fillRect(x, y, width, height);
+  }
+  context.globalAlpha = previousAlpha;
 }
 
 function drawRoutes(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
@@ -404,6 +433,28 @@ function traceCityGlyph(
   context.closePath();
 }
 
+/**
+ * The player's capital gets a cross over its diamond — the same idiom `drawSettlement` already uses for
+ * 現在地 (visual.md §2.6), reusing its exact geometry with the glyph's own radius in place of the fixed
+ * settlement radius. It is what frees the diamond shape to mean "capital" while this mark alone means
+ * "the player's own capital"; a rival's capital stays a plain diamond.
+ */
+function drawCapitalCrossHatch(
+  context: CanvasRenderingContext2D,
+  center: Position,
+  glyph: CityGlyph,
+): void {
+  const radius = glyph.radiusPx;
+  context.beginPath();
+  context.moveTo(center.x - radius, center.y - radius);
+  context.lineTo(center.x + radius, center.y + radius);
+  context.moveTo(center.x + radius, center.y - radius);
+  context.lineTo(center.x - radius, center.y + radius);
+  context.strokeStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
+  context.lineWidth = 1;
+  context.stroke();
+}
+
 function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   for (const city of view.cities) {
     traceCityGlyph(context, cellCenter(city.pos), city.glyph);
@@ -413,6 +464,9 @@ function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel):
     context.strokeStyle = hexColor(MAP_CASING_COLOR);
     context.lineWidth = city.glyph.ringWidthPx;
     context.stroke();
+    if (city.isCapital && city.isPlayer) {
+      drawCapitalCrossHatch(context, cellCenter(city.pos), city.glyph);
+    }
   }
 }
 
