@@ -11,11 +11,18 @@ import { assignNationBanners } from "../src/render/nationBanner.js";
 import {
   buildWorldMapViewModel,
   polityIdAtWorldMapPosition,
+  type WorldMapMarks,
   worldMapPositionFromPointer,
 } from "../src/ui/worldMapView.js";
 
 function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
+}
+
+/** Both `WorldMapMarks` fields are required, so every literal needs both; this fills in "neither" for
+ *  whichever one a test does not care about. */
+function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
+  return { playerPolityId: null, hoveredPolityId: null, ...overrides };
 }
 
 /** The banner a nation is assigned, which is now the fill colour as well as the border colour. */
@@ -163,9 +170,9 @@ function historyFixture(): WorldHistory {
 }
 
 describe("buildWorldMapViewModel", () => {
-  it("formats Japanese terrain, polity colors, settlement, and selection highlights", () => {
+  it("formats Japanese terrain, polity colors, settlement, and hover highlights", () => {
     const history = historyFixture();
-    const view = buildWorldMapViewModel(history, "polity-1");
+    const view = buildWorldMapViewModel(history, [], marks({ hoveredPolityId: "polity-1" }));
 
     expect(view.settlement).toEqual({
       pos: { x: 3, y: 2 },
@@ -191,9 +198,9 @@ describe("buildWorldMapViewModel", () => {
     expect(view.tradeRoutes[0]?.isHighlighted).toBe(true);
   });
 
-  it("uses normal alpha for unselected overlays and no overlay for unclaimed cells", () => {
+  it("uses normal alpha for unhovered overlays and no overlay for unclaimed cells", () => {
     const history = historyFixture();
-    const view = buildWorldMapViewModel(history, null);
+    const view = buildWorldMapViewModel(history);
 
     expect(view.cells[1]).toMatchObject({
       polityColor: bannerFor(history, "polity-1"),
@@ -214,7 +221,7 @@ describe("buildWorldMapViewModel", () => {
   it("fills territory in the banner colour rather than the archival one", () => {
     const history = historyFixture();
 
-    const view = buildWorldMapViewModel(history, null);
+    const view = buildWorldMapViewModel(history);
 
     const fills = new Set(view.cells.flatMap(({ polityColor }) => polityColor ?? []));
     expect(fills).toEqual(
@@ -228,7 +235,7 @@ describe("buildWorldMapViewModel", () => {
   it("gives exactly one nation the player's fill alpha", () => {
     const history = historyFixture();
 
-    const view = buildWorldMapViewModel(history, null, [], { playerPolityId: "polity-2" });
+    const view = buildWorldMapViewModel(history, [], marks({ playerPolityId: "polity-2" }));
 
     const owned = view.cells.filter(({ polityId }) => polityId !== null);
     const player = owned.filter(({ isPlayer }) => isPlayer);
@@ -246,7 +253,7 @@ describe("buildWorldMapViewModel", () => {
 
   /** Spectating is a real state — the picker exists — and it must not decorate an arbitrary nation. */
   it("marks no nation at all when the player holds none", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: null });
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ playerPolityId: null }));
 
     expect(view.cells.some(({ isPlayer }) => isPlayer)).toBe(false);
     const owned = view.cells.filter(({ polityId }) => polityId !== null);
@@ -256,13 +263,16 @@ describe("buildWorldMapViewModel", () => {
   });
 
   /**
-   * A player selecting their own nation must still get the selection answer. If the player step won, the
-   * one nation whose cells you most often click would be the one that never responded to a click.
+   * Hovering a nation must still get the highlight answer even when it is the player's own. If the
+   * player step won instead, the one nation whose cells the player most often points at would be the one
+   * that never responded to a hover.
    */
-  it("lets a selection outrank the player's own step", () => {
-    const view = buildWorldMapViewModel(historyFixture(), "polity-2", [], {
-      playerPolityId: "polity-2",
-    });
+  it("lets hovering a nation outrank the player's own step", () => {
+    const view = buildWorldMapViewModel(
+      historyFixture(),
+      [],
+      marks({ playerPolityId: "polity-2", hoveredPolityId: "polity-2" }),
+    );
 
     const player = view.cells.filter(({ isPlayer }) => isPlayer);
     expect(player.length).toBeGreaterThan(0);
@@ -280,14 +290,14 @@ describe("buildWorldMapViewModel", () => {
       cityIds: ["city-polity-1-1", "city-missing"],
     };
 
-    expect(buildWorldMapViewModel(history, "polity-1").tradeRoutes).toEqual([]);
+    expect(buildWorldMapViewModel(history).tradeRoutes).toEqual([]);
   });
 
   it("gives each city its nation's banner colour, not the colliding archival one", () => {
     const history = historyFixture();
     const banners = assignNationBanners(history.polities);
 
-    const view = buildWorldMapViewModel(history, null);
+    const view = buildWorldMapViewModel(history);
 
     expect(view.cities.map(({ bannerColor }) => bannerColor)).toEqual(
       banners.map(({ slot }) => hexColor(NATION_BANNER_RING[slot] ?? 0)),
@@ -305,14 +315,14 @@ describe("buildWorldMapViewModel", () => {
       polityId: "polity-vanished",
     };
 
-    expect(buildWorldMapViewModel(history, null).cities[0]?.bannerColor).toBe(
+    expect(buildWorldMapViewModel(history).cities[0]?.bannerColor).toBe(
       hexColor(MAP_CITY_FILL_COLOR),
     );
   });
 
   it("uses the exact Japanese label for every terrain kind", () => {
     const labels = new Map(
-      buildWorldMapViewModel(historyFixture(), null).cells.map(({ terrain, terrainLabel }) => [
+      buildWorldMapViewModel(historyFixture()).cells.map(({ terrain, terrainLabel }) => [
         terrain,
         terrainLabel,
       ]),
@@ -330,7 +340,7 @@ describe("buildWorldMapViewModel", () => {
 
 describe("world map territory outline", () => {
   it("outlines the rim against off-map and leaves the frontier between two nations uncased", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     const rim = view.territoryEdges.find(
       ({ pos, side }) => pos.x === 1 && pos.y === 0 && side === "top",
@@ -344,7 +354,7 @@ describe("world map territory outline", () => {
   });
 
   it("draws no edge between two cells the same nation holds", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     // (1,0) and (2,0) are both polity-1, so the side they share is interior.
     expect(
@@ -353,7 +363,7 @@ describe("world map territory outline", () => {
   });
 
   it("gives every edge a banner colour to paint it with", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
     const banners = new Map(
       assignNationBanners(historyFixture().polities).map(
         ({ nationId, color }) => [nationId, hexColor(color)] as const,
@@ -371,7 +381,11 @@ describe("world map territory outline", () => {
    * `hasCasing` — it draws at a nation-nation frontier too, where there is never any casing.
    */
   it("marks a player's own edges and no rival's, regardless of casing", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: "polity-1" });
+    const view = buildWorldMapViewModel(
+      historyFixture(),
+      [],
+      marks({ playerPolityId: "polity-1" }),
+    );
 
     const owned = view.territoryEdges.filter(({ isPlayer }) => isPlayer);
     const rivals = view.territoryEdges.filter(({ isPlayer }) => !isPlayer);
@@ -382,7 +396,7 @@ describe("world map territory outline", () => {
   });
 
   it("marks no edge as the player's when nobody holds one", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     expect(view.territoryEdges.some(({ isPlayer }) => isPlayer)).toBe(false);
   });
@@ -390,7 +404,7 @@ describe("world map territory outline", () => {
 
 describe("world map city tiers", () => {
   it("sizes a city from the population its nation reports for it", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null, [
+    const view = buildWorldMapViewModel(historyFixture(), [
       { cityId: "city-polity-1-1", population: 9000, developmentLevel: 4 },
       { cityId: "city-polity-2-1", population: 100, developmentLevel: 1 },
     ]);
@@ -404,11 +418,11 @@ describe("world map city tiers", () => {
 
   /** A rival's collapse must not resize anyone else's city — the thresholds are absolute. */
   it("leaves one nation's tier alone when the other empties out", () => {
-    const held = buildWorldMapViewModel(historyFixture(), null, [
+    const held = buildWorldMapViewModel(historyFixture(), [
       { cityId: "city-polity-1-1", population: 6000, developmentLevel: 3 },
       { cityId: "city-polity-2-1", population: 9000, developmentLevel: 5 },
     ]);
-    const collapsed = buildWorldMapViewModel(historyFixture(), null, [
+    const collapsed = buildWorldMapViewModel(historyFixture(), [
       { cityId: "city-polity-1-1", population: 6000, developmentLevel: 3 },
       { cityId: "city-polity-2-1", population: 0, developmentLevel: 0 },
     ]);
@@ -420,13 +434,13 @@ describe("world map city tiers", () => {
 
   /** What the chronicle renders today: it has no nation state until the map gets a live host. */
   it("falls back to the smallest tier when it is given no nation state at all", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     expect(view.cities.map(({ glyph }) => glyph.tier)).toEqual([1, 1]);
   });
 
   it("keeps capitals as diamonds whether or not their population is known", () => {
-    const known = buildWorldMapViewModel(historyFixture(), null, [
+    const known = buildWorldMapViewModel(historyFixture(), [
       { cityId: "city-polity-1-1", population: 9000, developmentLevel: 4 },
     ]);
 
@@ -435,14 +449,18 @@ describe("world map city tiers", () => {
 
   /** The cross-hatch's input (visual.md §2.6): only the player's own cities carry it. */
   it("marks a city as the player's own and no one else's", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null, [], { playerPolityId: "polity-1" });
+    const view = buildWorldMapViewModel(
+      historyFixture(),
+      [],
+      marks({ playerPolityId: "polity-1" }),
+    );
 
     expect(view.cities.find(({ id }) => id === "city-polity-1-1")?.isPlayer).toBe(true);
     expect(view.cities.find(({ id }) => id === "city-polity-2-1")?.isPlayer).toBe(false);
   });
 
   it("marks no city as the player's when nobody holds one", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     expect(view.cities.some(({ isPlayer }) => isPlayer)).toBe(false);
   });
@@ -450,7 +468,7 @@ describe("world map city tiers", () => {
 
 describe("world map selection", () => {
   it("returns an owned polity and clears selection on sea or unclaimed land", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
 
     expect(polityIdAtWorldMapPosition(view, { x: 1, y: 1 })).toBe("polity-1");
     expect(polityIdAtWorldMapPosition(view, { x: 0, y: 0 })).toBeNull();
@@ -458,7 +476,7 @@ describe("world map selection", () => {
   });
 
   it("maps CSS-scaled pointer coordinates and rejects points outside the bounds", () => {
-    const view = buildWorldMapViewModel(historyFixture(), null);
+    const view = buildWorldMapViewModel(historyFixture());
     const bounds = { left: 10, top: 20, width: 400, height: 300 };
 
     expect(worldMapPositionFromPointer(view, bounds, 10, 20)).toEqual({ x: 0, y: 0 });

@@ -73,9 +73,10 @@ export interface WorldMapRouteViewModel {
 }
 
 /**
- * Who the map is drawn *for*, as opposed to what is selected in it. The player's nation is a resting
- * state that lasts a session; a selection is a momentary question. Keeping them apart is what stops one
- * from being read as the other at a call site.
+ * Who the map is drawn *for*, as opposed to what is momentarily under the pointer. The player's nation
+ * is a resting state that lasts a session; a hover is transient and universal — it applies to any
+ * nation, including rivals (visual.md §2.2.1's equality principle). Keeping the two fields apart is what
+ * stops a persistent, singular fact from being read as a transient, universal one at a call site.
  */
 export interface WorldMapMarks {
   /**
@@ -83,9 +84,14 @@ export interface WorldMapMarks {
    * owner is a `polityId`, so it takes the map's vocabulary here. Null marks no nation at all.
    */
   playerPolityId: string | null;
+  /**
+   * The polity currently under the pointer, or null when nothing is hovered. Null the instant the
+   * pointer leaves — there is no resting hover, only the player's own resting mark (visual.md §2.2.1).
+   */
+  hoveredPolityId: string | null;
 }
 
-const NO_MARKS: WorldMapMarks = { playerPolityId: null };
+const NO_MARKS: WorldMapMarks = { playerPolityId: null, hoveredPolityId: null };
 
 export interface WorldMapViewModel {
   width: number;
@@ -98,7 +104,6 @@ export interface WorldMapViewModel {
     pos: Position;
     label: "現在地";
   };
-  selectedPolityId: string | null;
 }
 
 export function hexColor(color: number): string {
@@ -106,17 +111,21 @@ export function hexColor(color: number): string {
 }
 
 /**
- * Selection outranks the player step, and both outrank the resting alpha. Selection has to win or a
- * player who selects their own nation would get no answer to "which cells are theirs"; the player step
- * is a resting state and selection is not, so there is nothing to trade.
+ * Hover outranks the player step, and both outrank the resting alpha. Not because one mark of ownership
+ * beats another — they are not competing marks of ownership at all. Hover is transient and universal: it
+ * answers "what is under the pointer right now" for any nation, including the player's own, and a player
+ * hovering their own territory still needs that answer or "which cells are theirs" would go unanswered
+ * for the one nation they are most likely to point at. The player step is persistent and singular — it
+ * marks one nation for the whole session regardless of the pointer — so the two never have anything to
+ * trade; hover simply wins when both are true of the same cell.
  */
 function cellAlpha(
   polityId: string | null,
-  selectedPolityId: string | null,
+  hoveredPolityId: string | null,
   playerPolityId: string | null,
 ): number {
   if (polityId === null) return 0;
-  if (polityId === selectedPolityId) return WORLD_MAP_SELECTED_POLITY_ALPHA;
+  if (polityId === hoveredPolityId) return WORLD_MAP_SELECTED_POLITY_ALPHA;
   return polityId === playerPolityId ? WORLD_MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
 }
 
@@ -127,7 +136,7 @@ function cellAlpha(
  */
 function buildCells(
   history: WorldHistory,
-  selectedPolityId: string | null,
+  hoveredPolityId: string | null,
   banners: ReadonlyMap<string, string>,
   playerPolityId: string | null,
 ): WorldMapCellViewModel[] {
@@ -139,7 +148,7 @@ function buildCells(
     terrainColor: TERRAIN_VIEW[terrain].color,
     polityId,
     polityColor: polityId === null ? null : (banners.get(polityId) ?? null),
-    polityAlpha: cellAlpha(polityId, selectedPolityId, playerPolityId),
+    polityAlpha: cellAlpha(polityId, hoveredPolityId, playerPolityId),
     isPlayer: polityId !== null && polityId === playerPolityId,
   }));
 }
@@ -156,7 +165,7 @@ function bannerColors(history: WorldHistory): Map<string, string> {
 
 function buildCities(
   history: WorldHistory,
-  selectedPolityId: string | null,
+  hoveredPolityId: string | null,
   banners: ReadonlyMap<string, string>,
   cityStates: ReadonlyMap<string, NationCityState>,
   playerPolityId: string | null,
@@ -168,7 +177,7 @@ function buildCities(
     polityId,
     bannerColor: banners.get(polityId) ?? hexColor(MAP_CITY_FILL_COLOR),
     isCapital,
-    isHighlighted: polityId === selectedPolityId,
+    isHighlighted: polityId === hoveredPolityId,
     isPlayer: polityId === playerPolityId,
     glyph: chronicleCityGlyph(cityStates.get(id) ?? null, { isCapital }),
   }));
@@ -188,7 +197,7 @@ function buildTerritoryEdges(
 
 function buildRoutes(
   history: WorldHistory,
-  selectedPolityId: string | null,
+  hoveredPolityId: string | null,
 ): WorldMapRouteViewModel[] {
   const cities = new Map(history.worldMap.cities.map((city) => [city.id, city]));
   return history.worldMap.tradeRoutes.flatMap(({ id, cityIds }) => {
@@ -200,7 +209,7 @@ function buildRoutes(
         id,
         from: from.pos,
         to: to.pos,
-        isHighlighted: from.polityId === selectedPolityId || to.polityId === selectedPolityId,
+        isHighlighted: from.polityId === hoveredPolityId || to.polityId === hoveredPolityId,
       },
     ];
   });
@@ -211,39 +220,55 @@ function buildRoutes(
  * that carries one arrives with the world map's own surface. Cities without it draw at the smallest
  * tier. Pass `nations.flatMap(({ cities }) => cities)` once there is a nation snapshot to hand.
  *
- * `marks` is an object rather than a fourth nullable string so it cannot be passed where
- * `selectedPolityId` belongs — the two mean opposite things, one transient and one a resting state.
+ * `marks` carries both the player's resting state and the pointer's transient one, since neither is a
+ * bare string parameter's job: `playerPolityId` lasts a session, `hoveredPolityId` lasts as long as the
+ * pointer sits still, and a lone positional string could not tell a caller which one it was setting.
  */
 export function buildWorldMapViewModel(
   history: WorldHistory,
-  selectedPolityId: string | null,
   cityStates: readonly NationCityState[] = [],
   marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
+  const { playerPolityId, hoveredPolityId } = marks;
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
-    cells: buildCells(history, selectedPolityId, banners, marks.playerPolityId),
+    cells: buildCells(history, hoveredPolityId, banners, playerPolityId),
     cities: buildCities(
       history,
-      selectedPolityId,
+      hoveredPolityId,
       banners,
       new Map(cityStates.map((state) => [state.cityId, state] as const)),
-      marks.playerPolityId,
+      playerPolityId,
     ),
-    territoryEdges: buildTerritoryEdges(history, banners, marks.playerPolityId),
-    tradeRoutes: buildRoutes(history, selectedPolityId),
+    territoryEdges: buildTerritoryEdges(history, banners, playerPolityId),
+    tradeRoutes: buildRoutes(history, hoveredPolityId),
     settlement: {
       pos: history.worldMap.settlementFrontierPos,
       label: "現在地",
     },
-    selectedPolityId,
   };
 }
 
+/**
+ * The minimal grid shape either resolver below needs. Narrowed rather than `WorldMapViewModel` itself so
+ * a caller can resolve a position straight off the raw `WorldHistory["worldMap"]` — hover fires on every
+ * `pointermove`, dozens of times a second, and building the styled view model (banner colours, city
+ * glyphs, territory edges) just to hit-test a cell would be wasted work. The full view model still
+ * satisfies this shape, so every existing caller is unaffected.
+ */
+interface WorldMapGrid {
+  width: number;
+  height: number;
+}
+
+interface PolityLookupGrid extends WorldMapGrid {
+  cells: readonly { terrain: WorldMapTerrain; polityId: string | null }[];
+}
+
 export function worldMapPositionFromPointer(
-  view: WorldMapViewModel,
+  view: WorldMapGrid,
   bounds: Pick<DOMRect, "left" | "top" | "width" | "height">,
   clientX: number,
   clientY: number,
@@ -266,7 +291,7 @@ export function worldMapPositionFromPointer(
   };
 }
 
-export function polityIdAtWorldMapPosition(view: WorldMapViewModel, pos: Position): string | null {
+export function polityIdAtWorldMapPosition(view: PolityLookupGrid, pos: Position): string | null {
   if (
     !Number.isInteger(pos.x) ||
     !Number.isInteger(pos.y) ||

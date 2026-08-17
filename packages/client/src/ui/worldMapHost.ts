@@ -20,9 +20,12 @@ export interface WorldMapSnapshot {
 }
 
 export interface WorldMapHostController {
-  /** Repaints from a new snapshot, keeping whatever the player has selected. */
+  /** Repaints from a new snapshot, painting whatever is currently hovered — a repaint neither clears nor
+   *  artificially preserves a hover, it simply keeps using the live state. The clicked nation is kept
+   *  as-is either way; see `selection` below. */
   render(snapshot: WorldMapSnapshot): void;
-  /** Null until something is selected, and again when a click lands off any nation. */
+  /** The last nation clicked, decoupled from hover. Null until something is clicked, and again when a
+   *  click lands off any nation. */
   selection(): string | null;
 }
 
@@ -50,6 +53,8 @@ const CANVAS_LABEL = "現存国家、都市、交易路、現在地を示す世�
  * Repainting is driven by `render`, i.e. by the server, not by the pointer. The old handler repainted
  * only on `pointerup`, which meant every value that moves with the clock — a season wash, a border that
  * just changed hands, a city that grew a tier — sat frozen on screen until the player happened to click.
+ * A hover still repaints on its own, but only to show or clear the transient highlight — see
+ * `hoveredPolityId` below; it never carries any of the values a server `render` does.
  */
 export function createWorldMapHost(
   root: HTMLElement,
@@ -63,32 +68,61 @@ export function createWorldMapHost(
   root.append(canvas);
 
   let snapshot: WorldMapSnapshot | null = null;
-  let selectedPolityId: string | null = null;
+  // Transient: what the pointer is over right now, drives the 0.52 highlight, cleared the instant the
+  // pointer leaves. Decoupled from `clickedPolityId` below — visual.md §2.2.1 made the highlight
+  // hover-only, but a click still needs to persist for whichever consumer reads `selection()`.
+  let hoveredPolityId: string | null = null;
+  // Persistent: the last nation clicked, unaffected by hover or by a server-driven repaint.
+  let clickedPolityId: string | null = null;
 
   const paint = (): void => {
     if (snapshot === null) return;
-    const view = buildWorldMapViewModel(snapshot.history, selectedPolityId, snapshot.cityStates, {
+    const view = buildWorldMapViewModel(snapshot.history, snapshot.cityStates, {
       playerPolityId: snapshot.playerPolityId,
+      hoveredPolityId,
     });
     renderWorldMapCanvas(canvas, view);
   };
 
+  /**
+   * Resolves the polity under a pointer position straight off the raw map, without building the styled
+   * view model — `pointermove` fires dozens of times a second, and paying for banner colours, city
+   * glyphs and territory edges just to hit-test a cell would be wasted work on every one of them.
+   */
+  const polityAtPointer = (clientX: number, clientY: number): string | null => {
+    if (snapshot === null) return null;
+    const { worldMap } = snapshot.history;
+    const pos = worldMapPositionFromPointer(
+      worldMap,
+      canvas.getBoundingClientRect(),
+      clientX,
+      clientY,
+    );
+    return pos === null ? null : polityIdAtWorldMapPosition(worldMap, pos);
+  };
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (snapshot === null) return;
+    const next = polityAtPointer(event.clientX, event.clientY);
+    if (next === hoveredPolityId) return;
+    hoveredPolityId = next;
+    paint();
+  });
+
+  // `pointerout` fires whenever the pointer leaves the canvas, including onto a child element; there is
+  // no resting hover, so this always clears rather than re-resolving a position.
+  canvas.addEventListener("pointerout", () => {
+    if (snapshot === null || hoveredPolityId === null) return;
+    hoveredPolityId = null;
+    paint();
+  });
+
+  // The click channel is unrelated to the highlight above: it answers "which nation did the player ask
+  // to read about" (the chronicle's detail card), and it persists across a repaint on purpose.
   canvas.addEventListener("pointerup", (event) => {
     if (snapshot === null) return;
-    // Rebuilt rather than cached: the snapshot behind it may have changed under the pointer since the
-    // last paint, and hit-testing a stale view model would select whoever used to own the cell.
-    const view = buildWorldMapViewModel(snapshot.history, selectedPolityId, snapshot.cityStates, {
-      playerPolityId: snapshot.playerPolityId,
-    });
-    const pos = worldMapPositionFromPointer(
-      view,
-      canvas.getBoundingClientRect(),
-      event.clientX,
-      event.clientY,
-    );
-    selectedPolityId = pos === null ? null : polityIdAtWorldMapPosition(view, pos);
-    paint();
-    onSelect(selectedPolityId);
+    clickedPolityId = polityAtPointer(event.clientX, event.clientY);
+    onSelect(clickedPolityId);
   });
 
   return {
@@ -98,7 +132,7 @@ export function createWorldMapHost(
     },
 
     selection(): string | null {
-      return selectedPolityId;
+      return clickedPolityId;
     },
   };
 }

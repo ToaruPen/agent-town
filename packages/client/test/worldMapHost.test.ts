@@ -4,6 +4,7 @@ import {
   type NationCityState,
   WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
+  WORLD_MAP_SELECTED_POLITY_ALPHA,
   type WorldHistory,
 } from "@agent-town/shared";
 import { describe, expect, it } from "vitest";
@@ -217,6 +218,75 @@ describe("the world map's persistent host", () => {
 
     expect(selected).toEqual([]);
     expect(log.fills).toEqual([]);
+  });
+});
+
+/**
+ * visual.md §2.2.1: the 0.52 highlight is hover-only and transient, decoupled from the click channel
+ * exercised above — hovering never touches `selection()`, and clicking never needs a prior hover.
+ */
+describe("the world map's hover highlight", () => {
+  it("paints the hover alpha on pointermove", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot());
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    log.fills.length = 0;
+
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 3, clientY: 3, bubbles: true }),
+    );
+
+    expect(new Set(log.fills.map(({ alpha }) => alpha))).toContain(WORLD_MAP_SELECTED_POLITY_ALPHA);
+  });
+
+  it("clears the hover alpha on pointerout — there is no resting hover", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot());
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 3, clientY: 3, bubbles: true }),
+    );
+    log.fills.length = 0;
+
+    canvas.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+
+    expect(new Set(log.fills.map(({ alpha }) => alpha))).not.toContain(
+      WORLD_MAP_SELECTED_POLITY_ALPHA,
+    );
+  });
+
+  /** `pointermove` fires dozens of times a second; a repaint on every one of them would be wasted work
+   *  the instant the pointer sits still over the same nation. */
+  it("does not repaint again while the pointer stays over the same nation", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot());
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 3, clientY: 3, bubbles: true }),
+    );
+    log.fills.length = 0;
+
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 4, clientY: 4, bubbles: true }),
+    );
+
+    expect(log.fills).toEqual([]);
+  });
+
+  it("leaves the click channel alone — hovering a nation is not selecting it", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot());
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 9, clientY: 3, bubbles: true }),
+    );
+
+    expect(host.selection()).toBeNull();
   });
 });
 
