@@ -161,6 +161,58 @@ describe("advanceNationEngine", () => {
     expect(result.consumedQueuedDirectiveIds).toEqual(["player-directive"]);
   });
 
+  it("uses the chancellor for an autopilot player with no queued directive", () => {
+    const history = historyFixture();
+    const state: NationEngineState = {
+      tick: 299,
+      nations: [nationFixture({ autoPilot: true })],
+    };
+
+    const result = advanceNationEngine(state, history, []);
+
+    expect(result.state.nations[0]?.activeDirectives[0]).toMatchObject({
+      id: "chancellor-realm-300",
+      kind: "clearFarmland",
+    });
+    expect(result.consumedQueuedDirectiveIds).toEqual([]);
+  });
+
+  it("activates nothing for a manual player with no queued directive", () => {
+    const history = historyFixture();
+    const state: NationEngineState = {
+      tick: 299,
+      nations: [nationFixture({ autoPilot: false })],
+    };
+
+    const result = advanceNationEngine(state, history, []);
+
+    expect(result.state.nations[0]?.activeDirectives).toEqual([]);
+    expect(result.consumedQueuedDirectiveIds).toEqual([]);
+  });
+
+  it("uses the chancellor without consuming an invalid queued player directive", () => {
+    const history = historyFixture();
+    const state: NationEngineState = {
+      tick: 299,
+      nations: [nationFixture({ autoPilot: true })],
+    };
+    const queued: QueuedDirective = {
+      id: "invalid-player-directive",
+      nationId: "realm",
+      kind: "growCity",
+      targetCityId: "foreign-city",
+      issuedAtTick: 250,
+    };
+
+    const result = advanceNationEngine(state, history, [queued]);
+
+    expect(result.state.nations[0]?.activeDirectives[0]).toMatchObject({
+      id: "chancellor-realm-300",
+      kind: "clearFarmland",
+    });
+    expect(result.consumedQueuedDirectiveIds).toEqual([]);
+  });
+
   it("activates the chancellor choice for an agent nation at a boundary", () => {
     const history = historyFixture();
     const state: NationEngineState = {
@@ -184,5 +236,6 @@ describe("advanceNationEngine", () => {
         ?.entries.filter(({ reason }) => reason === "directiveCost")
         .map(({ directiveId }) => directiveId),
     ).toEqual(["chancellor-realm-300", "chancellor-realm-300", "chancellor-realm-300"]);
+    expect(result.consumedQueuedDirectiveIds).toEqual([]);
   });
 });
