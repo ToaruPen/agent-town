@@ -230,7 +230,7 @@ function buildCard(
 const AUTOPILOT_ON_DESCRIPTION =
   "自動運転が入っていても、実行可能なあなたの発令があればそれが優先されます。発令がない季だけ、宰相が代わりに決めます。";
 const AUTOPILOT_OFF_DESCRIPTION =
-  "あなたの発令がそのまま実行されます。発令がない季は何も実行されません。";
+  "実行可能なあなたの発令があれば、それが実行されます。発令がない季は何も実行されません。";
 const AUTOPILOT_UNKNOWN_DESCRIPTION =
   "どちらの運転になっているかは、次の応答を受け取るまで分かりません。発令はいま送れます。";
 

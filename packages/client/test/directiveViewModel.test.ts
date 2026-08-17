@@ -210,11 +210,19 @@ describe("the autopilot mode text", () => {
     expect(view.autoPilotDescription).toContain("発令がない季だけ");
   });
 
-  it("says the player's own order runs once autopilot is off", () => {
+  /**
+   * Same legality hedge as the ON description above: "あなたの発令が実行されます" without qualification
+   * was untrue whenever the queued order matched no legal option (`engine.ts:64`), the same defect review
+   * finding 2 named for the ON side.
+   */
+  it("says the player's own order runs once autopilot is off, if it is legal", () => {
     const view = build(ordersFixture({ autoPilot: false }));
 
     expect(view.autoPilot).toBe(false);
     expect(view.autoPilotLabel).toBe("自動運転 OFF（あなたが決めます）");
+    expect(view.autoPilotDescription).toContain(
+      "実行可能なあなたの発令があれば、それが実行されます",
+    );
     expect(view.autoPilotDescription).toContain("発令がない季は何も実行されません");
   });
 });
