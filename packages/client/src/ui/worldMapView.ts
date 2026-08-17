@@ -89,9 +89,16 @@ export interface WorldMapMarks {
    * pointer leaves — there is no resting hover, only the player's own resting mark (visual.md §2.2.1).
    */
   hoveredPolityId: string | null;
+  /**
+   * Progress through the on-demand locate pulse (visual.md §2.6), from 0 to 1 across its 500 ms
+   * wall-clock span, or null when no pulse is live. A plain number like every other field here — the
+   * host computes it fresh from its own animation deadline on every paint, so this module only ever
+   * turns a phase into a frame and never touches the clock that produced it.
+   */
+  pulsePhase: number | null;
 }
 
-const NO_MARKS: WorldMapMarks = { playerPolityId: null, hoveredPolityId: null };
+const NO_MARKS: WorldMapMarks = { playerPolityId: null, hoveredPolityId: null, pulsePhase: null };
 
 export interface WorldMapViewModel {
   width: number;
@@ -104,6 +111,8 @@ export interface WorldMapViewModel {
     pos: Position;
     label: "現在地";
   };
+  /** See `WorldMapMarks.pulsePhase` — carried through unchanged for `drawTerritoryBorders`. */
+  pulsePhase: number | null;
 }
 
 export function hexColor(color: number): string {
@@ -230,7 +239,7 @@ export function buildWorldMapViewModel(
   marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
-  const { playerPolityId, hoveredPolityId } = marks;
+  const { playerPolityId, hoveredPolityId, pulsePhase } = marks;
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
@@ -248,6 +257,7 @@ export function buildWorldMapViewModel(
       pos: history.worldMap.settlementFrontierPos,
       label: "現在地",
     },
+    pulsePhase,
   };
 }
 
@@ -351,6 +361,18 @@ const CASING_ALPHA = 0.55;
 /** visual.md §2.6: one band further in than the banner, on the player's own edges only. */
 const INNER_RULE_WIDTH_PX = 1;
 const INNER_RULE_ALPHA = 0.85;
+/** The locate pulse's peak values (visual.md §2.6): full alpha, and one pixel closer to the banner. */
+const PULSE_ALPHA_PEAK = 1;
+const PULSE_EXPANSION_PX = 1;
+
+/**
+ * A symmetric rise and fall: 0 at either end of the pulse, 1 at its midpoint. Pure in `phase` alone, so
+ * the paint layer below never needs the clock that produced it — the same phase always paints the same
+ * frame, the constraint every other visual channel in this module already holds.
+ */
+function pulseEnvelope(phase: number): number {
+  return 1 - Math.abs(phase * 2 - 1);
+}
 
 /**
  * The rectangle to fill for one edge, offset `insetPx` from the cell's own side. `fillRect` rather than
@@ -396,6 +418,7 @@ export type BorderPaintContext = Pick<
 export function drawTerritoryBorders(
   context: BorderPaintContext,
   edges: readonly WorldMapTerritoryEdgeViewModel[],
+  pulsePhase: number | null = null,
 ): void {
   const previousAlpha = context.globalAlpha;
   context.globalAlpha = CASING_ALPHA;
@@ -416,11 +439,20 @@ export function drawTerritoryBorders(
   // The player's own edges get a second, warm-white line one band past the banner — visual.md §2.6's
   // "key move". Unconditioned on `hasCasing`: it is what still separates the player's border at a
   // nation-nation frontier, where there is never any casing.
-  context.globalAlpha = INNER_RULE_ALPHA;
+  //
+  // A live locate pulse rides on top of that resting line rather than replacing it: `pulseEnvelope`
+  // is 0 at either end of the 500 ms span, so a null or completed pulse reproduces the resting values
+  // exactly, and only a live one bends the alpha and inset toward the peak partway through.
+  const pulse = pulsePhase === null ? 0 : pulseEnvelope(pulsePhase);
+  context.globalAlpha = INNER_RULE_ALPHA + pulse * (PULSE_ALPHA_PEAK - INNER_RULE_ALPHA);
   context.fillStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
   for (const edge of edges) {
     if (!edge.isPlayer) continue;
-    const [x, y, width, height] = edgeRect(edge, INNER_RULE_WIDTH_PX, BORDER_WIDTH_PX);
+    const [x, y, width, height] = edgeRect(
+      edge,
+      INNER_RULE_WIDTH_PX,
+      BORDER_WIDTH_PX - pulse * PULSE_EXPANSION_PX,
+    );
     context.fillRect(x, y, width, height);
   }
   context.globalAlpha = previousAlpha;
@@ -531,7 +563,7 @@ export function renderWorldMapCanvas(canvas: HTMLCanvasElement, view: WorldMapVi
   context.imageSmoothingEnabled = false;
   drawTerrain(context, view);
   drawPolityOverlays(context, view.cells);
-  drawTerritoryBorders(context, view.territoryEdges);
+  drawTerritoryBorders(context, view.territoryEdges, view.pulsePhase);
   drawRoutes(context, view);
   drawCities(context, view);
   drawSettlement(context, view);

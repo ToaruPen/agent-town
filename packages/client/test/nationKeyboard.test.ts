@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { panelActionForKey } from "../src/ui/nationKeyboard.js";
+import { mapActionForKey, panelActionForKey } from "../src/ui/nationKeyboard.js";
 
 /**
  * The panel half of the §3.5 key map. Kept apart from the server half so that neither can answer for a key
@@ -41,5 +41,21 @@ describe("panelActionForKey", () => {
   it("ignores a key that merely starts with d", () => {
     expect(panelActionForKey("Delete")).toBeNull();
     expect(panelActionForKey("ArrowDown")).toBeNull();
+  });
+});
+
+/** The map's own key (visual.md §2.6's on-demand locate), a third half of the §3.5 map alongside the
+ *  server and panel ones above — it must claim `L` from both without answering for any other key. */
+describe("mapActionForKey", () => {
+  it("locates on L, in either case", () => {
+    expect(mapActionForKey("l")).toBe("locate");
+    expect(mapActionForKey("L")).toBe("locate");
+  });
+
+  it("leaves the panel and server keys alone", () => {
+    expect(mapActionForKey("d")).toBeNull();
+    expect(mapActionForKey("Escape")).toBeNull();
+    expect(mapActionForKey("a")).toBeNull();
+    expect(mapActionForKey("1")).toBeNull();
   });
 });

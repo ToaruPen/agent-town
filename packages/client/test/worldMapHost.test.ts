@@ -7,7 +7,7 @@ import {
   WORLD_MAP_SELECTED_POLITY_ALPHA,
   type WorldHistory,
 } from "@agent-town/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
 import { createWorldMapHost, type WorldMapSnapshot } from "../src/ui/worldMapHost.js";
@@ -122,6 +122,40 @@ function mount(log: PaintLog) {
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error("host mounted no canvas");
   return { host, canvas, selected, log };
 }
+
+/**
+ * A controllable stand-in for the locate pulse's own wall clock and its `requestAnimationFrame` loop.
+ * Real time would make a 500 ms pulse either flaky or slow to assert on, and happy-dom's own rAF fires
+ * on the next microtask regardless of elapsed time — so `Date.now` and the global scheduler are both
+ * driven by hand here, one `advance` at a time.
+ */
+function stubPulseClock(): { advance: (ms: number) => void; readonly scheduledFrameCount: number } {
+  let now = 0;
+  let queued: FrameRequestCallback | null = null;
+  let scheduledFrameCount = 0;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    scheduledFrameCount += 1;
+    queued = callback;
+    return 0;
+  });
+  return {
+    get scheduledFrameCount() {
+      return scheduledFrameCount;
+    },
+    advance(ms: number): void {
+      now += ms;
+      const callback = queued;
+      queued = null;
+      callback?.(now);
+    },
+  };
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("the world map's persistent host", () => {
   it("mounts a canvas into the page's own root", () => {
@@ -345,5 +379,94 @@ describe("the player's capital", () => {
 
     expect(withPlayerCapital).toBe(baseline + 1);
     expect(withPlayerNonCapital).toBe(baseline);
+  });
+});
+
+/**
+ * visual.md §2.6: an on-demand locate pulses the player's inner rule once, 500 ms, wall-clock, one
+ * shot. The host owns the deadline and self-schedules its own frames — deliberately not the HUD's
+ * `requestAnimationFrame` loop, which belongs to the countdown and runs the whole session through.
+ */
+describe("the world map's locate pulse", () => {
+  function innerRuleAlphas(log: PaintLog): number[] {
+    return log.fills
+      .filter(({ style }) => style === hexColor(MAP_PLAYER_INNER_RULE_COLOR))
+      .map(({ alpha }) => alpha);
+  }
+
+  it("boosts the inner rule to full alpha mid-pulse and settles it back to rest at the deadline", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ playerPolityId: "polity-1" }));
+
+    host.locate();
+    clock.advance(250); // the pulse's peak
+
+    expect(innerRuleAlphas(log)).toContain(1);
+
+    clock.advance(250); // the 500 ms deadline
+
+    expect(innerRuleAlphas(log).at(-1)).toBe(0.85);
+  });
+
+  it("stops scheduling frames once the pulse completes, rather than looping forever", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ playerPolityId: "polity-1" }));
+
+    host.locate();
+    clock.advance(600); // past the deadline in a single jump
+
+    const fillsAtEnd = log.fills.length;
+    clock.advance(16); // a frame that must never have been scheduled
+
+    expect(log.fills.length).toBe(fillsAtEnd);
+  });
+
+  it("does nothing before any payload has arrived", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+
+    host.locate();
+    clock.advance(250);
+
+    expect(log.fills).toEqual([]);
+  });
+
+  /**
+   * A real `requestAnimationFrame` schedules an independent frame on every call — unlike this stub's
+   * single `queued` slot, a browser would run two full loops at once, doubling every paint until each
+   * self-terminates on its own. The frame count is the only place that difference is visible.
+   */
+  it("does not stack a second frame loop when locate is called again mid-pulse", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ playerPolityId: "polity-1" }));
+
+    host.locate();
+    const scheduledAfterFirstCall = clock.scheduledFrameCount;
+
+    host.locate(); // called again before the pending frame has fired
+
+    expect(clock.scheduledFrameCount).toBe(scheduledAfterFirstCall);
+  });
+
+  it("pulses again on a later call, after the first pulse has already finished", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ playerPolityId: "polity-1" }));
+
+    host.locate();
+    clock.advance(600); // finishes the first pulse
+
+    host.locate();
+    clock.advance(250); // the second pulse's own peak
+
+    expect(innerRuleAlphas(log).at(-1)).toBe(1);
   });
 });

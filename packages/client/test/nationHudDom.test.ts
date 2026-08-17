@@ -406,6 +406,53 @@ describe("the order desk's controls", () => {
     unbind();
   });
 
+  /**
+   * `L` is the map's own key (visual.md §2.6's on-demand locate), a third half of the §3.5 map alongside
+   * the server and panel ones exercised above — it must reach neither `send` nor a panel, only whichever
+   * `locate` the page supplied `bindNationKeys`.
+   */
+  it("calls the supplied locate on L, in either case, and sends nothing to the server", () => {
+    const { hud, sent } = mountAgainstIndexHtml();
+    let located = 0;
+    const unbind = bindNationKeys(
+      hud.send,
+      () => hud.state(),
+      {
+        toggleDirectives: () => hud.toggleDirectives(),
+        toggleReport: () => hud.toggleReport(),
+        closeTopPanel: () => hud.closeTopPanel(),
+      },
+      {
+        locate: () => {
+          located += 1;
+        },
+      },
+    );
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "L", bubbles: true }));
+
+    expect(located).toBe(2);
+    expect(sent).toEqual([]);
+    unbind();
+  });
+
+  /** A page with no map on screen supplies no fourth argument at all, and `L` must fall silently rather
+   *  than throwing on a missing `locate`. */
+  it("does nothing on L when the page supplied no locate at all", () => {
+    const { hud } = mountAgainstIndexHtml();
+    const unbind = bindNationKeys(hud.send, () => hud.state(), {
+      toggleDirectives: () => hud.toggleDirectives(),
+      toggleReport: () => hud.toggleReport(),
+      closeTopPanel: () => hud.closeTopPanel(),
+    });
+
+    expect(() =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", bubbles: true })),
+    ).not.toThrow();
+    unbind();
+  });
+
   /** The refusal is announced, not merely printed, because at speed 0 nothing else on screen moves. */
   it("puts a server refusal on screen as an alert", () => {
     const { roots } = openDesk(

@@ -194,4 +194,36 @@ describe("drawTerritoryBorders", () => {
       [CELL * 2 - 2, CELL, 1, CELL],
     ]);
   });
+
+  /**
+   * visual.md §2.6: the on-demand locate pulse rises and falls once over its 500 ms span, and the paint
+   * layer only ever sees the phase the host hands it — never the clock itself. Phase 0.5 is the peak.
+   */
+  it("boosts the inner rule to full alpha and flush with the banner at the pulse's peak", () => {
+    const { context, painted } = recorder();
+
+    drawTerritoryBorders(context, [edge("top", true, undefined, true)], 0.5);
+
+    expect(innerRules(painted)[0]?.alpha).toBe(1);
+    expect(innerRules(painted)[0]?.rect).toEqual([CELL, CELL, CELL, 1]);
+  });
+
+  it("returns the inner rule to its resting alpha and inset at either end of the pulse", () => {
+    const { context, painted } = recorder();
+
+    drawTerritoryBorders(context, [edge("top", true, undefined, true)], 0);
+
+    expect(innerRules(painted)[0]?.alpha).toBe(0.85);
+    expect(innerRules(painted)[0]?.rect).toEqual([CELL, CELL + 1, CELL, 1]);
+  });
+
+  it("paints the resting rule when no pulse is live, same as when the argument is omitted", () => {
+    const withNull = recorder();
+    const withDefault = recorder();
+
+    drawTerritoryBorders(withNull.context, [edge("top", true, undefined, true)], null);
+    drawTerritoryBorders(withDefault.context, [edge("top", true, undefined, true)]);
+
+    expect(withNull.painted).toEqual(withDefault.painted);
+  });
 });

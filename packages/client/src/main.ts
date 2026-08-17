@@ -120,15 +120,20 @@ function mountNationHud(roots: NationHudRoots): void {
   });
   // `hud.send`, not `post`: the keys go through the HUD's channel so a send the transport refused is
   // announced. Bound to `post` they would be swallowed silently, with no control on screen to say why.
-  bindNationKeys(hud.send, () => hud.state(), {
-    toggleDirectives: () => {
-      hud.toggleDirectives();
+  bindNationKeys(
+    hud.send,
+    () => hud.state(),
+    {
+      toggleDirectives: () => {
+        hud.toggleDirectives();
+      },
+      toggleReport: () => {
+        hud.toggleReport();
+      },
+      closeTopPanel: () => hud.closeTopPanel(),
     },
-    toggleReport: () => {
-      hud.toggleReport();
-    },
-    closeTopPanel: () => hud.closeTopPanel(),
-  });
+    { locate: () => map?.locate() },
+  );
 
   // The countdown's own loop, deliberately not Pixi's ticker: that belongs to a scene which may be
   // unmounted. `tick` short-circuits itself while paused, so a paused game repaints nothing.

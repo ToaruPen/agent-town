@@ -11,6 +11,19 @@ export interface NationPanelKeys {
 }
 
 /**
+ * The map's own half of the §3.5 key map — kept apart from `NationPanelKeys` because a locate is not a
+ * panel: it opens nothing and closes nothing, it pulses the map host directly. A page mounted with no
+ * map supplies none, which `bindNationKeys`'s default below turns into a silent no-op rather than a
+ * missing-argument error.
+ */
+export interface NationMapKeys {
+  /** "Find my nation" — visual.md §2.6's on-demand locate pulse. */
+  locate: () => void;
+}
+
+const NO_MAP_KEYS: NationMapKeys = { locate: (): void => undefined };
+
+/**
  * Document-level single-key shortcuts are safe because `index.html` contains no text input, but this
  * bails on an editable target anyway so a later screen that adds one does not have to remember to.
  */
@@ -26,6 +39,11 @@ export function panelActionForKey(key: string): "close" | "directives" | "report
   if (key === "d" || key === "D") return "directives";
   if (key === "r" || key === "R") return "report";
   return null;
+}
+
+/** The key that acts on the map rather than on a panel or the server. */
+export function mapActionForKey(key: string): "locate" | null {
+  return key === "l" || key === "L" ? "locate" : null;
 }
 
 /**
@@ -64,11 +82,17 @@ function handleNationKey(
   send: SendClientMessage,
   readState: () => NationHudState,
   panels: NationPanelKeys,
+  map: NationMapKeys,
 ): void {
   if (isForAnotherHandler(event)) return;
   const action = panelActionForKey(event.key);
   if (action !== null) {
     if (runPanelAction(action, panels)) event.preventDefault();
+    return;
+  }
+  if (mapActionForKey(event.key) === "locate") {
+    map.locate();
+    event.preventDefault();
     return;
   }
   const command = nationKeyCommand(event.key, readState());
@@ -84,15 +108,20 @@ function handleNationKey(
  * `A` sends the opposite of the server's last echo rather than tracking a local mode, so the key and the
  * on-screen toggle can never disagree about which way the nation is running.
  *
+ * `L` locates the player's own nation on the map (visual.md §2.6) and is the one key here with nothing to
+ * send and no panel to open — `map` defaults to a no-op so a page with no map on screen never needs to
+ * pass a fourth argument just to satisfy this one.
+ *
  * Returns an unbind, following `bindWorldChronicleEscape`.
  */
 export function bindNationKeys(
   send: SendClientMessage,
   readState: () => NationHudState,
   panels: NationPanelKeys,
+  map: NationMapKeys = NO_MAP_KEYS,
 ): () => void {
   const onKeydown = (event: KeyboardEvent): void => {
-    handleNationKey(event, send, readState, panels);
+    handleNationKey(event, send, readState, panels, map);
   };
 
   document.addEventListener("keydown", onKeydown);

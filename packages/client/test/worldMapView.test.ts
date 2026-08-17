@@ -19,10 +19,10 @@ function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-/** Both `WorldMapMarks` fields are required, so every literal needs both; this fills in "neither" for
- *  whichever one a test does not care about. */
+/** Every `WorldMapMarks` field is required, so every literal needs all three; this fills in "none of
+ *  the above" for whichever ones a test does not care about. */
 function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
-  return { playerPolityId: null, hoveredPolityId: null, ...overrides };
+  return { playerPolityId: null, hoveredPolityId: null, pulsePhase: null, ...overrides };
 }
 
 /** The banner a nation is assigned, which is now the fill colour as well as the border colour. */
@@ -260,6 +260,22 @@ describe("buildWorldMapViewModel", () => {
     expect(new Set(owned.map(({ polityAlpha }) => polityAlpha))).toEqual(
       new Set([WORLD_MAP_POLITY_ALPHA]),
     );
+  });
+
+  /**
+   * The pulse's phase is a plain pass-through here — `buildWorldMapViewModel` makes no drawing decision
+   * about it, it only carries the host's number down to the paint layer that does (visual.md §2.6).
+   */
+  it("carries the locate pulse's phase onto the view model unchanged", () => {
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ pulsePhase: 0.4 }));
+
+    expect(view.pulsePhase).toBe(0.4);
+  });
+
+  it("carries a null pulse phase onto the view model when no pulse is live", () => {
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ pulsePhase: null }));
+
+    expect(view.pulsePhase).toBeNull();
   });
 
   /**

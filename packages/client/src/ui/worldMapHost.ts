@@ -27,6 +27,12 @@ export interface WorldMapHostController {
   /** The last nation clicked, decoupled from hover. Null until something is clicked, and again when a
    *  click lands off any nation. */
   selection(): string | null;
+  /**
+   * The on-demand "find my nation" pulse (visual.md §2.6): the player's inner rule rises to full alpha
+   * and one pixel further out, then settles back, once, over 500 ms. Calling it again before the pulse
+   * ends restarts the same 500 ms window rather than stacking a second one.
+   */
+  locate(): void;
 }
 
 export interface WorldMapHostOptions {
@@ -40,6 +46,8 @@ export interface WorldMapHostOptions {
 }
 
 const CANVAS_LABEL = "現存国家、都市、交易路、現在地を示す世界地図";
+/** visual.md §2.6: the locate pulse's one-shot span. */
+const LOCATE_PULSE_DURATION_MS = 500;
 
 /**
  * The world map's persistent surface: it owns the canvas, the pointer handler and the view-model
@@ -74,15 +82,51 @@ export function createWorldMapHost(
   let hoveredPolityId: string | null = null;
   // Persistent: the last nation clicked, unaffected by hover or by a server-driven repaint.
   let clickedPolityId: string | null = null;
+  // Wall clock start of the current locate pulse, or null between pulses. Read fresh on every paint —
+  // not just from the frame loop below — so a server-driven repaint that happens to land mid-pulse still
+  // shows the correct phase instead of one frame behind it.
+  let pulseStartedAt: number | null = null;
+  // Whether a pulse frame is already queued, so a second `locate()` call while one is still scheduled
+  // restarts the deadline without stacking a second `requestAnimationFrame` loop alongside the first.
+  let pulseFrameScheduled = false;
+
+  const pulsePhase = (): number | null => {
+    if (pulseStartedAt === null) return null;
+    const elapsed = Date.now() - pulseStartedAt;
+    return elapsed >= LOCATE_PULSE_DURATION_MS ? null : elapsed / LOCATE_PULSE_DURATION_MS;
+  };
 
   const paint = (): void => {
     if (snapshot === null) return;
     const view = buildWorldMapViewModel(snapshot.history, snapshot.cityStates, {
       playerPolityId: snapshot.playerPolityId,
       hoveredPolityId,
+      pulsePhase: pulsePhase(),
     });
     renderWorldMapCanvas(canvas, view);
   };
+
+  /**
+   * The pulse's own frame loop — deliberately not the HUD's `requestAnimationFrame` loop, which belongs
+   * to the countdown and runs for the whole session. This one self-schedules only while a pulse is
+   * live, and stops itself the instant `pulsePhase` reports the deadline has passed.
+   */
+  const scheduleNextPulseFrame = (): void => {
+    if (pulseFrameScheduled) return;
+    pulseFrameScheduled = true;
+    requestAnimationFrame(stepPulse);
+  };
+
+  function stepPulse(): void {
+    pulseFrameScheduled = false;
+    const phase = pulsePhase();
+    paint();
+    if (phase === null) {
+      pulseStartedAt = null;
+      return;
+    }
+    scheduleNextPulseFrame();
+  }
 
   /**
    * Resolves the polity under a pointer position straight off the raw map, without building the styled
@@ -133,6 +177,11 @@ export function createWorldMapHost(
 
     selection(): string | null {
       return clickedPolityId;
+    },
+
+    locate(): void {
+      pulseStartedAt = Date.now();
+      scheduleNextPulseFrame();
     },
   };
 }
