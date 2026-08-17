@@ -62,7 +62,10 @@ const LOCATE_PULSE_DURATION_MS = 500;
  * only on `pointerup`, which meant every value that moves with the clock — a season wash, a border that
  * just changed hands, a city that grew a tier — sat frozen on screen until the player happened to click.
  * A hover still repaints on its own, but only to show or clear the transient highlight — see
- * `hoveredPolityId` below; it never carries any of the values a server `render` does.
+ * `hoveredPolityId` below; it never carries any of the values a server `render` does. `render` itself
+ * also re-resolves the hover, against the pointer's last position rather than the map it was resolved
+ * against last — a server update can hand the hovered cell to a different owner, or take its owner away
+ * entirely, without any `pointermove` in between, and §2.2.1 forbids a highlight that lags behind that.
  */
 export function createWorldMapHost(
   root: HTMLElement,
@@ -80,6 +83,12 @@ export function createWorldMapHost(
   // pointer leaves. Decoupled from `clickedPolityId` below — visual.md §2.2.1 made the highlight
   // hover-only, but a click still needs to persist for whichever consumer reads `selection()`.
   let hoveredPolityId: string | null = null;
+  // The pointer's own last coordinates, retained while it sits inside the canvas and cleared on
+  // `pointerout` alongside `hoveredPolityId` itself. `render` re-resolves the hover against these on
+  // every snapshot swap, because §2.2.1's "hover-only, transient" is a claim about the current pointer
+  // position — a `pointermove`-only resolution left `hoveredPolityId` stale across a server update that
+  // changed the hovered cell's owner without the pointer moving, which is a de facto resting hover.
+  let hoverPointerPosition: { clientX: number; clientY: number } | null = null;
   // Persistent: the last nation clicked, unaffected by hover or by a server-driven repaint.
   let clickedPolityId: string | null = null;
   // Wall clock start of the current locate pulse, or null between pulses. Read fresh on every paint —
@@ -145,8 +154,20 @@ export function createWorldMapHost(
     return pos === null ? null : polityIdAtWorldMapPosition(worldMap, pos);
   };
 
+  // Re-resolves `hoveredPolityId` against the current `snapshot` from the pointer's last known
+  // position, rather than trusting whatever it was set to last. `render` calls this on every snapshot
+  // swap so a server update that changes the hovered cell's owner is reflected immediately, without
+  // waiting on a `pointermove` that may never come if the cursor sits still.
+  const resolveHover = (): void => {
+    hoveredPolityId =
+      hoverPointerPosition === null
+        ? null
+        : polityAtPointer(hoverPointerPosition.clientX, hoverPointerPosition.clientY);
+  };
+
   canvas.addEventListener("pointermove", (event) => {
     if (snapshot === null) return;
+    hoverPointerPosition = { clientX: event.clientX, clientY: event.clientY };
     const next = polityAtPointer(event.clientX, event.clientY);
     if (next === hoveredPolityId) return;
     hoveredPolityId = next;
@@ -154,8 +175,11 @@ export function createWorldMapHost(
   });
 
   // `pointerout` fires whenever the pointer leaves the canvas, including onto a child element; there is
-  // no resting hover, so this always clears rather than re-resolving a position.
+  // no resting hover, so this always clears — both the resolved polity and the position `render` would
+  // otherwise re-resolve against — rather than keeping a position that no longer describes where the
+  // pointer is.
   canvas.addEventListener("pointerout", () => {
+    hoverPointerPosition = null;
     if (snapshot === null || hoveredPolityId === null) return;
     hoveredPolityId = null;
     paint();
@@ -172,6 +196,7 @@ export function createWorldMapHost(
   return {
     render(next: WorldMapSnapshot): void {
       snapshot = next;
+      resolveHover();
       paint();
     },
 

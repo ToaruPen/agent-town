@@ -322,6 +322,61 @@ describe("the world map's hover highlight", () => {
 
     expect(host.selection()).toBeNull();
   });
+
+  /**
+   * §2.2.1 forbids a resting hover: the highlight answers "what is under the pointer right now", not
+   * "what was under it when it last moved". A server-driven `render()` can hand the hovered cell to a
+   * different owner without any `pointermove` at all, and the wash must follow rather than staying on
+   * the nation that used to be there.
+   */
+  it("follows the hovered cell to its new owner across a server update, with the cursor never moving", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot({ history: mapHistory() }));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 3, clientY: 3, bubbles: true }), // cell (0,0): polity-1
+    );
+    log.fills.length = 0;
+
+    const changed = mapHistory();
+    const hoveredCell = changed.worldMap.cells[0];
+    if (hoveredCell === undefined) throw new Error("missing cell fixture");
+    changed.worldMap.cells[0] = { ...hoveredCell, polityId: "polity-2" }; // same cell, new owner
+    host.render(snapshot({ history: changed })); // no pointermove in between
+
+    expect(new Set(log.fills.map(({ alpha }) => alpha))).toContain(WORLD_MAP_SELECTED_POLITY_ALPHA);
+  });
+
+  /**
+   * The mirror case: the hovered cell loses its owner entirely while the old owner still holds
+   * territory elsewhere on the map. A stale hover would keep lighting up that other territory — a de
+   * facto resting mark on a nation the pointer is nowhere near — rather than clearing.
+   */
+  it("clears the hover once its cell loses its owner, even though that owner still holds territory elsewhere", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    host.render(snapshot({ history: mapHistory() }));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 3, clientY: 3, bubbles: true }), // cell (0,0): polity-1
+    );
+    log.fills.length = 0;
+
+    const changed = mapHistory();
+    const hoveredCell = changed.worldMap.cells[0];
+    const relocatedCell = changed.worldMap.cells[3]; // was unowned; now the last polity-1 cell
+    if (hoveredCell === undefined || relocatedCell === undefined) {
+      throw new Error("missing cell fixture");
+    }
+    changed.worldMap.cells[0] = { ...hoveredCell, polityId: null };
+    changed.worldMap.cells[3] = { ...relocatedCell, polityId: "polity-1" };
+    host.render(snapshot({ history: changed })); // no pointermove in between
+
+    expect(new Set(log.fills.map(({ alpha }) => alpha))).not.toContain(
+      WORLD_MAP_SELECTED_POLITY_ALPHA,
+    );
+  });
 });
 
 /** Not a decoration: `cityStates` is what gives a glyph its population tier. */
