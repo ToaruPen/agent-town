@@ -43,21 +43,17 @@ because the row was written and no worker was given the work — write the dispa
 All three stopped at the package boundary rather than reaching into `packages/client/`. Only #4 had client
 cost: three fixtures needed the now-required `id`, done separately in `cde6b42` as conformance, not design.
 
-Still held: nothing. #2 landed at `f99dbde` (see below). #1 was **dispatched 2026-08-18** to Codex on
-`n1-14-autopilot-gap` (branched from `beeb6b8`, fresh worktree): server change first — the supervisor
-decided `orders.chancellorChoice` stays advertised exactly as today, only what commits at the boundary
-changes — then a client conformance pass on the same branch flips
-`nationDashboardViewModel.test.ts:224`, sequentially, because a simulation worker may not edit it.
+Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decisions are now landed work.
 
 ### In flight, dispatched 2026-08-18
 
 | branch | task | worker | outcome |
 |---|---|---|---|
-| `n1-14-autopilot-gap` | #1 autopilot fills the gap, server half | Codex | running |
-| `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | running |
+| `n1-14-autopilot-gap` | #1 autopilot fills the gap: server change, then client conformance, sequentially on one branch | Codex, then a Claude client worker | **merged `0876200`.** See "Autopilot fills the gap" below |
+| `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | worker done at `9ff0c26` (80 files / 1184 tests green, its report); independent review in progress |
 
-Both worktrees under `.worktrees/` are live worker workspaces from dispatch time — no builds, tests,
-installs or git operations in them from anyone else.
+A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
+no builds, tests, installs or git operations in it from anyone else in that window.
 
 **A player whose nation dies gets no explanation.** Nothing crashes — the server's `orders()` returns null
 for a nation it cannot find, and the client's `ownPair` and `ownBreakdown` both guard — but the dashboard
@@ -407,29 +403,34 @@ live. `spatialFixture.ts` looked like the same duplication and was not: only the
 while the facility and demand fixtures have diverged in purpose, so only the trail one moved. Not unifying a
 duplicate that has diverged is as much a result as removing one that has not.
 
-## Autopilot does not fill the gap — it always decides
+## Autopilot fills the gap — decision #1, landed 2026-08-18
 
-C1-4's worker falsified the assumption `hud.md` §3.2 flagged for the owner, with a pre-registered falsifier
-that never fired. Measured:
+Superseded history, kept because the measurement was load-bearing: C1-4's worker measured the old engine
+as always-chancellor (a queued order sat through three boundaries with autopilot on), which falsified the
+fill-the-gap assumption `hud.md` §3.2 had flagged, and the owner ruled the spec's reading wins. The fix is
+merged; the current behaviour table is:
 
-| `autoPilot` | `queued` | what commits |
-|---|---|---|
-| true | anything | `chancellorChoice`. The queued order **waits** — neither obeyed nor discarded |
-| false | non-null | the queued order |
-| false | null | nothing |
+| controller | `autoPilot` | `queued` | what commits |
+|---|---|---|---|
+| agent | — | — | the chancellor's choice, unchanged |
+| player | any | non-null, legal | the queued order, consumed |
+| player | true | null (or illegal, unconsumed) | `chancellorChoice` |
+| player | false | null (or illegal, unconsumed) | nothing |
 
-`sim/nation/engine.ts`'s `selectDirective` tests `autoPilot` before it ever reads the queued list, and the
-chancellor branch returns `consumedQueuedDirectiveId: null`. Live at x8, a queued order sat through three
-boundaries with autopilot on and committed at the first boundary after it went off.
+Landed as six commits on `n1-14-autopilot-gap`, merged fast-forward at `0876200`: the engine change
+(`selectDirective` reads the queue before the mode), a review-driven test commit pinning all four states
+plus the illegal-queue path with mutation evidence, and four client commits flipping every old-semantics
+string, comment and assertion (dashboard §3.2 slot, season report's held-order note, autopilot
+descriptions, toggle live-region announcements, the clock-bar ARIA label — the last two caught only by
+independent review). `bootstrap.ts:134` keeps `autoPilot: true`, correctly: under fill-the-gap a new
+player's first order commits instead of being silently held, so the old trap is gone without touching it.
+`orders.chancellorChoice` is still advertised exactly as before — it is the preview, and only what commits
+changed.
 
-So there are **four** slot states, and the fourth is the one a new player meets first: `bootstrap.ts:134`
-starts nations with `autoPilot: true` and `wsServer.selectNation` does not touch it, so **a brand-new
-player's first order is silently held** until they find a toggle they have no reason to look for.
-
-This is a spec/implementation divergence, not a client question. Spec line 184 —
-`プレイヤーの国も、指示がない季は宰相が決める` — reads as fill-the-gap; `engine.ts` implements
-always-chancellor. **One of the two is wrong and it is the owner's call which.** If the engine changes, one
-test in `nationDashboardViewModel.test.ts` is what flips.
+Wording rule that came out of review, worth keeping: the client cannot judge a queued order's legality
+(an illegal order is left queued, unconsumed, and the chancellor fills in when autopilot is on), so client
+copy describes selection *order* — 実行可能な発令を優先し、なければ宰相 — and never promises unconditional
+execution.
 
 ## The prosperity ceiling, measured on today's main
 
@@ -736,7 +737,9 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Distinguish a vanished agent from a failed provider | `server/src/llm/thoughtBroker.ts:122` | `applyPlan` now throws for an unknown agent, and the existing catch books it as a provider planning failure. Nothing failed — the agent died mid-request. **Unowned** |
 | Deepen `decodeServerMessage`'s validation to match its contract | `shared/src/protocol.ts` | It accepts `nations: [null]`, an all-`null` world map, and a history missing required fields. Needs shape-level work and a decision about how strict the boundary should be, so it is a task rather than a chore |
 | Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
-| Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff. **In the C1-6b continuation brief, dispatched 2026-08-18** |
+| ~~Collapse the three copies of `hexColor` and `element`~~ | `client/src/ui/` | **Already done — this row was stale.** The C1-6b worker verified by grep: one definition each (`worldMapView.ts` exports `hexColor`, `worldChronicle.ts` exports `element`), everything else imports. Kept struck-through as a reminder that this table can rot |
+| Retire `heldOrderNote` and `commitSlot.detail`, or decide to keep them | `client/src/ui/seasonReportViewModel.ts`, `nationDashboardViewModel.ts`, both panels, `.season-report__held` CSS | Since `0876200` both are permanently `null` on every path — a legal queued order is never held, and the client deliberately does not report the illegal-order hold since it judges no legality. The renderers only fire inside null guards, so nothing visible leaks; retiring them is an interface + panel + CSS change and a design decision (would a future surface want the note back?). **Unowned** |
+| Pin `player + queued + autoPilot: false` in the engine's state tests | `server/test/nationEngine.test.ts` | The four-state table's queued row is tested only with `autoPilot: true`; the false side rides on an older test that predates the table framing. The conformance worker flagged the asymmetry. One test, reusing the existing fixtures. **Unowned** |
 | Return focus to the opener when a panel closes | `client/src/ui/directivePanel.ts`, `seasonReportPanel.ts` | hud.md §3.5 names the behaviour and neither panel does it. C1-5 read the existing gap as precedent; recorded here so it is one item against both panels rather than a settled question. **Unowned** |
 | Clear the one lint warning `just check` now carries | `client/src/ui/seasonReportViewModel.ts:296` | `useOptionalChain`, introduced by C1-5 and left because Biome's fix changes the type to `boolean \| undefined`. `report?.entries.some(…) === true` satisfies both. **Unowned** |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
