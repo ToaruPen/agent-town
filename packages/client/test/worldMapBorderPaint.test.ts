@@ -199,13 +199,21 @@ describe("drawTerritoryBorders", () => {
    * visual.md §2.6: the on-demand locate pulse rises and falls once over its 500 ms span, and the paint
    * layer only ever sees the phase the host hands it — never the clock itself. Phase 0.5 is the peak.
    */
-  it("boosts the inner rule to full alpha and flush with the banner at the pulse's peak", () => {
+  /**
+   * "Expansion" grows the band rather than relocating it: the far edge stays pinned at the resting
+   * rule's own inward side, and the near edge reaches out to meet the banner, so the peak frame covers
+   * both bands rather than merely trading one 1 px line for another. A pulse that only slid the rule
+   * onto the banner's own rect would erase the player's banner hue from their frontier for the one
+   * frame that is supposed to be drawing the eye to it — the opposite of visual.md §2.6's point that the
+   * banner hue is what keeps the map reading as nations rather than "one special one."
+   */
+  it("boosts the inner rule to full alpha and grows it flush with the banner at the pulse's peak", () => {
     const { context, painted } = recorder();
 
     drawTerritoryBorders(context, [edge("top", true, undefined, true)], 0.5);
 
     expect(innerRules(painted)[0]?.alpha).toBe(1);
-    expect(innerRules(painted)[0]?.rect).toEqual([CELL, CELL, CELL, 1]);
+    expect(innerRules(painted)[0]?.rect).toEqual([CELL, CELL, CELL, 2]);
   });
 
   it("returns the inner rule to its resting alpha and inset at either end of the pulse", () => {

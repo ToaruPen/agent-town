@@ -361,7 +361,8 @@ const CASING_ALPHA = 0.55;
 /** visual.md §2.6: one band further in than the banner, on the player's own edges only. */
 const INNER_RULE_WIDTH_PX = 1;
 const INNER_RULE_ALPHA = 0.85;
-/** The locate pulse's peak values (visual.md §2.6): full alpha, and one pixel closer to the banner. */
+/** The locate pulse's peak values (visual.md §2.6): full alpha, and the band widened by one pixel to
+ *  reach the banner while keeping its own resting position — see the expansion note below. */
 const PULSE_ALPHA_PEAK = 1;
 const PULSE_EXPANSION_PX = 1;
 
@@ -442,7 +443,14 @@ export function drawTerritoryBorders(
   //
   // A live locate pulse rides on top of that resting line rather than replacing it: `pulseEnvelope`
   // is 0 at either end of the 500 ms span, so a null or completed pulse reproduces the resting values
-  // exactly, and only a live one bends the alpha and inset toward the peak partway through.
+  // exactly, and only a live one bends the alpha, inset and width toward the peak partway through.
+  //
+  // The inset shrinks *and* the width grows by the same amount, so the band's far edge — the resting
+  // rule's own inward side — stays put while the near edge reaches out to the banner. That is what
+  // "expansion" means here: at the peak the rule covers its own resting band and the banner's band
+  // both, rather than vacating the former to occupy the latter. A pulse that only relocated the rule
+  // would erase the player's banner hue from their own frontier for the one frame meant to be drawing
+  // the eye to it — the opposite of what the resting double line (banner hue plus inner rule) is for.
   const pulse = pulsePhase === null ? 0 : pulseEnvelope(pulsePhase);
   context.globalAlpha = INNER_RULE_ALPHA + pulse * (PULSE_ALPHA_PEAK - INNER_RULE_ALPHA);
   context.fillStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
@@ -450,7 +458,7 @@ export function drawTerritoryBorders(
     if (!edge.isPlayer) continue;
     const [x, y, width, height] = edgeRect(
       edge,
-      INNER_RULE_WIDTH_PX,
+      INNER_RULE_WIDTH_PX + pulse * PULSE_EXPANSION_PX,
       BORDER_WIDTH_PX - pulse * PULSE_EXPANSION_PX,
     );
     context.fillRect(x, y, width, height);
