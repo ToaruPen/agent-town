@@ -277,14 +277,13 @@ describe("buildSeasonReportViewModel", () => {
   });
 
   /**
-   * The truth table `sim/nation/engine.ts:104` actually implements: with autopilot on, the chancellor's
-   * selection commits and a queued order is neither obeyed nor discarded — it waits. A season in which
-   * this happened must not read as a season where nothing happened, which is why this is tested against
-   * an otherwise-quiet season rather than a busy one: a held-order note on a busy season would prove
-   * nothing about this specific claim.
+   * The truth table `sim/nation/engine.ts:104` `selectDirective` implements, pinned by the five state
+   * tests atop `nationEngine.test.ts`: `queuedSelection` runs before the function ever looks at
+   * `autoPilot`, so a queued order commits in either autopilot mode and the chancellor only fills a
+   * season with nothing queued. There is no state left where a queued order is held rather than obeyed.
    */
-  describe("the held order — autopilot always decides, never fills a gap", () => {
-    it("notes a queued order as held, not discarded, when autopilot is on in an otherwise quiet season", () => {
+  describe("the held order — no current state produces one", () => {
+    it("has no held-order note when autopilot is on and an order is queued, since the order commits", () => {
       const report = reportFixture({ entries: [], completedDirectiveIds: [] });
       const orders = ordersFixture({
         autoPilot: true,
@@ -293,8 +292,7 @@ describe("buildSeasonReportViewModel", () => {
 
       const view = buildSeasonReportViewModel(report, emptyLog, emptyOwn, orders, CURRENT_YEAR);
 
-      expect(view.heldOrderNote).not.toBeNull();
-      expect(view.heldOrderNote).toContain("祭礼");
+      expect(view.heldOrderNote).toBeNull();
     });
 
     it("has no held-order note once autopilot is off, since a queued order there either commits or is not autopilot's to hold", () => {

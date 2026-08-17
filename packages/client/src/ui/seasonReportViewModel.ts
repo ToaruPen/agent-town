@@ -65,7 +65,7 @@ export interface SeasonReportViewModel {
   headline: string;
   metrics: SeasonReportMetricRow[];
   completedDirectives: SeasonReportCompletedDirectiveRow[];
-  /** Non-null only when autopilot is on and an order is queued — held, not discarded, not obeyed. */
+  /** Always null today: no current state has a held order to report. */
   heldOrderNote: string | null;
 }
 
@@ -263,17 +263,14 @@ function completedDirectiveRow(
 }
 
 /**
- * The truth table `sim/nation/engine.ts:104` selectDirective actually implements: with autopilot on, the
- * chancellor's choice commits and a queued order is neither obeyed nor discarded — it waits at the front
- * of the queue for the first boundary after autopilot goes off. A season in which this happened must not
- * read as a season where nothing happened, or a brand-new player (`sim/nation/bootstrap.ts` starts every
- * nation with `autoPilot: true`) reads their first command as meaningless in the exact state they start
- * in. No cross-check against `completedDirectiveIds` is needed: the engine never consumes a queued id
- * while autopilot is on, so the two conditions below are sufficient on their own.
+ * `sim/nation/engine.ts:104` `selectDirective` runs `queuedSelection` before it ever looks at
+ * `autoPilot`, pinned by the five state tests atop `nationEngine.test.ts`: a queued order commits in
+ * either autopilot mode, and the chancellor only fills a season with nothing queued. There is no state
+ * left where a queued order is held rather than obeyed, so `orders` never yields a note.
  */
 function heldOrderNote(orders: NationOrders | null): string | null {
-  if (orders === null || !orders.autoPilot || orders.queued === null) return null;
-  return `あなたの発令「${directiveKindLabel(orders.queued.kind)}」は自動運転により、この決算では実行されず待機しています。`;
+  void orders;
+  return null;
 }
 
 /**

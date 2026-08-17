@@ -72,7 +72,7 @@ function paintAutoPilot(button: HTMLButtonElement, autoPilot: boolean | null): v
   button.setAttribute(
     "aria-label",
     autoPilot
-      ? "自動運転を切る（A）。今は毎季かならず宰相が決めます"
+      ? "自動運転を切る（A）。今は発令があればそれが実行され、なければ宰相が決めます"
       : "自動運転を入れる（A）。今はあなたの発令だけが実行されます",
   );
 }

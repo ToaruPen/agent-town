@@ -81,9 +81,9 @@ function markCanSend(cancel: Element, canSend: boolean): void {
  * The 次の決算 slot: the one place that answers what commits at the next boundary.
  *
  * Never empty and never a prediction — the view model reads the state the server sent. The cancel
- * control appears whenever an order is queued, including while autopilot is holding it, because the
- * server accepts a cancel in that state (measured) and a waiting order the player cannot withdraw
- * would be the worst of both modes.
+ * control appears whenever an order is queued, in either autopilot mode, because a queued order commits
+ * at the very next boundary regardless of autopilot and the player must be able to withdraw it before
+ * then.
  */
 function commitSlotSection(
   slot: NationCommitSlotViewModel,

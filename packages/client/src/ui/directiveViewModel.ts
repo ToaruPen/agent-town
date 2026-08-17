@@ -228,7 +228,7 @@ function buildCard(
 }
 
 const AUTOPILOT_ON_DESCRIPTION =
-  "自動運転が入っている間は、毎季かならず宰相が決めます。あなたの発令は取り消されず、自動運転を切った次の決算で実行されます。";
+  "自動運転が入っていても、あなたの発令があればそのまま実行されます。発令がない季だけ、宰相が代わりに決めます。";
 const AUTOPILOT_OFF_DESCRIPTION =
   "あなたの発令がそのまま実行されます。発令がない季は何も実行されません。";
 const AUTOPILOT_UNKNOWN_DESCRIPTION =

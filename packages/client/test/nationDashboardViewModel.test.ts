@@ -198,13 +198,11 @@ describe("buildNationDashboardViewModel", () => {
 });
 
 /**
- * The four states of 次の決算, pinned against the server's real rule rather than the design's.
+ * The four states of 次の決算, matching hud.md §3.2's table now that the server implements it.
  *
- * hud.md §3.2 tabulated three states on the assumption that autopilot "fills the gap", so a queued order
- * would commit even with autopilot on. It does not: `sim/nation/engine.ts` `selectDirective` tests
- * `autoPilot` first and the chancellor's branch consumes no queued id. Measured against a live server at
- * x8: a queued order sat through three boundaries with autopilot on, then committed at the first boundary
- * after it went off. §3.2 anticipated this outcome and asked for the order to read as overridden.
+ * `sim/nation/engine.ts` `selectDirective` runs `queuedSelection` before it ever looks at `autoPilot`,
+ * pinned by the five state tests atop `nationEngine.test.ts`: a queued order commits in either autopilot
+ * mode, and the chancellor only fills a season with nothing queued.
  */
 describe("the commit slot", () => {
   const slotFor = (orders: NationOrders | null) =>
@@ -212,7 +210,7 @@ describe("the commit slot", () => {
 
   const queued = { id: "directive-1" as const, kind: "holdFestival" as const, targetCityId: null };
 
-  it("says the chancellor commits whenever autopilot is on", () => {
+  it("says the chancellor commits when autopilot is on and nothing is queued", () => {
     const slot = slotFor(ordersFixture({ autoPilot: true, queued: null }));
 
     expect(slot.kind).toBe("chancellor");
@@ -220,13 +218,13 @@ describe("the commit slot", () => {
     expect(slot.detail).toBeNull();
   });
 
-  /** The state the design's table had no room for, and the one a fresh player is dropped into. */
-  it("still says the chancellor commits when autopilot is on and an order is queued", () => {
+  /** A queued order wins in either autopilot mode — the state a fresh player is dropped into. */
+  it("says the player's order commits even while autopilot is on, since a queued order wins", () => {
     const slot = slotFor(ordersFixture({ autoPilot: true, queued }));
 
-    expect(slot.kind).toBe("chancellor");
-    expect(slot.headline).toBe("備蓄奨励（宰相の既定）");
-    expect(slot.detail).toBe("あなたの発令「祭礼」は自動運転を切るまで待機します");
+    expect(slot.kind).toBe("queued");
+    expect(slot.headline).toBe("祭礼（あなたの発令）");
+    expect(slot.detail).toBeNull();
   });
 
   it("says the player's order commits once autopilot is off", () => {

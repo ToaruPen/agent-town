@@ -584,11 +584,12 @@ describe("the season report", () => {
   });
 
   /**
-   * The hardest case, checked where it actually has to survive: inside the open panel, not just in the
-   * view model. A body that early-returns on `isEmpty` before reading `heldOrderNote` would silently drop
-   * this in exactly the quiet-season case the plan's own test targets.
+   * `heldOrderNote` is always null now that a queued order commits in either autopilot mode
+   * (`sim/nation/engine.ts` `selectDirective` runs `queuedSelection` before it looks at `autoPilot`,
+   * pinned by the five state tests atop `nationEngine.test.ts`). Checked in the mounted panel, not just
+   * the view model, in the same otherwise-quiet-season fixture the old held-order state used.
    */
-  it("shows the held-order note inside the panel even on an otherwise empty season", () => {
+  it("renders no held-order element even with autopilot on and an order queued", () => {
     const mounted = mountAgainstIndexHtml();
     mounted.hud.applyWelcome(unclaimedWorld(), 1_000);
     mounted.hud.applyOrders(
@@ -612,9 +613,7 @@ describe("the season report", () => {
     );
     mounted.hud.toggleReport();
 
-    expect(mounted.roots.report.querySelector(".season-report__held")?.textContent).toContain(
-      "祭礼",
-    );
+    expect(mounted.roots.report.querySelector(".season-report__held")).toBeNull();
   });
 
   /** hud.md §4.5: famine "pins the report open… it does not require the player to press R." */

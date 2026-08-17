@@ -196,15 +196,16 @@ describe("buildDirectiveListViewModel", () => {
 describe("the autopilot mode text", () => {
   /**
    * The label says which state the nation is in and the description says what that costs, because
-   * "自動運転 ON" alone does not tell a player their own order is being held rather than obeyed.
+   * "自動運転 ON" alone does not tell a player that their own order still takes precedence over the
+   * chancellor.
    */
-  it("says the chancellor decides every season while autopilot is on", () => {
+  it("says the player's own order still wins while autopilot is on", () => {
     const view = build(ordersFixture({ autoPilot: true }));
 
     expect(view.autoPilot).toBe(true);
     expect(view.autoPilotLabel).toBe("自動運転 ON（宰相が決めます）");
-    expect(view.autoPilotDescription).toContain("毎季かならず宰相が決めます");
-    expect(view.autoPilotDescription).toContain("自動運転を切った次の決算で実行されます");
+    expect(view.autoPilotDescription).toContain("発令があればそのまま実行されます");
+    expect(view.autoPilotDescription).toContain("発令がない季だけ");
   });
 
   it("says the player's own order runs once autopilot is off", () => {

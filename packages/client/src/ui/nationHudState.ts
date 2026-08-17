@@ -204,7 +204,8 @@ export function applyUpdate(
  * adds a freshly selected directive and resolves the season in the same boundary, so a chancellor-picked
  * festival is never seen sitting in `activeDirectives` first; a player-queued one still passes through
  * here before that boundary runs. Never overwrites an existing key, so the *first* sighting's tick is
- * what is kept — `queued` can repeat across several `orders` messages while autopilot holds it.
+ * what is kept — `queued` can repeat across several `orders` messages within the same season, right up
+ * to the boundary that consumes it.
  */
 function observedFromOrders(
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,

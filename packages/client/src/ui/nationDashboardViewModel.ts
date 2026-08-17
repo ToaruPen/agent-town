@@ -33,9 +33,8 @@ export interface NationActiveDirectiveRow {
 }
 
 /**
- * `chancellor` covers both "autopilot, nothing queued" and "autopilot, an order waiting" — in each case
- * the chancellor is what commits, and the waiting order is reported in `detail` rather than by a state of
- * its own, because the slot answers exactly one question.
+ * `chancellor` is reached only when nothing is queued: a queued order commits in either autopilot mode
+ * and reports as `queued`, so `chancellor` means the chancellor is genuinely filling an empty season.
  */
 export type CommitSlotKind = "queued" | "chancellor" | "idle" | "unknown";
 
@@ -43,11 +42,11 @@ export interface NationCommitSlotViewModel {
   kind: CommitSlotKind;
   /** What commits at the next boundary, in one line. Never empty. */
   headline: string;
-  /** The waiting-order note, set only when autopilot is overriding a queued order. */
+  /** Always null today: no current state has a second line to add under the headline. */
   detail: string | null;
   /** True only for the warning state: no autopilot and nothing queued, so the season is wasted. */
   emphasis: boolean;
-  /** Non-null whenever an order is queued — a waiting order stays cancellable under autopilot (measured). */
+  /** Non-null whenever an order is queued — a queued order stays cancellable up to the boundary that commits it. */
   cancelDirectiveId: DirectiveId | null;
 }
 
@@ -170,38 +169,28 @@ function unknownSlot(): NationCommitSlotViewModel {
 
 function chancellorSlot(orders: NationOrders): NationCommitSlotViewModel {
   const choice = orders.chancellorChoice;
-  const waiting = orders.queued;
   return {
     kind: "chancellor",
     headline:
       choice === null
         ? "宰相は今季なにも選べません"
         : `${directiveKindLabel(choice.kind)}（宰相の既定）`,
-    detail:
-      waiting === null
-        ? null
-        : `あなたの発令「${directiveKindLabel(waiting.kind)}」は自動運転を切るまで待機します`,
+    detail: null,
     emphasis: false,
-    cancelDirectiveId: waiting?.id ?? null,
+    cancelDirectiveId: null,
   };
 }
 
 /**
- * What commits at the next boundary.
+ * What commits at the next boundary — hud.md §3.2's table.
  *
- * The branch order is the *server's*, read off `sim/nation/engine.ts` `selectDirective`: it tests
- * `autoPilot` before it ever looks at the queued list, and the chancellor's branch reports no consumed
- * queued id — so with autopilot on the chancellor decides every season and the player's order is neither
- * read nor discarded. It waits, and commits at the first boundary after autopilot goes off.
- *
- * hud.md §3.2 assumed the opposite ("autopilot fills the gap", so a queued order would win even with
- * autopilot on) and pre-specified this branch for the case the assumption failed. It failed; the table
- * here was measured against a running server, not inferred. If the simulation is later changed to match
- * the spec, this function and its tests are the whole of the client-side change.
+ * The branch order is the *server's*, read off `sim/nation/engine.ts` `selectDirective`: `queuedSelection`
+ * runs before the function ever looks at `autoPilot`, and only falls through to the chancellor when there
+ * is nothing queued or the queued order was rejected. A queued order therefore commits in either autopilot
+ * mode, and the chancellor's branch is reached only for a genuinely empty season.
  */
 function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
   if (orders === null) return unknownSlot();
-  if (orders.autoPilot) return chancellorSlot(orders);
   const queued = orders.queued;
   if (queued !== null) {
     return {
@@ -212,6 +201,7 @@ function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
       cancelDirectiveId: queued.id,
     };
   }
+  if (orders.autoPilot) return chancellorSlot(orders);
   return {
     kind: "idle",
     headline: "この季は何も実行されません",
