@@ -43,14 +43,21 @@ because the row was written and no worker was given the work — write the dispa
 All three stopped at the package boundary rather than reaching into `packages/client/`. Only #4 had client
 cost: three fixtures needed the now-required `id`, done separately in `cde6b42` as conformance, not design.
 
-Still held:
+Still held: nothing. #2 landed at `f99dbde` (see below). #1 was **dispatched 2026-08-18** to Codex on
+`n1-14-autopilot-gap` (branched from `beeb6b8`, fresh worktree): server change first — the supervisor
+decided `orders.chancellorChoice` stays advertised exactly as today, only what commits at the boundary
+changes — then a client conformance pass on the same branch flips
+`nationDashboardViewModel.test.ts:224`, sequentially, because a simulation worker may not edit it.
 
-- **#2 (ceiling)** was waiting on #3 *and on the measurement between them*. That measurement now exists —
-  see "Re-measured on `e0a9398`". Its brief must carry those numbers, because the target changed: the
-  problem is no longer a spread that is too small, it is a field that **converges**.
-- **#1 (autopilot)** collided with #4 in `engine.ts`; #4 has landed, so that reason is gone. What remains is
-  the boundary — the server change flips a test in `nationDashboardViewModel.test.ts`, which a simulation
-  worker may not edit. Server change first, then a client pass on the same branch, sequentially.
+### In flight, dispatched 2026-08-18
+
+| branch | task | worker | outcome |
+|---|---|---|---|
+| `n1-14-autopilot-gap` | #1 autopilot fills the gap, server half | Codex | running |
+| `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | running |
+
+Both worktrees under `.worktrees/` are live worker workspaces from dispatch time — no builds, tests,
+installs or git operations in them from anyone else.
 
 **A player whose nation dies gets no explanation.** Nothing crashes — the server's `orders()` returns null
 for a nation it cannot find, and the client's `ownPair` and `ownBreakdown` both guard — but the dashboard
@@ -71,8 +78,8 @@ was wrong. All four were fixed in `2fd7ccc` with the regression proved by breaki
 watching the new test fail.
 
 **`n1-08-balance-horizon` is now dead.** It raises `NATION_PROSPERITY_POPULATION_REFERENCE` from 10,000 to
-12,000; that constant no longer exists. Deleting it needs the owner — `git branch -D` is refused by this
-supervisor's permission layer.
+12,000; that constant no longer exists. Its worktree was removed 2026-08-18 (it was clean). Deleting the
+branch itself still needs the owner — `git branch -D` is refused by this supervisor's permission layer.
 
 ## What the relative scale costs, in the owner's words
 
@@ -186,12 +193,12 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1, C1-2, C1-3, C1-6a and C1-10 merged).
+  C1-1 through C1-5, C1-6a and C1-10 merged).
 - **The simulation is complete; the N1 slice is not.** The plan's own completion criteria include "opening
   the browser shows live nations, a moving ranking, a working directive panel and a working speed control".
-  Live nations, the ranking and the speed control landed with C1-3; `main.ts` mounts the HUD. **The
-  directive panel is the one clause still unmet**, which is C1-4, and C1-6b then adds the map. Of the other
-  criteria, same-seed reproducibility and seed *divergence* are both genuinely tested —
+  Live nations, the ranking and the speed control landed with C1-3, the directive panel with C1-4
+  (`af74fc5`); `main.ts` mounts the HUD. **The world map is the one piece still unmounted**, which is
+  C1-6b. Of the other criteria, same-seed reproducibility and seed *divergence* are both genuinely tested —
   `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158` — so only that one clause is outstanding.
 
   This paragraph claimed `main.ts` was still 14 lines and that C1-3 was next for four commits after C1-3
@@ -560,12 +567,14 @@ the inner rule, not the alpha); the hover-only change is to be made deliberately
 
 **Owed before more work lands, both:**
 
-- **Rebase.** `89ba3df` is based on `ce37717`; main has since moved to `77798e1` through the player-alpha
-  constant, two docs commits and all five of C1-5's. C1-5 touched `index.html`, `main.ts`, `nationHud.ts` and
-  `nationHudState.ts` — the same four files the map host mounts through — so this rebase, unlike C1-5's, will
-  conflict. **Unowned.** Both client workers stood down on the owner's stop order, so nobody holds this branch;
-  whoever picks it up rebases it themselves rather than having it rebased under them. The nine-piece table
-  above is the whole brief, and the four unstarted pieces have their decisions recorded.
+- **Rebase.** `89ba3df` is based on `ce37717`; main has since moved on through the player-alpha
+  constant, C1-5, #2's normalization and several docs commits. C1-5 touched `index.html`, `main.ts`,
+  `nationHud.ts` and `nationHudState.ts` — the same four files the map host mounts through — so this rebase,
+  unlike C1-5's, will conflict. **Dispatched 2026-08-18** to a fresh client worker that owns the branch and
+  the worktree and rebases onto `beeb6b8` itself — remembering that a dispatch recorded here is not proof of
+  a live owner; the worker's own status is. The nine-piece table above is the whole brief, and the four
+  unstarted pieces have their decisions recorded. The brief also folds in the constant swap below, the
+  `cellAlpha` comment rewrite, and the `hexColor`/`element` collapse from Queued cleanups.
 - **The constant swap.** `MAP_PLAYER_POLITY_ALPHA = 0.32` is at `client/src/render/colors.ts:47` with five
   references: `src/ui/worldMapView.ts:16` and `:113`, `test/worldMapView.test.ts:10` and `:243`,
   `test/worldMapHost.test.ts:10`, `:160` and `:170`. Swap to `WORLD_MAP_PLAYER_POLITY_ALPHA` from
@@ -630,8 +639,9 @@ by reading `protocol.ts` directly.
 
 ## Two of the three "unmerged" branches are not unmerged
 
-`git branch --no-merged main` lists four branches plus `__diag_merge_test`. Only **two** hold work main lacks:
-`c1-06b-world-map-host` (`89ba3df`) and `n1-08-balance-horizon` (`cb58162`). The other two are finished:
+`git branch --no-merged main` lists four branches plus `__diag_merge_test`. Only **one** holds work main
+still wants: `c1-06b-world-map-host` (`89ba3df`). `n1-08-balance-horizon` (`cb58162`) diffs against main but
+is dead — see above; it retunes a constant that no longer exists. The other two are finished:
 
 - `c1-05-season-report` — merged as `38be255..77798e1`. `git cherry` marks all five commits `-`.
 - `c1-06a-territory-tiers` (`03e0bf1`) — **superseded, not pending.** Its work is in main as `3fb4d8d`, and
@@ -726,7 +736,7 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | Distinguish a vanished agent from a failed provider | `server/src/llm/thoughtBroker.ts:122` | `applyPlan` now throws for an unknown agent, and the existing catch books it as a provider planning failure. Nothing failed — the agent died mid-request. **Unowned** |
 | Deepen `decodeServerMessage`'s validation to match its contract | `shared/src/protocol.ts` | It accepts `nations: [null]`, an all-`null` world map, and a history missing required fields. Needs shape-level work and a decision about how strict the boundary should be, so it is a task rather than a chore |
 | Make the new-art gate check new art | `client/test/assetConformance.test.ts:409` | It asserts `NEW_ART_ROOT` is *empty*, so the first conforming PNG fails the suite for existing — and nothing ever runs `checkTile` over that directory, so the advertised gate can neither accept valid new art nor report its violations. Iterate the directory and assert each file's violations are empty instead. Found by Codex review; **unowned**, and independent of the AGENTS.md asset decision |
-| Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff, but it leaves three copies for C1-6b to collapse — the same duplication class the `ARCHIVAL_COLORS` tripwire exists to catch, without a tripwire |
+| Collapse the three copies of `hexColor` and `element` | `client/src/ui/` | C1-3 duplicated both locally rather than exporting from `worldMapView.ts` / `worldChronicle.ts`. That was the right call for its diff. **In the C1-6b continuation brief, dispatched 2026-08-18** |
 | Return focus to the opener when a panel closes | `client/src/ui/directivePanel.ts`, `seasonReportPanel.ts` | hud.md §3.5 names the behaviour and neither panel does it. C1-5 read the existing gap as precedent; recorded here so it is one item against both panels rather than a settled question. **Unowned** |
 | Clear the one lint warning `just check` now carries | `client/src/ui/seasonReportViewModel.ts:296` | `useOptionalChain`, introduced by C1-5 and left because Biome's fix changes the type to `boolean \| undefined`. `report?.entries.some(…) === true` satisfies both. **Unowned** |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
