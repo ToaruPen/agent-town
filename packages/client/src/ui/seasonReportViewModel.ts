@@ -266,10 +266,9 @@ function completedDirectiveRow(
  * `sim/nation/engine.ts:104` `selectDirective` runs `queuedSelection` before it ever looks at
  * `autoPilot`, pinned by the five state tests atop `nationEngine.test.ts`: a queued order commits in
  * either autopilot mode, and the chancellor only fills a season with nothing queued. There is no state
- * left where a queued order is held rather than obeyed, so `orders` never yields a note.
+ * left where a queued order is held rather than obeyed, so this never has one to report.
  */
-function heldOrderNote(orders: NationOrders | null): string | null {
-  void orders;
+function heldOrderNote(_orders: NationOrders | null): string | null {
   return null;
 }
 
@@ -279,8 +278,8 @@ function heldOrderNote(orders: NationOrders | null): string | null {
  * Deviates from hud.md §4.3's original sketch of `(report, polity, ownDirectiveIds)`: `polity` is dropped
  * (nothing here needs the nation's name or colour), and `directiveLog`/`orders`/`currentYear` are added —
  * `directiveLog` because attributing and dating a completed directive needs more than an id set, `orders`
- * because the held-order note (above) cannot be built from the report alone, and `currentYear` because
- * §3.1a puts the calendar year (not the elapsed year the report/directive-log carry) on this surface.
+ * because `heldOrderNote` (above) takes it, and `currentYear` because §3.1a puts the calendar year (not
+ * the elapsed year the report/directive-log carry) on this surface.
  * Reported to the supervisor as a deliberate, justified departure rather than chosen silently.
  */
 export function buildSeasonReportViewModel(
