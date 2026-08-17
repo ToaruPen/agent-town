@@ -238,8 +238,8 @@ describe("buildWorldMapViewModel", () => {
     const view = buildWorldMapViewModel(history, [], marks({ playerPolityId: "polity-2" }));
 
     const owned = view.cells.filter(({ polityId }) => polityId !== null);
-    const player = owned.filter(({ isPlayer }) => isPlayer);
-    const rivals = owned.filter(({ isPlayer }) => !isPlayer);
+    const player = owned.filter(({ polityId }) => polityId === "polity-2");
+    const rivals = owned.filter(({ polityId }) => polityId !== "polity-2");
     expect(player.length).toBeGreaterThan(0);
     expect(rivals.length).toBeGreaterThan(0);
     expect(new Set(player.map(({ polityId }) => polityId))).toEqual(new Set(["polity-2"]));
@@ -253,9 +253,12 @@ describe("buildWorldMapViewModel", () => {
 
   /** Spectating is a real state — the picker exists — and it must not decorate an arbitrary nation. */
   it("marks no nation at all when the player holds none", () => {
-    const view = buildWorldMapViewModel(historyFixture(), [], marks({ playerPolityId: null }));
+    const playerPolityId = null;
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ playerPolityId }));
 
-    expect(view.cells.some(({ isPlayer }) => isPlayer)).toBe(false);
+    expect(
+      view.cells.some(({ polityId }) => polityId !== null && polityId === playerPolityId),
+    ).toBe(false);
     const owned = view.cells.filter(({ polityId }) => polityId !== null);
     expect(new Set(owned.map(({ polityAlpha }) => polityAlpha))).toEqual(
       new Set([WORLD_MAP_POLITY_ALPHA]),
@@ -290,7 +293,7 @@ describe("buildWorldMapViewModel", () => {
       marks({ playerPolityId: "polity-2", hoveredPolityId: "polity-2" }),
     );
 
-    const player = view.cells.filter(({ isPlayer }) => isPlayer);
+    const player = view.cells.filter(({ polityId }) => polityId === "polity-2");
     expect(player.length).toBeGreaterThan(0);
     expect(new Set(player.map(({ polityAlpha }) => polityAlpha))).toEqual(
       new Set([WORLD_MAP_SELECTED_POLITY_ALPHA]),

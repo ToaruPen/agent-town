@@ -36,8 +36,6 @@ export interface WorldMapCellViewModel {
   polityId: string | null;
   polityColor: string | null;
   polityAlpha: number;
-  /** Whether this cell belongs to the nation the player holds. False for every cell when nobody does. */
-  isPlayer: boolean;
 }
 
 export interface WorldMapCityViewModel {
@@ -158,7 +156,6 @@ function buildCells(
     polityId,
     polityColor: polityId === null ? null : (banners.get(polityId) ?? null),
     polityAlpha: cellAlpha(polityId, hoveredPolityId, playerPolityId),
-    isPlayer: polityId !== null && polityId === playerPolityId,
   }));
 }
 
@@ -445,12 +442,10 @@ export function drawTerritoryBorders(
   // is 0 at either end of the 500 ms span, so a null or completed pulse reproduces the resting values
   // exactly, and only a live one bends the alpha, inset and width toward the peak partway through.
   //
-  // The inset shrinks *and* the width grows by the same amount, so the band's far edge — the resting
-  // rule's own inward side — stays put while the near edge reaches out to the banner. That is what
-  // "expansion" means here: at the peak the rule covers its own resting band and the banner's band
-  // both, rather than vacating the former to occupy the latter. A pulse that only relocated the rule
-  // would erase the player's banner hue from their own frontier for the one frame meant to be drawing
-  // the eye to it — the opposite of what the resting double line (banner hue plus inner rule) is for.
+  // The inset shrinks and the width grows by the same amount, so the band's far edge — the resting
+  // rule's own inward side — stays fixed while the near edge reaches out to meet the banner. That is
+  // what "expansion" means here: at the peak the rule spans both its own resting band and the banner's
+  // band as one 2 px mark, rather than relocating a same-size 1 px mark from one to the other.
   const pulse = pulsePhase === null ? 0 : pulseEnvelope(pulsePhase);
   context.globalAlpha = INNER_RULE_ALPHA + pulse * (PULSE_ALPHA_PEAK - INNER_RULE_ALPHA);
   context.fillStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
