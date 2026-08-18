@@ -164,6 +164,107 @@ describe("nation HUD state", () => {
 });
 
 /**
+ * `orders.chancellorChoice` (its `issuedAtTick` landed at `e55e65d`) is the one place a chancellor's pick
+ * ever carries an id before it might commit — a preview, not a commitment. Fill-the-gap (`0876200`)
+ * commits it only when no legal player order wins the boundary, so it is logged the same way `queued`
+ * is: by id, never overwritten once seen, and never added to `ownDirectiveIds` (it is never the
+ * player's own). The client predicts nothing about whether a preview will commit; one that never does
+ * simply sits unread in the log, which is what lets a chancellor-picked `holdFestival` — the one
+ * one-season directive, which completes before `activeDirectives` ever carries it — attribute correctly
+ * once it does commit.
+ */
+describe("the chancellor's previewed choice", () => {
+  it("logs the preview by id, attributed to nobody the player can claim", () => {
+    const state = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+
+    expect(state.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "holdFestival",
+      issuedAtTick: 300,
+    });
+    expect(state.ownDirectiveIds.has("chancellor-polity-1-300")).toBe(false);
+  });
+
+  it("adds nothing when the chancellor has no legal choice to preview", () => {
+    const state = applyOrders(welcomed(), ordersFixture({ chancellorChoice: null }));
+
+    expect(state.directiveLog.size).toBe(0);
+  });
+
+  it("keeps the first-seen preview for a repeated id, and logs a later boundary's id separately", () => {
+    const first = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+    // Same id, a different kind — the projection changed before the boundary committed anything. The
+    // first sighting is kept rather than corrupted by a later preview of the same boundary.
+    const repeated = applyOrders(
+      first,
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "growCity",
+          targetCityId: "city-polity-1-1",
+          issuedAtTick: 300,
+        },
+      }),
+    );
+
+    expect(repeated.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "holdFestival",
+      issuedAtTick: 300,
+    });
+
+    const nextBoundary = applyOrders(
+      repeated,
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-600",
+          kind: "encourageStores",
+          targetCityId: null,
+          issuedAtTick: 600,
+        },
+      }),
+    );
+
+    expect(nextBoundary.directiveLog.get("chancellor-polity-1-600")).toEqual({
+      kind: "encourageStores",
+      issuedAtTick: 600,
+    });
+    expect(nextBoundary.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "holdFestival",
+      issuedAtTick: 300,
+    });
+  });
+
+  it("survives a later update that carries no orders message of its own", () => {
+    const withChoice = applyOrders(welcomed(), ordersFixture());
+    const updated = applyUpdate(withChoice, worldFixture({ tick: 40 }), 2_000);
+
+    expect(updated.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "encourageStores",
+      issuedAtTick: 300,
+    });
+  });
+});
+
+/**
  * Measured against the live server: a fresh connection arrives with `playerNationId === null`, and
  * `wsServer.selectNation` sets the player's nation without re-sending `welcome` — it replies with
  * `orders`. So `orders.nationId` is the only place the client learns which nation is its own, and

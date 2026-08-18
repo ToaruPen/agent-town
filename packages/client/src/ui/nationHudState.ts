@@ -71,8 +71,10 @@ export interface NationHudState {
   generation: number;
   /**
    * Every directive this session has seen the kind and issue tick of, keyed by id. Populated from
-   * `activeDirectives` as it arrives and from `orders.queued`, never overwritten once a key exists —
-   * a directive's kind does not change after it is issued, so the first sighting is authoritative.
+   * `activeDirectives` as it arrives, from `orders.queued`, and from `orders.chancellorChoice` (see
+   * `observedFromOrders` for why the last of those is logged unconditionally, before it is known to
+   * commit) — never overwritten once a key exists, since a directive's kind does not change after it is
+   * issued, so the first sighting is authoritative.
    *
    * Survives `welcome`, unlike `orders`: this is a record of what was observed, not an assertion about
    * the next boundary, so a reconnect gap does not invalidate it (measured against `sim/nation/engine.ts`
@@ -199,13 +201,20 @@ export function applyUpdate(
 }
 
 /**
- * `queued.id`'s kind and issue tick, the moment they arrive — the one directive-log source that reaches a
- * one-season directive (`holdFestival`) before it completes. `engine.ts` `activateBoundaryDirectives`
- * adds a freshly selected directive and resolves the season in the same boundary, so a chancellor-picked
- * festival is never seen sitting in `activeDirectives` first; a player-queued one still passes through
- * here before that boundary runs. Never overwrites an existing key, so the *first* sighting's tick is
- * what is kept — `queued` can repeat across several `orders` messages within the same season, right up
- * to the boundary that consumes it.
+ * `queued.id`'s kind and issue tick, the moment they arrive, plus `chancellorChoice.id`'s — between the
+ * two, every directive-log source that reaches a one-season directive (`holdFestival`) before it
+ * completes. `engine.ts` `activateBoundaryDirectives` adds a freshly selected directive and resolves the
+ * season in the same boundary, so a chancellor-picked festival is never seen sitting in
+ * `activeDirectives` first; a player-queued one still passes through `queued` before that boundary runs,
+ * and the chancellor's own preview passes through `chancellorChoice` regardless of whether it ever
+ * commits. Neither ever populates `ownDirectiveIds` for the chancellor's pick — it is never the player's
+ * own — which is what lets `attributionFor` read a logged-but-not-owned id as 宰相の決定.
+ *
+ * Neither overwrites an existing key, so the *first* sighting is what is kept for each: `queued` can
+ * repeat across several `orders` messages within the same season, right up to the boundary that consumes
+ * it, and `chancellorChoice` can change its projected kind across messages before that same boundary —
+ * the client judges no directive's legality or likelihood of committing, so it does not try to track
+ * which preview was "final," only the first one it saw.
  */
 function observedFromOrders(
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
@@ -216,12 +225,21 @@ function observedFromOrders(
   ownDirectiveIds: ReadonlySet<DirectiveId>;
 } {
   const queued = orders.queued;
-  if (queued === null) return { directiveLog: log, ownDirectiveIds: ownIds };
-  const directiveLog = log.has(queued.id)
-    ? log
-    : new Map(log).set(queued.id, { kind: queued.kind, issuedAtTick: orders.tick });
-  const ownDirectiveIds = ownIds.has(queued.id) ? ownIds : new Set(ownIds).add(queued.id);
-  return { directiveLog, ownDirectiveIds };
+  const directiveLog =
+    queued === null || log.has(queued.id)
+      ? log
+      : new Map(log).set(queued.id, { kind: queued.kind, issuedAtTick: orders.tick });
+  const ownDirectiveIds =
+    queued === null || ownIds.has(queued.id) ? ownIds : new Set(ownIds).add(queued.id);
+  const choice = orders.chancellorChoice;
+  const withChancellorChoice =
+    choice === null || directiveLog.has(choice.id)
+      ? directiveLog
+      : new Map(directiveLog).set(choice.id, {
+          kind: choice.kind,
+          issuedAtTick: choice.issuedAtTick,
+        });
+  return { directiveLog: withChancellorChoice, ownDirectiveIds };
 }
 
 /**

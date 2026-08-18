@@ -119,4 +119,60 @@ describe("seasonReportView", () => {
       attributionLabel: "宰相の決定",
     });
   });
+
+  /**
+   * The gap the handoff doc names directly: `holdFestival` is the one one-season directive, and
+   * `engine.ts` `activateBoundaryDirectives` completes it in the same boundary that selects it — it is
+   * never seen sitting in `nation.activeDirectives`.
+   * `orders.chancellorChoice` is the only place its id, kind and issue tick ever reach the client, and
+   * it must attribute here rather than rendering 発令者不明.
+   */
+  it("attributes a chancellor-picked holdFestival to the chancellor, never 発令者不明", () => {
+    const withChoice = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+    const report = reportFixture({ completedDirectiveIds: ["chancellor-polity-1-300"] });
+    const state = applyUpdate(
+      withChoice,
+      worldFixture({ nations: [nationFixture({ lastReport: report })] }),
+      2_000,
+    );
+
+    const view = seasonReportView(state);
+
+    expect(view?.completedDirectives[0]).toMatchObject({
+      directiveId: "chancellor-polity-1-300",
+      kindLabel: "祭礼",
+      attribution: "chancellor",
+      attributionLabel: "宰相の決定",
+    });
+  });
+
+  /**
+   * A chancellorChoice is a preview, not a commitment (fill-the-gap, `0876200`): it commits only if no
+   * legal player order wins the boundary. A preview that never commits must never appear in a report —
+   * the client predicts nothing about whether it will commit, so it just sits unread in the log — and
+   * must never crash the report that does resolve.
+   */
+  it("leaves a chancellor preview that never committed out of the report, without failing", () => {
+    const withChoice = applyOrders(welcomed(), ordersFixture());
+    const report = reportFixture({ completedDirectiveIds: [] });
+    const state = applyUpdate(
+      withChoice,
+      worldFixture({ nations: [nationFixture({ lastReport: report })] }),
+      2_000,
+    );
+
+    const view = seasonReportView(state);
+
+    expect(view?.completedDirectives).toEqual([]);
+  });
 });
