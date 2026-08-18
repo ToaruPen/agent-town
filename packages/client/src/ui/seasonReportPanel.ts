@@ -1,4 +1,4 @@
-import { resolveOpener, stableSelectorFor } from "./nationDom.js";
+import { type CapturedOpener, captureOpener, resolveOpener } from "./nationDom.js";
 import type {
   SeasonReportCompletedDirectiveRow,
   SeasonReportMetricRow,
@@ -169,12 +169,8 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
   // §4.5 gives it the right to do ("show itself", not move the caret).
   let focusCloseButtonOnNextPaint = false;
   // hud.md §3.5: closing a panel returns focus to whatever opened it. Captured by `toggle()` only — see
-  // `returnFocusToOpener` for why `owner` and `selector` exist alongside the raw element.
-  let opener: {
-    readonly owner: FocusOwner;
-    readonly element: HTMLElement;
-    readonly selector: string | null;
-  } | null = null;
+  // `returnFocusToOpener` for why `owner` rides alongside the shared `CapturedOpener` shape.
+  let opener: (CapturedOpener & { readonly owner: FocusOwner }) | null = null;
 
   /** Split out of `paint()` purely to keep its complexity under the linter's limit. */
   const restoreFocusAfterPaint = (restoreTo: FocusOwner): void => {
@@ -254,11 +250,7 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
         const active = explicitOpener ?? document.activeElement;
         opener =
           active instanceof HTMLElement
-            ? {
-                owner: ownerOf(roots, active),
-                element: active,
-                selector: stableSelectorFor(active),
-              }
+            ? { owner: ownerOf(roots, active), ...captureOpener(active) }
             : null;
         focusCloseButtonOnNextPaint = true;
       }

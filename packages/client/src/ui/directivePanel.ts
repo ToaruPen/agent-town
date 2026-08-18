@@ -1,6 +1,6 @@
 import type { SendClientMessage } from "../net/wsClient.js";
 import type { DirectiveCardViewModel, DirectiveListViewModel } from "./directiveViewModel.js";
-import { meter, resolveOpener, stableSelectorFor } from "./nationDom.js";
+import { type CapturedOpener, captureOpener, meter, resolveOpener } from "./nationDom.js";
 import { issueDirectiveCommand } from "./nationHudState.js";
 import { element } from "./worldChronicle.js";
 
@@ -128,7 +128,7 @@ export function createDirectivePanel(
   let open = false;
   let latest: DirectiveListViewModel | null = null;
   /** Captured by `toggle()` when it opens the panel; consumed and cleared when it closes. */
-  let opener: { readonly element: HTMLElement; readonly selector: string | null } | null = null;
+  let opener: CapturedOpener | null = null;
 
   const paint = (): void => {
     root.hidden = !open;
@@ -165,10 +165,7 @@ export function createDirectivePanel(
       const opening = !open;
       if (opening) {
         const active = explicitOpener ?? document.activeElement;
-        opener =
-          active instanceof HTMLElement
-            ? { element: active, selector: stableSelectorFor(active) }
-            : null;
+        opener = active instanceof HTMLElement ? captureOpener(active) : null;
       }
       open = opening;
       renderedKey = null;

@@ -13,38 +13,87 @@ export function meter(className: string, ratio: number, valueText: string): HTML
 }
 
 /**
- * A CSS selector that can find a freshly rebuilt stand-in for `node`, when it carries the single stable
- * class every node this codebase builds via `element()` (worldChronicle.ts) gets — e.g. the dashboard's
- * own "施策を選ぶ" button, class `nation-dashboard__choose`, which `nationHud.renderPanels()` rebuilds
- * wholesale on every `applyOrders`/`applyUpdate`. Used by `directivePanel.ts` and `seasonReportPanel.ts`
- * to re-resolve an opener that a rebuild elsewhere on the page detached while a panel sat open (hud.md
- * §3.5). `null` when the node has no class to key off (a bare test fixture, `document.body`), in which
- * case a stale reference just stays stale — there is nothing left to re-resolve by.
+ * How to re-find a freshly rebuilt stand-in for the node a `CapturedOpenerSelector` was taken from.
  *
- * Assumes the class is unique enough on the page that the first match is the right one. Not used for
- * `seasonReportPanel.ts`'s own strip toggle: that node is rebuilt by *this controller's own* `paint()`
- * unconditionally on every call, so its selector is a hardcoded constant scoped to `roots.strip` rather
- * than a `document`-wide lookup by a class read off the stale node.
+ * `"id"`: the node had its own `id` (rare — `worldChronicle.ts`'s tab/panel elements, `#inspect-panel-name`
+ * — but page-unique and unambiguous by construction; nothing else needs checking).
+ *
+ * `"scoped"`: the common case — a plain `element()`-built node with a class but no `id` of its own, e.g.
+ * the dashboard's "施策を選ぶ" button. `scopeId` is the `id` of the nearest ANCESTOR that has one — every
+ * root `main.ts` looks up (`#nation-dashboard`, `#directive-panel`, …) carries one, and none of them are
+ * ever torn down and replaced wholesale the way their children are, so this stays reliable across a
+ * rebuild. `className` narrows the search to that scope; `dataKey`, when the node carries a `data-*`
+ * attribute (`directivePanel.ts`'s `data-directive-key` is the only one today), narrows further to the
+ * *specific* same-class sibling — required because a class is not always a singleton within its scope
+ * (one `.directive-panel__submit` exists per card). Without a `dataKey`, resolution only succeeds if the
+ * class turns out to be the only match in scope; guessing the first of several is exactly the bug this
+ * replaced (a rebuilt-and-refocused submit control could otherwise land on an unrelated card).
  */
-export function stableSelectorFor(node: HTMLElement): string | null {
+type CapturedOpenerSelector =
+  | { readonly kind: "id"; readonly id: string }
+  | {
+      readonly kind: "scoped";
+      readonly scopeId: string;
+      readonly className: string;
+      readonly dataKey: { readonly name: string; readonly value: string } | null;
+    };
+
+/**
+ * Captures how to re-find `node` later, when it carries either its own `id` or a class inside an
+ * identifiable ancestor (see `CapturedOpenerSelector`). `null` when neither is available (a bare test
+ * fixture, `document.body`) — a stale reference then just stays stale, there is nothing to re-resolve by.
+ */
+function captureOpenerSelector(node: HTMLElement): CapturedOpenerSelector | null {
+  if (node.id !== "") return { kind: "id", id: node.id };
+
+  const scope = node.closest<HTMLElement>("[id]");
   const className = node.classList[0];
-  return className === undefined ? null : `.${className}`;
+  if (scope === null || className === undefined) return null;
+
+  const dataAttribute = [...node.attributes].find((attribute) =>
+    attribute.name.startsWith("data-"),
+  );
+  return {
+    kind: "scoped",
+    scopeId: scope.id,
+    className,
+    dataKey:
+      dataAttribute === undefined ? null : { name: dataAttribute.name, value: dataAttribute.value },
+  };
 }
 
-/** A captured opener, as `stableSelectorFor` produces it: the raw node, plus a fallback to re-find it by. */
+function resolveOpenerSelector(selector: CapturedOpenerSelector): HTMLElement | null {
+  if (selector.kind === "id") return document.getElementById(selector.id);
+
+  const scope = document.getElementById(selector.scopeId);
+  if (scope === null) return null;
+  const candidates = [...scope.getElementsByClassName(selector.className)].filter(
+    (candidate): candidate is HTMLElement => candidate instanceof HTMLElement,
+  );
+  if (selector.dataKey === null) return candidates.length === 1 ? (candidates[0] ?? null) : null;
+  const { name, value } = selector.dataKey;
+  return candidates.find((candidate) => candidate.getAttribute(name) === value) ?? null;
+}
+
+/** A captured opener (hud.md §3.5): the raw node, plus a fallback to re-find it by if a rebuild detaches it. */
 export interface CapturedOpener {
   readonly element: HTMLElement;
-  readonly selector: string | null;
+  readonly selector: CapturedOpenerSelector | null;
+}
+
+/** Builds the `selector` half of a `CapturedOpener` from the node being captured. */
+export function captureOpener(node: HTMLElement): CapturedOpener {
+  return { element: node, selector: captureOpenerSelector(node) };
 }
 
 /**
  * Resolves a captured opener (hud.md §3.5) to a live, focusable node: the raw reference if a rebuild
- * elsewhere on the page has not detached it, otherwise a fresh match for its `stableSelectorFor` selector,
+ * elsewhere on the page has not detached it, otherwise a fresh match for its `CapturedOpenerSelector`,
  * otherwise `null` — the opener was genuinely removed from the page, not just rebuilt, and there is
  * nothing sensible left to focus. Shared by `directivePanel.ts` and `seasonReportPanel.ts` rather than
  * duplicated: both panels face the identical staleness once an opener is captured as a raw node.
  */
 export function resolveOpener(opener: CapturedOpener): HTMLElement | null {
   if (opener.element.isConnected) return opener.element;
-  return opener.selector === null ? null : document.querySelector<HTMLElement>(opener.selector);
+  return opener.selector === null ? null : resolveOpenerSelector(opener.selector);
 }

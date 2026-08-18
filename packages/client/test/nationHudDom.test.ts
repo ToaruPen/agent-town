@@ -266,6 +266,44 @@ describe("the order desk's controls", () => {
   });
 
   /**
+   * Reviewer-found regression: `.directive-panel__submit` is not a singleton class the way
+   * `.nation-dashboard__choose` is — one exists per card, and the panel really does rebuild them all
+   * while some *other* panel (the season report, opened by `R` without leaving this one) sits on top. A
+   * class-only, document-wide re-resolution would land on whichever submit button happens to be first,
+   * not the one that was actually the opener — `data-directive-key` is what actually distinguishes them.
+   */
+  it("returns focus to the same rebuilt submit button, not merely the first one sharing its class", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    hud.toggleDirectives();
+    const submits = [...roots.directives.querySelectorAll<HTMLElement>("[data-directive-key]")];
+    expect(submits.length).toBeGreaterThan(1);
+    const target = submits[2];
+    expect(target).toBeDefined();
+    const targetKey = (target as HTMLElement).getAttribute("data-directive-key");
+    (target as HTMLElement).focus();
+    expect(document.activeElement).toBe(target);
+
+    hud.toggleReport();
+    expect(roots.report.hidden).toBe(false);
+
+    // Rebuilds the directive panel's cards while the report sits open, same mechanism as the dashboard
+    // regression above — only here the opener is one of several same-class siblings, not a singleton.
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: true }));
+    const rebuiltTarget = roots.directives.querySelector<HTMLElement>(
+      `[data-directive-key="${targetKey}"]`,
+    );
+    expect(rebuiltTarget).not.toBeNull();
+    expect(rebuiltTarget).not.toBe(target);
+
+    hud.toggleReport();
+
+    expect(roots.report.hidden).toBe(true);
+    expect(document.activeElement).toBe(rebuiltTarget);
+  });
+
+  /**
    * The ambiguous case §3.5 leaves unstated: the opener can vanish from the document while the panel is
    * open (a dashboard rebuild, say). Closing must not throw and must not hand focus to a detached node —
    * there is nothing sensible left to return it to, so it is left wherever the browser's default lands.
