@@ -1,4 +1,5 @@
 import {
+  NATION_TICKS_PER_SEASON,
   WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
   WORLD_MAP_SELECTED_POLITY_ALPHA,
@@ -8,6 +9,11 @@ import { describe, expect, it } from "vitest";
 
 import { MAP_CITY_FILL_COLOR, NATION_BANNER_RING } from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
+import {
+  TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
+  TERRITORY_CHANGE_HATCH_PEAK_ALPHA,
+  territoryChangeStagger,
+} from "../src/ui/worldMapChangeViewModel.js";
 import {
   buildWorldMapViewModel,
   polityIdAtWorldMapPosition,
@@ -19,7 +25,7 @@ function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-/** Every `WorldMapMarks` field is required, so every literal needs all four; this fills in "none of
+/** Every `WorldMapMarks` field is required, so every literal needs all six; this fills in "none of
  *  the above" for whichever ones a test does not care about. */
 function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
   return {
@@ -27,6 +33,8 @@ function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
     hoveredPolityId: null,
     pulsePhase: null,
     openCityId: null,
+    tick: 0,
+    territoryChanges: new Map(),
     ...overrides,
   };
 }
@@ -513,6 +521,130 @@ describe("world map city tiers", () => {
     const view = buildWorldMapViewModel(historyFixture());
 
     expect(view.cities.some(({ isOpen }) => isOpen)).toBe(false);
+  });
+});
+
+/**
+ * visual.md §2.4: territory change is a per-cell overlay driven by the host's own accumulated
+ * `territoryChanges`, keyed by index — `buildWorldMapViewModel` never diffs `history` against a previous
+ * snapshot to find one.
+ */
+describe("world map territory change", () => {
+  // Array index 1 is (x:1, y:0) in this 4-wide fixture — `polity-1`'s in the fixture, tracked here as
+  // changing to `polity-2`. `view.cells[CHANGED_CELL_INDEX]` is asserted against directly rather than a
+  // `.find(pos...)` lookup, so a position typo can never silently target a different, untracked cell.
+  // Its own stagger delay (`territoryChangeStagger(1)`) is the tick its window actually starts at — the
+  // flash has not begun a single tick before that, which is exactly what the stagger requirement means.
+  const CHANGED_CELL_INDEX = 1;
+  const changedCellStart = territoryChangeStagger(CHANGED_CELL_INDEX);
+
+  it("flashes a changed cell in the tracked change's own banner colour at the peak alpha the instant it starts", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(
+      history,
+      [],
+      marks({
+        tick: changedCellStart,
+        territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: "polity-2", changeTick: 0 }]]),
+      }),
+    );
+
+    expect(view.cells[CHANGED_CELL_INDEX]).toMatchObject({
+      polityColor: bannerFor(history, "polity-2"),
+      polityAlpha: TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
+    });
+  });
+
+  /**
+   * `history.worldMap.cells` only refreshes on a `welcome`, so the tracked change's own `polityId` — not
+   * the cell's (possibly stale) resting one — is what a live flash must draw in. This cell reads
+   * `polity-1` from the fixture's `history`; tracking a change there to `polity-2` and seeing the flash
+   * paint in `polity-2`'s banner is the only way to tell the two colour sources apart.
+   */
+  it("resolves the flash colour from the tracked change, not from the cell's own possibly-stale owner", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(
+      history,
+      [],
+      marks({
+        tick: changedCellStart,
+        territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: "polity-2", changeTick: 0 }]]),
+      }),
+    );
+
+    const cell = view.cells[CHANGED_CELL_INDEX];
+    expect(cell?.polityColor).toBe(bannerFor(history, "polity-2"));
+    expect(cell?.polityColor).not.toBe(bannerFor(history, "polity-1"));
+  });
+
+  it("settles the flash into the resting alpha and hands off to the recent-change hatch", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(
+      history,
+      [],
+      marks({
+        tick: 100, // well past both the stagger delay and the 30-tick flash, for any cell in this fixture
+        territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: "polity-2", changeTick: 0 }]]),
+      }),
+    );
+
+    const cell = view.cells[CHANGED_CELL_INDEX];
+    // Resting alpha for this cell: unhovered, unplayed rival territory, per its own history entry.
+    expect(cell?.polityAlpha).toBe(WORLD_MAP_POLITY_ALPHA);
+    expect(cell?.polityColor).toBe(bannerFor(history, "polity-2"));
+    expect(cell?.recentChangeHatchAlpha).toBeGreaterThan(0);
+    expect(cell?.recentChangeHatchAlpha).toBeLessThanOrEqual(TERRITORY_CHANGE_HATCH_PEAK_ALPHA);
+  });
+
+  it("leaves a cell with no tracked change entirely unmarked, at any tick", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(history, [], marks({ tick: 5_000 }));
+
+    for (const cell of view.cells) expect(cell.recentChangeHatchAlpha).toBe(0);
+  });
+
+  /** No stated treatment in visual.md §2.4 for a cell changing to unowned; suppressing the mark — there
+   *  is no banner to flash or hatch into — is the safe reading rather than inventing one. */
+  it("suppresses the mark when the tracked change's new owner is null", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(
+      history,
+      [],
+      marks({
+        tick: changedCellStart,
+        territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: null, changeTick: 0 }]]),
+      }),
+    );
+
+    const cell = view.cells[CHANGED_CELL_INDEX];
+    expect(cell?.polityColor).toBe(bannerFor(history, "polity-1"));
+    expect(cell?.polityAlpha).toBe(WORLD_MAP_POLITY_ALPHA);
+    expect(cell?.recentChangeHatchAlpha).toBe(0);
+  });
+
+  it("clears both the flash and the hatch once the change's own season boundary has passed", () => {
+    const history = historyFixture();
+    const view = buildWorldMapViewModel(
+      history,
+      [],
+      marks({
+        tick: NATION_TICKS_PER_SEASON + 1,
+        territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: "polity-2", changeTick: 0 }]]),
+      }),
+    );
+
+    const cell = view.cells[CHANGED_CELL_INDEX];
+    expect(cell?.polityAlpha).toBe(WORLD_MAP_POLITY_ALPHA); // back to this cell's own resting alpha
+    expect(cell?.polityColor).toBe(bannerFor(history, "polity-1")); // and its own resting colour
+    expect(cell?.recentChangeHatchAlpha).toBe(0);
+  });
+
+  /** `WorldMapViewModel.tick` is what `drawRecentChangeHatch` uses as the hatch's own moving `onStripe`
+   *  phase (§2.2.3/§2.4) — a plain pass-through, same idiom as `pulsePhase`. */
+  it("carries tick onto the view model unchanged", () => {
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ tick: 4_242 }));
+
+    expect(view.tick).toBe(4_242);
   });
 });
 

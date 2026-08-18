@@ -1,4 +1,4 @@
-import type { NationWorldState } from "@agent-town/shared";
+import type { NationWorldState, WorldCellChange } from "@agent-town/shared";
 import { Application, Assets, TextureStyle } from "pixi.js";
 
 import { type CityViewApp, createCityViewPanel } from "./local/cityViewPanel.js";
@@ -75,12 +75,15 @@ function mapSnapshot(
   world: NationWorldState,
   playerPolityId: string | null,
   openCityId: string | null,
+  changedCells: readonly WorldCellChange[],
 ): WorldMapSnapshot {
   return {
     history: world.history,
     cityStates: world.nations.flatMap(({ cities }) => cities),
     playerPolityId,
     openCityId,
+    tick: world.tick,
+    changedCells,
   };
 }
 
@@ -110,12 +113,25 @@ function mountNationHud(roots: NationHudRoots): NationHudHandle {
   // than here: a nation switch or death needs to compare target *identity* against what is currently
   // shown, not merely whether a redraw key changed or an open has ever happened.
   let citySync: CityViewSyncController | null = null;
-  const paintMap = (): void => {
+  /**
+   * `changedCells` defaults to empty: only the `onUpdate` handler below ever has a fresh delta to
+   * forward, straight from the wire (`wsClient.ts`'s own second `onUpdate` argument). Every other caller
+   * is repainting the *same* world state — a welcome, an orders echo, a city-view close — and the host's
+   * own accumulator already remembers whatever change is still animating, so there is nothing new to add.
+   */
+  const paintMap = (changedCells: readonly WorldCellChange[] = []): void => {
     if (world !== null) {
       // `citySync?.shownCityId() ?? null` rather than a separately tracked variable: the world map's
       // own "open city" mark (traversal.md §2.2) must agree with what the panel actually shows, and
       // reading it from `citySync` — the single owner of that fact — is what keeps it from drifting.
-      map?.render(mapSnapshot(world, hud.state().playerNationId, citySync?.shownCityId() ?? null));
+      map?.render(
+        mapSnapshot(
+          world,
+          hud.state().playerNationId,
+          citySync?.shownCityId() ?? null,
+          changedCells,
+        ),
+      );
     }
   };
   /** Resolves the player's target (plan: "default target is the player's capital") and hands it to
@@ -138,13 +154,13 @@ function mountNationHud(roots: NationHudRoots): NationHudHandle {
       paintCityView();
       paintMap();
     },
-    onUpdate: (state) => {
+    onUpdate: (state, changedCells) => {
       hud.applyUpdate(state, Date.now());
       world = state;
       paintCityView();
       // Repainted from the server, not from the pointer. This is the whole point of the host: a border
       // that changed hands or a city that grew a tier appears when it happens, not when next clicked.
-      paintMap();
+      paintMap(changedCells);
     },
     onOrders: (message) => {
       hud.applyOrders(message);

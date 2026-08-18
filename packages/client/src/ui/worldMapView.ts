@@ -18,6 +18,10 @@ import {
 } from "../render/colors.js";
 import { assignNationBanners } from "../render/nationBanner.js";
 import { type CityGlyph, chronicleCityGlyph } from "./worldCityViewModel.js";
+import {
+  TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
+  territoryChangePhase,
+} from "./worldMapChangeViewModel.js";
 import { extractTerritoryEdges, type TerritoryEdge } from "./worldTerritoryViewModel.js";
 
 const TERRAIN_VIEW = {
@@ -36,6 +40,10 @@ export interface WorldMapCellViewModel {
   polityId: string | null;
   polityColor: string | null;
   polityAlpha: number;
+  /** visual.md §2.4: the recent-change hatch's own alpha for this instant, 0 outside its window. While
+   *  this is above 0 (or while a flash is live), `polityColor` is the tracked change's own banner, not
+   *  necessarily the colour a plain lookup of `polityId` would give — see `WorldMapMarks.territoryChanges`. */
+  recentChangeHatchAlpha: number;
 }
 
 export interface WorldMapCityViewModel {
@@ -77,6 +85,17 @@ export interface WorldMapRouteViewModel {
 }
 
 /**
+ * What the host's own accumulator tracks per changed cell index (visual.md §2.4), fed in through
+ * `WorldMapMarks.territoryChanges`. `polityId` is the wire's own new owner (`WorldCellChange.polityId`),
+ * not derived from `WorldHistory`: `history.worldMap.cells` only refreshes on a `welcome`, so a change
+ * can still be live before the cell's own resting fields have caught up to it.
+ */
+export interface TrackedTerritoryChange {
+  polityId: string | null;
+  changeTick: number;
+}
+
+/**
  * Who the map is drawn *for*, as opposed to what is momentarily under the pointer. The player's nation
  * is a resting state that lasts a session; a hover is transient and universal — it applies to any
  * nation, including rivals (visual.md §2.2.1's equality principle). Keeping the two fields apart is what
@@ -106,6 +125,20 @@ export interface WorldMapMarks {
    * (always the player's own, in N1) whose local view is on screen right now.
    */
   openCityId: string | null;
+  /**
+   * The current tick — the input every phase in `worldMapChangeViewModel.ts` is a pure function of, and
+   * also the recent-change hatch's own moving `onStripe` phase (visual.md §2.2.3/§2.4). A plain number
+   * like `pulsePhase`: the host reads it fresh from the payload that arrived, and this module only ever
+   * turns it into a frame.
+   */
+  tick: number;
+  /**
+   * Territory changes the host is still animating, keyed by cell index (visual.md §2.4). Accumulated by
+   * the host from the wire's own per-season delta (`WorldCellChange`) and pruned once each entry's own
+   * window has fully decayed — never re-derived here by diffing `history` against a previous snapshot, or
+   * a coalesced update would silently lose a flash.
+   */
+  territoryChanges: ReadonlyMap<number, TrackedTerritoryChange>;
 }
 
 const NO_MARKS: WorldMapMarks = {
@@ -113,6 +146,8 @@ const NO_MARKS: WorldMapMarks = {
   hoveredPolityId: null,
   pulsePhase: null,
   openCityId: null,
+  tick: 0,
+  territoryChanges: new Map(),
 };
 
 export interface WorldMapViewModel {
@@ -128,6 +163,8 @@ export interface WorldMapViewModel {
   };
   /** See `WorldMapMarks.pulsePhase` — carried through unchanged for `drawTerritoryBorders`. */
   pulsePhase: number | null;
+  /** See `WorldMapMarks.tick` — carried through unchanged for the recent-change hatch's moving phase. */
+  tick: number;
 }
 
 export function hexColor(color: number): string {
@@ -153,6 +190,57 @@ function cellAlpha(
   return polityId === playerPolityId ? WORLD_MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
 }
 
+function lerp(from: number, to: number, progress: number): number {
+  return from + (to - from) * progress;
+}
+
+interface CellChangeVisuals {
+  polityColor: string | null;
+  polityAlpha: number;
+  recentChangeHatchAlpha: number;
+}
+
+/**
+ * Resolves what a cell's territory layers paint this tick, given its resting fill and whatever change the
+ * host is still tracking for it. A cell with no tracked change, or one whose new owner is null (no banner
+ * to flash or hatch into — visual.md §2.4 has no stated treatment for a cell changing to unowned, and
+ * suppressing the mark is the safe reading), just reproduces its resting fill unchanged.
+ */
+function cellChangeVisuals(
+  restingColor: string | null,
+  restingAlpha: number,
+  tracked: TrackedTerritoryChange | undefined,
+  banners: ReadonlyMap<string, string>,
+  tick: number,
+  index: number,
+): CellChangeVisuals {
+  const resting: CellChangeVisuals = {
+    polityColor: restingColor,
+    polityAlpha: restingAlpha,
+    recentChangeHatchAlpha: 0,
+  };
+  if (tracked === undefined || tracked.polityId === null) return resting;
+  const changeColor = banners.get(tracked.polityId) ?? null;
+  if (changeColor === null) return resting;
+
+  const phase = territoryChangePhase(tick, tracked.changeTick, index);
+  if (phase.flashProgress !== null) {
+    return {
+      polityColor: changeColor,
+      polityAlpha: lerp(TERRITORY_CHANGE_FLASH_PEAK_ALPHA, restingAlpha, phase.flashProgress),
+      recentChangeHatchAlpha: 0,
+    };
+  }
+  if (phase.hatchAlpha > 0) {
+    return {
+      polityColor: changeColor,
+      polityAlpha: restingAlpha,
+      recentChangeHatchAlpha: phase.hatchAlpha,
+    };
+  }
+  return resting;
+}
+
 /**
  * The fill takes the **banner** colour, not the archival `Polity.color` it used to. The archival values
  * are muted for large flat areas and collide across worlds (visual.md §1.3), so the wash was the one
@@ -163,17 +251,32 @@ function buildCells(
   hoveredPolityId: string | null,
   banners: ReadonlyMap<string, string>,
   playerPolityId: string | null,
+  tick: number,
+  territoryChanges: ReadonlyMap<number, TrackedTerritoryChange>,
 ): WorldMapCellViewModel[] {
   const { width } = history.worldMap;
-  return history.worldMap.cells.map(({ terrain, polityId }, index) => ({
-    pos: { x: index % width, y: Math.floor(index / width) },
-    terrain,
-    terrainLabel: TERRAIN_VIEW[terrain].label,
-    terrainColor: TERRAIN_VIEW[terrain].color,
-    polityId,
-    polityColor: polityId === null ? null : (banners.get(polityId) ?? null),
-    polityAlpha: cellAlpha(polityId, hoveredPolityId, playerPolityId),
-  }));
+  return history.worldMap.cells.map(({ terrain, polityId }, index) => {
+    const restingColor = polityId === null ? null : (banners.get(polityId) ?? null);
+    const restingAlpha = cellAlpha(polityId, hoveredPolityId, playerPolityId);
+    const visuals = cellChangeVisuals(
+      restingColor,
+      restingAlpha,
+      territoryChanges.get(index),
+      banners,
+      tick,
+      index,
+    );
+    return {
+      pos: { x: index % width, y: Math.floor(index / width) },
+      terrain,
+      terrainLabel: TERRAIN_VIEW[terrain].label,
+      terrainColor: TERRAIN_VIEW[terrain].color,
+      polityId,
+      polityColor: visuals.polityColor,
+      polityAlpha: visuals.polityAlpha,
+      recentChangeHatchAlpha: visuals.recentChangeHatchAlpha,
+    };
+  });
 }
 
 /** Banners come from `history.polities`, the set fixed at world generation, so a nation's colour
@@ -255,11 +358,11 @@ export function buildWorldMapViewModel(
   marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
-  const { playerPolityId, hoveredPolityId, pulsePhase, openCityId } = marks;
+  const { playerPolityId, hoveredPolityId, pulsePhase, openCityId, tick, territoryChanges } = marks;
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
-    cells: buildCells(history, hoveredPolityId, banners, playerPolityId),
+    cells: buildCells(history, hoveredPolityId, banners, playerPolityId, tick, territoryChanges),
     cities: buildCities(
       history,
       hoveredPolityId,
@@ -275,6 +378,7 @@ export function buildWorldMapViewModel(
       label: "現在地",
     },
     pulsePhase,
+    tick,
   };
 }
 
@@ -367,6 +471,39 @@ function drawPolityOverlays(
     context.globalAlpha = cell.polityAlpha;
     context.fillStyle = cell.polityColor;
     context.fillRect(origin.x, origin.y, WORLD_MAP_CELL_SIZE_PX, WORLD_MAP_CELL_SIZE_PX);
+  }
+  context.globalAlpha = previousAlpha;
+}
+
+/**
+ * visual.md §2.2.3: hatch a cell when its diagonal band index falls on the stripe. §2.4 reuses this same
+ * function for the recent-change hatch with a moving `phase`, in place of the contested hatch's static 0.
+ */
+function onStripe(cx: number, cy: number, phase: number): boolean {
+  return (cx + cy + phase) % 4 === 0;
+}
+
+const RECENT_CHANGE_HATCH_LINE_WIDTH_PX = 1;
+
+/** Layer 5 (visual.md §2.2/§2.4): a diagonal 1 px line per stripe-selected changed cell, in that cell's
+ *  own tracked banner colour, at its own decaying alpha. */
+function drawRecentChangeHatch(
+  context: CanvasRenderingContext2D,
+  cells: readonly WorldMapCellViewModel[],
+  tick: number,
+): void {
+  const previousAlpha = context.globalAlpha;
+  context.lineWidth = RECENT_CHANGE_HATCH_LINE_WIDTH_PX;
+  for (const cell of cells) {
+    if (cell.recentChangeHatchAlpha <= 0 || cell.polityColor === null) continue;
+    if (!onStripe(cell.pos.x, cell.pos.y, tick)) continue;
+    const origin = cellOrigin(cell.pos);
+    context.globalAlpha = cell.recentChangeHatchAlpha;
+    context.strokeStyle = cell.polityColor;
+    context.beginPath();
+    context.moveTo(origin.x, origin.y + WORLD_MAP_CELL_SIZE_PX);
+    context.lineTo(origin.x + WORLD_MAP_CELL_SIZE_PX, origin.y);
+    context.stroke();
   }
   context.globalAlpha = previousAlpha;
 }
@@ -612,6 +749,7 @@ export function renderWorldMapCanvas(canvas: HTMLCanvasElement, view: WorldMapVi
   context.imageSmoothingEnabled = false;
   drawTerrain(context, view);
   drawPolityOverlays(context, view.cells);
+  drawRecentChangeHatch(context, view.cells, view.tick);
   drawTerritoryBorders(context, view.territoryEdges, view.pulsePhase);
   drawRoutes(context, view);
   drawCities(context, view);

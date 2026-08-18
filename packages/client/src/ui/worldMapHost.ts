@@ -1,9 +1,11 @@
-import type { NationCityState, WorldHistory } from "@agent-town/shared";
+import type { NationCityState, WorldCellChange, WorldHistory } from "@agent-town/shared";
 
+import { nextSeasonBoundary } from "./worldMapChangeViewModel.js";
 import {
   buildWorldMapViewModel,
   polityIdAtWorldMapPosition,
   renderWorldMapCanvas,
+  type TrackedTerritoryChange,
   worldMapPositionFromPointer,
 } from "./worldMapView.js";
 
@@ -19,6 +21,16 @@ export interface WorldMapSnapshot {
   playerPolityId: string | null;
   /** The city the docked local view currently shows, or null while it is closed (traversal.md §2.2). */
   openCityId: string | null;
+  /** The tick this payload was current as of — the input every phase in `worldMapChangeViewModel.ts` is
+   *  a pure function of (visual.md §2.4). */
+  tick: number;
+  /**
+   * This payload's own per-season territory delta (`WorldCellChange`, `nation.ts:127`) — empty for a
+   * `clock` heartbeat, which carries none. The host folds each entry into its own accumulator below and
+   * never re-derives one by diffing `history` against a previous snapshot, or a coalesced update would
+   * silently lose a flash.
+   */
+  changedCells: readonly WorldCellChange[];
 }
 
 export interface WorldMapHostController {
@@ -93,6 +105,11 @@ export function createWorldMapHost(
   let hoverPointerPosition: { clientX: number; clientY: number } | null = null;
   // Persistent: the last nation clicked, unaffected by hover or by a server-driven repaint.
   let clickedPolityId: string | null = null;
+  // Territory changes still animating, keyed by cell index (visual.md §2.4). The wire only ever reports
+  // a change the instant it happens — every render after that, including a plain `clock` heartbeat with
+  // no `changedCells` of its own, must still know when each tracked change started so its flash and
+  // hatch keep decaying. Pruned in `updateTrackedTerritoryChanges` once a change's own window closes.
+  const territoryChanges = new Map<number, TrackedTerritoryChange>();
   // Wall clock start of the current locate pulse, or null between pulses. Read fresh on every paint —
   // not just from the frame loop below — so a server-driven repaint that happens to land mid-pulse still
   // shows the correct phase instead of one frame behind it.
@@ -107,6 +124,21 @@ export function createWorldMapHost(
     return elapsed >= LOCATE_PULSE_DURATION_MS ? null : elapsed / LOCATE_PULSE_DURATION_MS;
   };
 
+  /**
+   * Folds `next.changedCells` into the accumulator and prunes every entry whose own season boundary the
+   * current tick has already reached — run on every `render`, not only one that happens to carry a fresh
+   * change, so a tracked change keeps decaying (and eventually clears) across the plain `clock` heartbeats
+   * that make up most repaints.
+   */
+  const updateTrackedTerritoryChanges = (next: WorldMapSnapshot): void => {
+    for (const change of next.changedCells) {
+      territoryChanges.set(change.index, { polityId: change.polityId, changeTick: next.tick });
+    }
+    for (const [index, tracked] of territoryChanges) {
+      if (next.tick >= nextSeasonBoundary(tracked.changeTick)) territoryChanges.delete(index);
+    }
+  };
+
   const paint = (): void => {
     if (snapshot === null) return;
     const view = buildWorldMapViewModel(snapshot.history, snapshot.cityStates, {
@@ -114,6 +146,8 @@ export function createWorldMapHost(
       hoveredPolityId,
       pulsePhase: pulsePhase(),
       openCityId: snapshot.openCityId,
+      tick: snapshot.tick,
+      territoryChanges,
     });
     renderWorldMapCanvas(canvas, view);
   };
@@ -199,6 +233,7 @@ export function createWorldMapHost(
   return {
     render(next: WorldMapSnapshot): void {
       snapshot = next;
+      updateTrackedTerritoryChanges(next);
       resolveHover();
       paint();
     },

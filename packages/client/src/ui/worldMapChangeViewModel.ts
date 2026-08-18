@@ -22,9 +22,11 @@ export function territoryChangeStagger(index: number): number {
 /**
  * The first tick of the season *after* `changeTick`'s own — a plain multiple of the season length, not
  * an offset from the change. Stagger shifts a cell's own start by a few ticks; it does not move the
- * calendar fact the hatch decays toward.
+ * calendar fact the hatch decays toward. Exported so the host's own accumulator can prune a tracked
+ * change once it is done, without duplicating this arithmetic or guessing from `territoryChangePhase`'s
+ * output — that sentinel alone cannot tell "not started yet" apart from "already finished".
  */
-function nextSeasonBoundary(changeTick: number): number {
+export function nextSeasonBoundary(changeTick: number): number {
   return (Math.floor(changeTick / NATION_TICKS_PER_SEASON) + 1) * NATION_TICKS_PER_SEASON;
 }
 

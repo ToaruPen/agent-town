@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import {
+  NATION_TICKS_PER_SEASON,
   type NationCityState,
   WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
@@ -9,10 +10,23 @@ import {
 } from "@agent-town/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
+import { MAP_CASING_COLOR, MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
+import { assignNationBanners } from "../src/render/nationBanner.js";
+import { TERRITORY_CHANGE_FLASH_PEAK_ALPHA } from "../src/ui/worldMapChangeViewModel.js";
 import { createWorldMapHost, type WorldMapSnapshot } from "../src/ui/worldMapHost.js";
 import { hexColor } from "../src/ui/worldMapView.js";
 import { historyFixture, polityFixture } from "./nationFixture.js";
+
+/** The banner a nation is assigned in `mapHistory()` — same idiom as `worldMapView.test.ts`'s own
+ *  `bannerFor`, needed here to tell a tracked change's flash/hatch apart from every other coloured
+ *  stroke or fill the host paints (casing, inner rule, a rival's own resting fill). */
+function bannerFor(history: WorldHistory, polityId: string): string {
+  const assignment = assignNationBanners(history.polities).find(
+    ({ nationId }) => nationId === polityId,
+  );
+  if (assignment === undefined) throw new Error(`no banner for ${polityId}`);
+  return hexColor(assignment.color);
+}
 
 /**
  * Records what the host actually painted. The alphas are the interesting channel — the player rule and
@@ -111,6 +125,8 @@ function snapshot(overrides: Partial<WorldMapSnapshot> = {}): WorldMapSnapshot {
     cityStates: [],
     playerPolityId: null,
     openCityId: null,
+    tick: 0,
+    changedCells: [],
     ...overrides,
   };
 }
@@ -467,6 +483,68 @@ describe("the docked city view's marker", () => {
     const withOpenCity = creamStrokes(log);
 
     expect(withOpenCity).toBe(baseline + 1);
+  });
+});
+
+/**
+ * visual.md §2.4: the host accumulates `WorldCellChange` entries across renders, keyed by cell index, so
+ * a change reported once by a `season` message keeps animating through every plain `clock` repaint that
+ * follows — the wire only ever announces a change the instant it happens, never its ongoing decay.
+ */
+describe("the world map's territory-change tracking", () => {
+  function nonCasingFlashFills(log: PaintLog): { style: string; alpha: number }[] {
+    return log.fills.filter(
+      ({ alpha, style }) =>
+        alpha === TERRITORY_CHANGE_FLASH_PEAK_ALPHA && style !== hexColor(MAP_CASING_COLOR),
+    );
+  }
+
+  function bannerStrokes(log: PaintLog, style: string): number {
+    return log.strokes.filter((stroke) => stroke.style === style).length;
+  }
+
+  it("flashes a cell in its new owner's banner the instant a season message reports it changed", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+    const history = mapHistory();
+
+    // Cell 0 (index 0) has no stagger delay, so tick 0 is already inside its flash window.
+    host.render(snapshot({ history, tick: 0, changedCells: [{ index: 0, polityId: "polity-2" }] }));
+
+    const flashes = nonCasingFlashFills(log);
+    expect(flashes.length).toBeGreaterThan(0);
+    expect(flashes.every(({ style }) => style === bannerFor(history, "polity-2"))).toBe(true);
+  });
+
+  /**
+   * The teeth of "at x8 the compressed lifetimes still complete": a huge tick gap between two renders —
+   * exactly what x8 produces between broadcasts — must still land on the fully decayed end state, with
+   * nothing stuck mid-flash or mid-hatch just because no intermediate tick was ever rendered.
+   */
+  it("carries a tracked change through a later clock repaint, then clears it once its season boundary is spanned", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+    const history = mapHistory();
+    const bannerStyle = bannerFor(history, "polity-2");
+
+    host.render(snapshot({ history, tick: 0, changedCells: [{ index: 0, polityId: "polity-2" }] }));
+    expect(nonCasingFlashFills(log).length).toBeGreaterThan(0);
+    log.fills.length = 0;
+    log.strokes.length = 0;
+
+    // A later plain clock repaint, well past the flash but still inside the hatch's own window — no new
+    // changedCells at all, the way a `clock` message always arrives.
+    host.render(snapshot({ history, tick: 100, changedCells: [] }));
+    expect(nonCasingFlashFills(log)).toEqual([]);
+    expect(bannerStrokes(log, bannerStyle)).toBeGreaterThan(0);
+    log.fills.length = 0;
+    log.strokes.length = 0;
+
+    // A tick gap spanning the whole remaining window in one jump, exactly what x8 compresses two
+    // broadcasts down to.
+    host.render(snapshot({ history, tick: NATION_TICKS_PER_SEASON + 1, changedCells: [] }));
+    expect(nonCasingFlashFills(log)).toEqual([]);
+    expect(bannerStrokes(log, bannerStyle)).toBe(0);
   });
 });
 

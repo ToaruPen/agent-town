@@ -374,7 +374,16 @@ function mapPanel(history: WorldHistory, chronicle: WorldChronicleViewModel): HT
   });
   // No nation state and no player: the chronicle is the archive of the world that was, so every city
   // draws at its smallest tier, no territory is marked as anyone's, and no local view is open on it.
-  host.render({ history, cityStates: [], playerPolityId: null, openCityId: null });
+  // Nothing here is currently changing either — `tick: 0` and `changedCells: []` are the archive's own
+  // "nothing is animating" values, not a live clock the chronicle happens to sit at.
+  host.render({
+    history,
+    cityStates: [],
+    playerPolityId: null,
+    openCityId: null,
+    tick: 0,
+    changedCells: [],
+  });
   replaceMapSelection(selection, polityViews, null);
 
   panel.append(canvasWrapper, mapLegend(), selection);
