@@ -231,6 +231,38 @@ export const SPRITE_ASSETS = {
     // Tiny Town tile 106: a cut log.
     log: "/assets/tiny-town/Tiles/tile_0106.png",
   },
+  /**
+   * `developTimber`, `openMine` and `holdFestival` per `directive-sprites.md`. `mineHead` is not under
+   * `buildings`: `FacilityKind` (`shared/spatial.ts`, frozen) has no such member, so the client cannot
+   * make a mine a `Building` — `directiveLayer.ts` composes these three tiles as raw sprites instead,
+   * matching the roof/wall/emblem grammar without extending the type it comes from.
+   */
+  directive: {
+    timber: {
+      // Tiny Farm tile 14: a cut stump, end-grain visible.
+      stump: "/assets/tiny-farm/Tiles/tile_0014.png",
+      // Tiny Town tile 106: a felled log, end-grain circle.
+      log: "/assets/tiny-town/Tiles/tile_0106.png",
+      // Tiny Farm tile 87: an axe, grey blade on a tan handle.
+      axe: "/assets/tiny-farm/Tiles/tile_0087.png",
+    },
+    mineHead: {
+      // Tiny Town tile 48: a slate shingle course with a pale ridge cap.
+      roof: "/assets/tiny-town/Tiles/tile_0048.png",
+      // Tiny Town tile 89: a grey stone wall with a stone lintel arch over a timber door.
+      wall: "/assets/tiny-town/Tiles/tile_0089.png",
+      // Tiny Town tile 115: a pickaxe, grey double head on a tan handle.
+      emblem: "/assets/tiny-town/Tiles/tile_0115.png",
+      // Tiny Farm tile 89: a grey-white ore chunk with blue-grey facets.
+      spoil: "/assets/tiny-farm/Tiles/tile_0089.png",
+    },
+    festival: {
+      // Tiny Farm tile 68: a grain sheaf.
+      sheaf: "/assets/tiny-farm/Tiles/tile_0068.png",
+      // Tiny Farm tile 85: a keg.
+      keg: "/assets/tiny-farm/Tiles/tile_0085.png",
+    },
+  },
   carry: {
     // Tiny Town tile 106: a cut log.
     wood: "/assets/tiny-town/Tiles/tile_0106.png",
@@ -289,6 +321,15 @@ export const SPRITE_PATHS = [
   SPRITE_ASSETS.field.crop.ripe,
   SPRITE_ASSETS.stockpile.basket,
   SPRITE_ASSETS.stockpile.log,
+  SPRITE_ASSETS.directive.timber.stump,
+  SPRITE_ASSETS.directive.timber.log,
+  SPRITE_ASSETS.directive.timber.axe,
+  SPRITE_ASSETS.directive.mineHead.roof,
+  SPRITE_ASSETS.directive.mineHead.wall,
+  SPRITE_ASSETS.directive.mineHead.emblem,
+  SPRITE_ASSETS.directive.mineHead.spoil,
+  SPRITE_ASSETS.directive.festival.sheaf,
+  SPRITE_ASSETS.directive.festival.keg,
   SPRITE_ASSETS.carry.wood,
   SPRITE_ASSETS.carry.food,
   SPRITE_ASSETS.tombstone,

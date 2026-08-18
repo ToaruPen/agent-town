@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import type { AgentState, Tile } from "@agent-town/shared";
 import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
@@ -21,6 +24,7 @@ import {
   treeSpritePath,
   undergrowthSpritePath,
 } from "../src/render/sprites.js";
+import { VENDORED_ASSET_ROOT } from "./pngTree.js";
 
 describe("field sprites", () => {
   it("gives every crop stage a distinct look", () => {
@@ -291,5 +295,46 @@ describe("undergrowthSpritePath", () => {
     expect(undergrowthSpritePath(depletedPlains, 3)).toBeNull();
     expect(undergrowthSpritePath(depletedForest, 3)).not.toBeNull();
     expect(undergrowthSpritePath(depletedForest, 3)).toBe(undergrowthSpritePath(depletedForest, 3));
+  });
+});
+
+/**
+ * `directive-sprites.md` §5: the tiles for `developTimber`, `openMine` and `holdFestival`. `mineHead`
+ * is not under `SPRITE_ASSETS.buildings` — `Facility.kind` (`shared/spatial.ts`) has no such member,
+ * and shared/ is frozen, so a mine cannot be a `Building`. `directiveLayer.ts` draws it from raw paths
+ * instead, and this group is where those paths live.
+ */
+describe("SPRITE_ASSETS.directive", () => {
+  const timberPaths = [
+    SPRITE_ASSETS.directive.timber.stump,
+    SPRITE_ASSETS.directive.timber.log,
+    SPRITE_ASSETS.directive.timber.axe,
+  ];
+  const mineHeadPaths = [
+    SPRITE_ASSETS.directive.mineHead.roof,
+    SPRITE_ASSETS.directive.mineHead.wall,
+    SPRITE_ASSETS.directive.mineHead.emblem,
+    SPRITE_ASSETS.directive.mineHead.spoil,
+  ];
+  const festivalPaths = [
+    SPRITE_ASSETS.directive.festival.sheaf,
+    SPRITE_ASSETS.directive.festival.keg,
+  ];
+
+  it("preloads every timber, mine and festival tile", () => {
+    for (const path of [...timberPaths, ...mineHeadPaths, ...festivalPaths]) {
+      expect(SPRITE_PATHS).toContain(path);
+    }
+  });
+
+  it("points every directive tile at a file the vendored packs actually ship", () => {
+    for (const path of [...timberPaths, ...mineHeadPaths, ...festivalPaths]) {
+      const onDisk = join(VENDORED_ASSET_ROOT, path.replace(/^\/assets\//, ""));
+      expect(existsSync(onDisk)).toBe(true);
+    }
+  });
+
+  it("gives the mine head a distinct tile per slot, matching the roof/wall/emblem grammar", () => {
+    expect(new Set(mineHeadPaths.slice(0, 3)).size).toBe(3);
   });
 });
