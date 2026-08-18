@@ -20,7 +20,7 @@ question — the reasoning behind each is in its own section below.
 | 1 | Autopilot: spec 184 says fill-the-gap, `engine.ts:104` implements always-chancellor | **Spec wins.** The chancellor decides only in a season with no queued order | One server change plus `bootstrap.ts:134`; one test in `nationDashboardViewModel.test.ts` flips. Also closes the silent hold on a new player's first order |
 | 2 | Prosperity ceiling: every living nation pins 4 of 5 components by year 10–40 | **Stop using fixed references.** Normalize by rank within the field, or log-scale | **landed `f99dbde`.** `log1p(value) / log1p(field maximum)`; rank was measured and rejected — it reported a constant 80 % spread at both year 40 and year 120 |
 | 3 | A nation with population 0 still scores 443.6 | **Death must read as death.** A dead nation leaves the ranking; the spread is measured over survivors | Must land *before* #2 can be measured — today's spread number is propped up by a corpse |
-| 4 | `orders.chancellorChoice` carries no `id`, so a chancellor's festival shows 発令者不明 | **Add the id to the protocol.** The server already knows | `shared` + `server` — **landed `cde6b42`.** The cost line originally read "the client's existing path then attributes it with no change"; that was wrong, and 発令者不明 is still on screen. See below |
+| 4 | `orders.chancellorChoice` carries no `id`, so a chancellor's festival shows 発令者不明 | **Add the id to the protocol.** The server already knows | **closed at `0fb8f71`**, in three stages (`cde6b42` id, `e55e65d` tick, then the client attribution pass) — the id alone was not the fix; see "発令者不明 is closed" |
 | 5 | The first game year renders as 紀元0年 | **Give the generator a real epoch** | `historyGen.ts:615`; the client is already correct and needs nothing |
 | 6 | `AGENTS.md` bans new assets; `asset-policy.md` allows generated art off the 16 px grid | **The design document wins.** Update `AGENTS.md` | Depends on the conformance gate actually working — see the `assetConformance.test.ts:409` entry in Queued cleanups, which is currently a no-op |
 | 7 | Push | **Done.** `origin/main` is at `a863690` | — |
@@ -51,7 +51,7 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 |---|---|---|---|
 | `n1-14-autopilot-gap` | #1 autopilot fills the gap: server change, then client conformance, sequentially on one branch | Codex, then a Claude client worker | **merged `0876200`.** See "Autopilot fills the gap" below |
 | `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | **merged `7e370a1`** after one review round (stale-hover fix). See "C1-6b landed" below |
-| `n1-15-chancellor-tick` | #4's remaining server half: `chancellorChoice` gains `issuedAtTick` (supervisor froze the shape; option 2 from "The chancellor's id reached the wire"), client fixture conformance only | Codex | running |
+| `n1-15-chancellor-tick` | #4 in full: `chancellorChoice` gains `issuedAtTick` (Codex, `e55e65d`), then the client attribution pass on the same branch (Claude worker, two review rounds) | Codex, then a Claude client worker | **merged `0fb8f71`.** See "発令者不明 is closed" below |
 | `chore-client-followups` | Four queued client cleanups: §3.5 focus return (both panels), the useOptionalChain warning, the tautological no-player map test, the Node-globals guard | Claude client worker | running |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
@@ -685,33 +685,26 @@ Publishing is the owner's, twice over: `wrangler login` is interactive OAuth, an
 against a project that does not exist prompts for a project name — creating one is persistent configuration
 on their Cloudflare account, so the name is theirs to choose.
 
-## The chancellor's id reached the wire and 発令者不明 did not move
+## 発令者不明 is closed — decision #4 landed in full at `0fb8f71`
 
-`cde6b42` puts `id` on `orders.chancellorChoice` and the server derives it from the same
-`chancellorDirectiveId` the engine uses, so the wire id and the ledger id are the same string — pinned by
-a test that reads the wire at one tick and the ledger 300 ticks later. That half is right. It is also not
-the fix, and the decision table said it would be.
+Three stages, two of which looked like the fix and were not, kept because the trap pattern generalizes:
+`cde6b42` put `id` on `orders.chancellorChoice` (right, insufficient — nothing read it); the supervisor
+then chose the second of the two recorded options — `chancellorChoice` gains `issuedAtTick` and the
+client stays a renderer, rather than re-deriving boundary arithmetic client-side — landed server-side as
+`e55e65d` with the boundary tick centralized in `nextNationSeasonBoundaryTick` so engine and wsServer
+cannot drift, review-approved with zero findings. The `orders.tick` trap (message-build tick renders a
+発令 date in the previous season) was avoided and the avoidance is pinned by test.
 
-**The client never records that id.** `nationHudState.ts`'s `observedFromOrders` writes only `orders.queued`
-into `directiveLog`, and `mergedDirectiveLog` learns the rest from `nation.activeDirectives` —
-which a chancellor's `holdFestival` never reaches, because it is the one one-season directive and it
-completes in the same boundary that selects it. `seasonReportViewModel.ts`'s `attributionFor` then reads
-`log.has(id)` and answers `unknown`. Adding a field to the wire that nothing reads changes no pixel.
-
-The remaining task is client-side and it carries a real design question, which is why it is not folded in
-here: a log entry needs `issuedAtTick`, and the wire does not carry one. Either
-
-- the client re-derives the next season boundary from `NATION_TICKS_PER_SEASON` — duplicating boundary
-  arithmetic across the package boundary, where it can drift from the server's copy silently; or
-- `chancellorChoice` gains the tick alongside the id, and the client stays a renderer.
-
-The second matches "the client computes no score and judges no directive's legality", but it is a second
-contract change and belongs to whoever owns `protocol.ts`. Do not let a worker pick the first one quietly
-because it needs no cross-package coordination.
-
-Recording `orders.tick` instead is the trap in the middle: it is the tick the *message* was built at, not
-the tick the directive is issued at, so a directive selected at the boundary would render a 発令 date in
-the previous season. Wrong-but-plausible, and no test would catch it.
+The client half is where the real finding surfaced. Recording the preview first-sighting-wins was wrong:
+`chancellorDirectiveId` is `chancellor-<nation>-<boundaryTick>`, so every `orders` message about the same
+boundary reuses one id while `chooseDirective` re-runs and can change its projection A→B mid-season — a
+first sighting pins the stale A under the id B commits with. Caught by independent review; the landed
+semantics are `previewDirectiveIds`: a chancellor preview keeps updating in place until the first
+`activeDirectives` sighting confirms the id, which outranks any preview and retires it. `orders.queued`
+keeps first-sighting-wins — verified exempt, `issueDirective` mints a fresh `directive-<n>` per issue.
+A chancellor-picked `holdFestival` now renders 宰相の決定 with its issue date, never 発令者不明; the
+unknown-attribution guard still covers ids completed during a disconnect gap or before the session
+connected, and §3.6's accepted reconnect misattribution is unchanged.
 
 ## Queued cleanups
 
