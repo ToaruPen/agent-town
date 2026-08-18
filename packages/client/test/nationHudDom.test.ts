@@ -263,6 +263,36 @@ describe("the order desk's controls", () => {
   });
 
   /**
+   * The common real flow, not an edge case: submitting a directive does not close the panel, and the
+   * `orders` echo that follows rebuilds the dashboard wholesale (`nationHud.renderPanels()` calls
+   * `panels.dashboard.render(...)` on every `applyOrders`) while the panel is still open — detaching
+   * whatever `toggle()` captured as the opener before the player gets around to closing it.
+   */
+  it("returns focus to the rebuilt opener when the dashboard repaints while the panel is still open", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const opener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(opener).not.toBeNull();
+    (opener as HTMLElement).focus();
+
+    hud.toggleDirectives();
+    expect(roots.directives.hidden).toBe(false);
+
+    // Simulates the `orders` echo a submitted directive triggers, panel still open — `autoPilot`
+    // flips so the dashboard's view model genuinely differs and its memoized render is not skipped.
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: true }));
+    const rebuiltOpener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(rebuiltOpener).not.toBeNull();
+    expect(rebuiltOpener).not.toBe(opener);
+
+    hud.toggleDirectives();
+
+    expect(roots.directives.hidden).toBe(true);
+    expect(document.activeElement).toBe(rebuiltOpener);
+  });
+
+  /**
    * Bullet 1, and the reason `aria-disabled` was chosen over `disabled`: a `disabled` button leaves the tab
    * order and takes the explanation with it. The control has to be present, reachable and inert all at once.
    */

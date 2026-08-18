@@ -110,6 +110,22 @@ function panelBody(view: DirectiveListViewModel, send: SendClientMessage): HTMLE
 }
 
 /**
+ * A CSS selector that can find a freshly rebuilt stand-in for `node`, when it carries the single stable
+ * class every node this codebase builds via `element()` (worldChronicle.ts) gets — e.g. the dashboard's
+ * own "施策を選ぶ" button, class `nation-dashboard__choose`, which `nationHud.renderPanels()` rebuilds
+ * wholesale on every `applyOrders`/`applyUpdate`, including while this panel sits open mid-decision.
+ * `null` when the node has no class to key off (a bare test fixture, `document.body`), in which case a
+ * stale reference just stays stale — there is nothing left to re-resolve by.
+ *
+ * Assumes the class is unique enough on the page that the first match is the right one, matching the
+ * hardcoded `STRIP_TOGGLE_SELECTOR` lookup `seasonReportPanel.ts` already does for the same reason.
+ */
+function stableSelectorFor(node: HTMLElement): string | null {
+  const className = node.classList[0];
+  return className === undefined ? null : `.${className}`;
+}
+
+/**
  * The order desk's candidate list. Opened on demand (`D`) and rebuilt only when the server sends a new
  * `orders`, which is once a season plus once per action — never on the countdown's frame loop.
  */
@@ -121,7 +137,7 @@ export function createDirectivePanel(
   let open = false;
   let latest: DirectiveListViewModel | null = null;
   /** Captured by `toggle()` when it opens the panel; consumed and cleared when it closes. */
-  let opener: HTMLElement | null = null;
+  let opener: { readonly element: HTMLElement; readonly selector: string | null } | null = null;
 
   const paint = (): void => {
     root.hidden = !open;
@@ -132,12 +148,24 @@ export function createDirectivePanel(
   };
 
   /**
-   * hud.md §3.5: closing a panel returns focus to whatever opened it. Guarded against a stale reference —
-   * the opener can be removed from the document by an unrelated rebuild while the panel was open, in which
-   * case there is nothing sensible left to focus and this is a no-op.
+   * hud.md §3.5: closing a panel returns focus to whatever opened it.
+   *
+   * The raw captured element goes stale whenever whatever rebuilds it does so while this panel is still
+   * open — most commonly the dashboard's "施策を選ぶ" button: submitting a directive without closing the
+   * panel triggers the `orders` echo, which rebuilds the dashboard before the player gets around to
+   * closing this panel. `opener.selector` re-resolves against the live document in that case. Failing
+   * that (no selector, or nothing matches — the opener was genuinely removed, not just rebuilt), this is
+   * a no-op rather than focusing something arbitrary.
    */
   const returnFocusToOpener = (): void => {
-    if (opener?.isConnected === true) opener.focus();
+    if (opener !== null) {
+      const target = opener.element.isConnected
+        ? opener.element
+        : opener.selector === null
+          ? null
+          : document.querySelector<HTMLElement>(opener.selector);
+      target?.focus();
+    }
     opener = null;
   };
 
@@ -153,7 +181,11 @@ export function createDirectivePanel(
     toggle(): void {
       const opening = !open;
       if (opening) {
-        opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const active = document.activeElement;
+        opener =
+          active instanceof HTMLElement
+            ? { element: active, selector: stableSelectorFor(active) }
+            : null;
       }
       open = opening;
       renderedKey = null;
