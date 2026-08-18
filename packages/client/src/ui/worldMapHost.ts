@@ -126,6 +126,20 @@ export function createWorldMapHost(
   // no `changedCells` of its own, must still know when each tracked change started so its flash and
   // hatch keep decaying. Pruned in `updateTrackedTerritoryChanges` once a change's own window closes.
   const territoryChanges = new Map<number, TrackedTerritoryChange>();
+  // The ownership fact the flash and hatch above are only ever a temporary treatment *of* — kept
+  // deliberately separate from `territoryChanges`, which forgets a change the instant its own animation
+  // window closes. `history.worldMap.cells` only refreshes on a fresh `welcome`, so without a record of
+  // its own the host would paint (and hit-test) a cell against its pre-change owner the moment the
+  // animation accumulator prunes the entry — the flash would have been a lie about what actually
+  // happened. Each entry is a delta applied from the wire's own `WorldCellChange` the instant it arrives,
+  // never a diff of two snapshots, and it is never pruned by a season boundary — only `updateLiveOwnership`
+  // below ever clears it, and only when a fresh `history` says the accumulated deltas no longer apply.
+  const liveOwnership = new Map<number, string | null>();
+  // The `history` reference `liveOwnership` was last folded against. `wsClient.ts` never reassigns
+  // `NationWorldState.history` on a `clock` or `season` message, only a fresh `welcome` does — so a
+  // changed reference here means a reconnect handed the host a new authoritative snapshot, and every
+  // delta accumulated against the old one is stale.
+  let lastHistory: WorldHistory | null = null;
   // Wall clock start of the current locate pulse, or null between pulses. Read fresh on every paint —
   // not just from the frame loop below — so a server-driven repaint that happens to land mid-pulse still
   // shows the correct phase instead of one frame behind it.
@@ -169,6 +183,35 @@ export function createWorldMapHost(
     for (const [index, tracked] of territoryChanges) {
       if (next.tick >= nextSeasonBoundary(tracked.changeTick)) territoryChanges.delete(index);
     }
+  };
+
+  /**
+   * Clears every accumulated delta the moment `next.history` is a different object than the one they
+   * were folded against, then folds `next.changedCells` into what remains. Run before `resolveOwnership`
+   * on every `render`, so a reconnect's fresh `welcome` — which never carries a `changedCells` of its own
+   * to imply a reset — still drops whatever the previous connection had accumulated.
+   */
+  const updateLiveOwnership = (next: WorldMapSnapshot): void => {
+    if (next.history !== lastHistory) liveOwnership.clear();
+    lastHistory = next.history;
+    for (const change of next.changedCells) liveOwnership.set(change.index, change.polityId);
+  };
+
+  /**
+   * `history.worldMap` with every entry `liveOwnership` currently overrides. Handing this resolved
+   * history to `buildWorldMapViewModel` and reusing it for hit-testing below, rather than patching cell
+   * fill and edge extraction and hover and hit-testing separately, is what keeps paint and hit-test from
+   * ever being able to disagree about who a cell belongs to right now — they read the same object. Returns
+   * `history` unchanged when there is nothing to override, which is the common case for a game with no
+   * live territory activity at all.
+   */
+  const resolveOwnership = (history: WorldHistory): WorldHistory => {
+    if (liveOwnership.size === 0) return history;
+    const cells = history.worldMap.cells.map((cell, index) => {
+      const owner = liveOwnership.get(index);
+      return owner === undefined ? cell : { ...cell, polityId: owner };
+    });
+    return { ...history, worldMap: { ...history.worldMap, cells } };
   };
 
   const paint = (): void => {
@@ -301,8 +344,11 @@ export function createWorldMapHost(
         scheduleNextCrossfadeFrame();
       }
       lastSeason = next.season;
-      snapshot = next;
+      updateLiveOwnership(next);
+      // `updateTrackedTerritoryChanges` reads `next.changedCells`/`next.tick` — unaffected by which
+      // `history` `snapshot` ends up holding, so it takes the original `next`, not the resolved copy.
       updateTrackedTerritoryChanges(next);
+      snapshot = { ...next, history: resolveOwnership(next.history) };
       resolveHover();
       paint();
     },

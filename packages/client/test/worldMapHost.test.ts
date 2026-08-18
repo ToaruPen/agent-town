@@ -580,6 +580,60 @@ describe("the world map's territory-change tracking", () => {
 });
 
 /**
+ * The territory-change animation above is layered on top of an ownership fact that must stay correct
+ * forever, not just while the flash or hatch is live. `history.worldMap.cells` only refreshes on a fresh
+ * `welcome`, so without its own persistent record the host would paint and hit-test a cell against its
+ * pre-change owner the instant the animation accumulator prunes the entry — the flash would have been a
+ * lie about what actually happened. This overlay is a delta applied from the wire's own `WorldCellChange`,
+ * never a diff of two snapshots, and it is kept intentionally separate from `territoryChanges` above: one
+ * remembers a fact forever, the other remembers an animation for exactly as long as it is playing.
+ */
+describe("the world map's live ownership overlay", () => {
+  it("keeps a cell showing its new owner once the flash and hatch have both fully decayed, not just while they're live", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    const history = mapHistory();
+
+    // Cell 0 (index 0) starts owned by polity-1 in the fixture; the wire reports it moving to polity-2.
+    host.render(snapshot({ history, tick: 0, changedCells: [{ index: 0, polityId: "polity-2" }] }));
+    log.fills.length = 0;
+
+    // Well past the season boundary: the tracked change has been pruned out of `territoryChanges`
+    // entirely (the flash and hatch have both fully decayed), the way a plain `clock` heartbeat would
+    // report it after a long gap — exactly what an x8 broadcast cadence produces between renders.
+    host.render(snapshot({ history, tick: NATION_TICKS_PER_SEASON + 1, changedCells: [] }));
+
+    const staleOwnerFills = log.fills.filter(
+      ({ style }) => style === bannerFor(history, "polity-1"),
+    );
+    expect(staleOwnerFills).toEqual([]);
+
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: 3, clientY: 3, bubbles: true })); // cell (0,0)
+    expect(host.selection()).toBe("polity-2");
+  });
+
+  /** The reviewer's own second required test: a reconnect must not let a pre-drop change keep haunting a
+   *  fresh, authoritative snapshot that disagrees with it. */
+  it("drops a stale overlay entry when a fresh history arrives on reconnect", () => {
+    const log = stubCanvasPainting();
+    const { host, canvas } = mount(log);
+    const history = mapHistory();
+    host.render(snapshot({ history, tick: 0, changedCells: [{ index: 0, polityId: "polity-2" }] }));
+
+    // A reconnect: a brand-new `history` object — not the same reference `wsClient.ts` was holding —
+    // agreeing with the pre-change ownership and carrying no `changedCells` of its own, exactly what a
+    // fresh `welcome` looks like arriving after the original connection dropped mid-flash.
+    const fresh = mapHistory();
+    host.render(snapshot({ history: fresh, tick: 0, changedCells: [] }));
+
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 12, height: 12 }) as DOMRect;
+    canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: 3, clientY: 3, bubbles: true })); // cell (0,0)
+    expect(host.selection()).toBe("polity-1");
+  });
+});
+
+/**
  * visual.md §2.6: an on-demand locate pulses the player's inner rule once, 500 ms, wall-clock, one
  * shot. The host owns the deadline and self-schedules its own frames — deliberately not the HUD's
  * `requestAnimationFrame` loop, which belongs to the countdown and runs the whole session through.
