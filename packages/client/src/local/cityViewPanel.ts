@@ -180,7 +180,7 @@ function paintScene(input: CityViewPanelInput, mounted: MountedScene): void {
   renderDirectiveLayer(
     mounted.objectLayer,
     directiveAnchorPositions(scene.stockpile.pos),
-    activeDirectiveKinds(input.scene.nation, input.scene.city.id),
+    activeDirectiveKinds(input.scene.nation, input.scene.city),
     numericColor(input.bannerColor),
   );
 }

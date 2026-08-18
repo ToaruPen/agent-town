@@ -39,13 +39,13 @@ function makeWorldMap(): WorldMap {
   };
 }
 
-function makeCity(pos: Position): WorldCity {
+function makeCity(pos: Position, isCapital = true): WorldCity {
   return {
     id: "city-polity-1-1",
     name: "石帯府",
     pos,
     polityId: "polity-1",
-    isCapital: true,
+    isCapital,
     foundedByEventId: "event-1",
   };
 }
@@ -101,6 +101,7 @@ interface InputOptions {
   developmentLevel: number;
   bannerColor: string;
   activeDirectives: ActiveDirective[];
+  isCapital: boolean;
 }
 
 const DEFAULT_INPUT: InputOptions = {
@@ -109,6 +110,7 @@ const DEFAULT_INPUT: InputOptions = {
   developmentLevel: 3,
   bannerColor: "#a1b2c3",
   activeDirectives: [],
+  isCapital: true,
 };
 
 function makeInput(overrides: Partial<InputOptions> = {}): CityViewPanelInput {
@@ -119,7 +121,7 @@ function makeInput(overrides: Partial<InputOptions> = {}): CityViewPanelInput {
     developmentLevel: options.developmentLevel,
   };
   const scene: CitySceneInput = {
-    city: makeCity({ x: 40, y: 30 }),
+    city: makeCity({ x: 40, y: 30 }, options.isCapital),
     cityState,
     nation: makeNation(cityState, options.activeDirectives),
     polity: makePolity(),
@@ -392,6 +394,24 @@ describe("createCityViewPanel", () => {
     expect(directiveObjectCount(app)).toBeGreaterThan(0);
 
     panel.update(makeInput({ tick: 150, activeDirectives: [] }));
+
+    expect(directiveObjectCount(app)).toBe(0);
+  });
+
+  /**
+   * Review finding: `activeDirectivesForCity` no longer special-cases which `DirectiveKind` gets
+   * matched by kind vs by city; a null `targetCityId` (`openMine` here, nation-wide on the wire) now
+   * shows only on the capital. This is the end-to-end proof that the wiring through `paintScene`
+   * actually withholds the mark for a city that is not the capital, not just the pure function.
+   */
+  it("draws no directive mark on a city that is not the capital, even with a nation-wide directive active", () => {
+    const app = makeApp();
+    const host = document.createElement("div");
+    const panel = createCityViewPanel(host, app);
+
+    panel.open(
+      makeInput({ isCapital: false, activeDirectives: [makeDirective({ kind: "openMine" })] }),
+    );
 
     expect(directiveObjectCount(app)).toBe(0);
   });

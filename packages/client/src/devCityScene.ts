@@ -255,7 +255,12 @@ function readSceneInput(controls: DevControls): CitySceneInput {
   };
 }
 
-function describeScene(scene: WorldState, checkedKinds: readonly DirectiveKind[]): string {
+/**
+ * `activeKinds` is what `activeDirectiveKinds` actually renders for this city, not merely what is
+ * checked: a checked nation-wide kind draws nothing on a city that is not the capital (review finding),
+ * so echoing the checkbox state here would claim a mark the page never actually drew.
+ */
+function describeScene(scene: WorldState, activeKinds: ReadonlySet<DirectiveKind>): string {
   const counts = new Map<Terrain, number>();
   for (const tile of scene.tiles) counts.set(tile.terrain, (counts.get(tile.terrain) ?? 0) + 1);
   const composition = [...counts]
@@ -267,10 +272,9 @@ function describeScene(scene: WorldState, checkedKinds: readonly DirectiveKind[]
   const anchors = Object.entries(directiveAnchorPositions(scene.stockpile.pos))
     .map(([kind, pos]) => `${kind} ${pos.x},${pos.y}`)
     .join(" / ");
+  const shown = DIRECTIVE_KINDS.filter((kind) => activeKinds.has(kind));
   const active =
-    checkedKinds.length === 0
-      ? "なし"
-      : checkedKinds.map((kind) => DIRECTIVE_KIND_LABELS[kind]).join(" / ");
+    shown.length === 0 ? "なし" : shown.map((kind) => DIRECTIVE_KIND_LABELS[kind]).join(" / ");
   return (
     `家 ${scene.buildings.length} / 街路 ${streets} / 木 ${trees} / ${composition}\n` +
     `施策の予約地: ${anchors}\n発令中: ${active}`
@@ -330,8 +334,12 @@ for (const [name, label] of Object.entries(NEIGHBOURHOOD_LABELS)) {
 for (const [index, season] of SEASONS.entries()) {
   addOption(controls.season, String(index), SEASON_LABELS[season]);
 }
+// Review finding: nation-wide (null-target) directives now show only on the capital
+// (activeDirectivesForCity in cityScene.ts) — index 0 alone, so the other five are labelled to make
+// their five now-inert checkboxes read as by design rather than as this page having broken.
 for (const index of CITY_POSITIONS.keys()) {
-  addOption(controls.city, String(index), `第${index + 1}都市`);
+  const label = index === 0 ? `第${index + 1}都市（首都）` : `第${index + 1}都市`;
+  addOption(controls.city, String(index), label);
 }
 // The simulation cannot take a city past the cap, so the page must not be able to depict one that is.
 controls.development.max = String(NATION_CITY_DEVELOPMENT_CAP);
@@ -344,17 +352,17 @@ const bannerColor = assignNationBanners([DEV_POLITY])[0]?.color ?? DEV_POLITY.co
 function draw(): void {
   const input = readSceneInput(controls);
   const scene = synthesizeCityScene(input);
-  const checkedKinds = checkedDirectiveKinds(controls);
+  const activeKinds = activeDirectiveKinds(input.nation, input.city);
   renderMapLayer(groundLayer, objectLayer, scene);
   renderTrailLayer(trailLayer, scene);
   renderStructureLayer(objectLayer, scene.buildings);
   renderDirectiveLayer(
     objectLayer,
     directiveAnchorPositions(scene.stockpile.pos),
-    activeDirectiveKinds(input.nation, input.city.id),
+    activeKinds,
     bannerColor,
   );
-  controls.status.textContent = describeScene(scene, checkedKinds);
+  controls.status.textContent = describeScene(scene, activeKinds);
 }
 
 for (const control of [

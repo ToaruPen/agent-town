@@ -142,18 +142,19 @@ function isDirectiveAnchor(pos: Position): boolean {
 }
 
 /**
- * Every `DirectiveKind` but `growCity` is nation-wide: `listDirectiveOptions`
- * (`server/src/sim/nation/directives.ts`) gives every other kind a `null` `targetCityId`, and
- * `isAlreadyActive` then allows at most one instance of each nation-wide kind at a time. The local view
- * only ever shows one city, so a nation-wide directive always belongs to it; `growCity` alone carries a
- * real target and must be matched against this city's own id.
+ * `targetCityId` is read generically: nothing here special-cases any one `DirectiveKind` by name, so a
+ * server change to which kinds carry a target never silently needs a matching client edit. A directive
+ * whose `targetCityId` names this city belongs to it, whatever kind it is. A directive with
+ * `targetCityId: null` carries no target at all; this view puts it on the capital — a client-side
+ * rendering choice this function makes, not a rule `ActiveDirective` itself states.
  */
 export function activeDirectivesForCity(
   nation: NationState,
-  cityId: string,
+  city: WorldCity,
 ): readonly ActiveDirective[] {
   return nation.activeDirectives.filter(
-    (directive) => directive.kind !== "growCity" || directive.targetCityId === cityId,
+    (directive) =>
+      directive.targetCityId === city.id || (directive.targetCityId === null && city.isCapital),
   );
 }
 
@@ -161,9 +162,9 @@ export function activeDirectivesForCity(
  *  draws a fixed mark per kind, never per directive instance. */
 export function activeDirectiveKinds(
   nation: NationState,
-  cityId: string,
+  city: WorldCity,
 ): ReadonlySet<DirectiveKind> {
-  return new Set(activeDirectivesForCity(nation, cityId).map((directive) => directive.kind));
+  return new Set(activeDirectivesForCity(nation, city).map((directive) => directive.kind));
 }
 
 function randomInteger(rng: () => number, min: number, max: number): number {
@@ -622,7 +623,7 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
     ...roads.map(({ pos }) => pos),
   ]);
 
-  const activeForCity = activeDirectivesForCity(input.nation, input.city.id);
+  const activeForCity = activeDirectivesForCity(input.nation, input.city);
   const season = nationSeasonOfTick(input.tick);
   // The one place the store's own position is decided; `directiveAnchorPositions` is then called on
   // this exact value; so `stockpile.pos` below and the anchors buildings are placed at can never read

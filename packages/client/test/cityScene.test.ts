@@ -95,13 +95,13 @@ function makePolity(): Polity {
   };
 }
 
-function makeCity(cityId: string, pos: Position): WorldCity {
+function makeCity(cityId: string, pos: Position, isCapital = true): WorldCity {
   return {
     id: cityId,
     name: "石帯府",
     pos,
     polityId: "polity-1",
-    isCapital: true,
+    isCapital,
     foundedByEventId: "event-1",
   };
 }
@@ -422,44 +422,80 @@ describe("directiveAnchorPositions", () => {
 });
 
 /**
- * Only `growCity` ever carries a non-null `targetCityId` (`server/src/sim/nation/directives.ts`
- * `listDirectiveOptions`): every other kind is nation-wide. Since the local view only ever shows one
- * city, a nation-wide directive always belongs to it; `growCity` alone must be matched by city.
+ * Review finding: the prior filter special-cased `growCity` by name, encoding
+ * `server/src/sim/nation/directives.ts`'s `listDirectiveOptions` behaviour (today, only `growCity`
+ * ever carries a non-null `targetCityId`) directly into the client. Nothing in the shared types
+ * forbids another kind from carrying one, so `targetCityId` is read generically here instead: a
+ * non-null target always names an exact city, of any kind; a directive with no target at all is shown
+ * on the capital, which is this function's own rendering choice, not a server guarantee.
  */
 describe("activeDirectivesForCity", () => {
-  it("keeps every nation-wide directive regardless of its null target", () => {
+  const capital = makeCity(CITY_ID, DEFAULT_OPTIONS.pos, true);
+  const notCapital = makeCity(CITY_ID, DEFAULT_OPTIONS.pos, false);
+
+  it("keeps a null-target directive for the capital", () => {
     const directive = makeDirective({ kind: "developTimber", targetCityId: null });
-    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), capital)).toEqual([
       directive,
     ]);
   });
 
+  it("drops a null-target directive for a city that is not the capital", () => {
+    const directive = makeDirective({ kind: "developTimber", targetCityId: null });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), notCapital)).toEqual(
+      [],
+    );
+  });
+
+  // holdFestival, not growCity: proves the match is on targetCityId alone, not on which kind it is.
+  it("keeps a directive that targets this city's id, whatever kind it is", () => {
+    const directive = makeDirective({ kind: "holdFestival", targetCityId: CITY_ID });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), notCapital)).toEqual([
+      directive,
+    ]);
+  });
+
+  it("drops a directive that targets a different city's id, whatever kind it is", () => {
+    const directive = makeDirective({ kind: "holdFestival", targetCityId: "city-polity-1-2" });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), capital)).toEqual([]);
+  });
+
   it("keeps a growCity directive that targets this city", () => {
     const directive = makeDirective({ kind: "growCity", targetCityId: CITY_ID });
-    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), notCapital)).toEqual([
       directive,
     ]);
   });
 
   it("drops a growCity directive that targets a different city", () => {
     const directive = makeDirective({ kind: "growCity", targetCityId: "city-polity-1-2" });
-    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([]);
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), capital)).toEqual([]);
   });
 });
 
 describe("activeDirectiveKinds", () => {
+  const capital = makeCity(CITY_ID, DEFAULT_OPTIONS.pos, true);
+
   it("collapses the filtered directives down to the kinds directiveLayer.ts checks for", () => {
     const directives = [
       makeDirective({ kind: "openMine", id: "directive-a" }),
       makeDirective({ kind: "holdFestival", id: "directive-b" }),
       makeDirective({ kind: "growCity", targetCityId: "city-polity-1-2", id: "directive-c" }),
     ];
-    const kinds = activeDirectiveKinds(makeNation(makeCityState(), directives), CITY_ID);
+    const kinds = activeDirectiveKinds(makeNation(makeCityState(), directives), capital);
     expect(kinds).toEqual(new Set(["openMine", "holdFestival"]));
   });
 
   it("is empty when nothing is active for this city", () => {
-    expect(activeDirectiveKinds(makeNation(makeCityState(), []), CITY_ID)).toEqual(new Set());
+    expect(activeDirectiveKinds(makeNation(makeCityState(), []), capital)).toEqual(new Set());
+  });
+
+  it("is empty on a non-capital city even when a null-target directive is active", () => {
+    const notCapital = makeCity(CITY_ID, DEFAULT_OPTIONS.pos, false);
+    const directives = [makeDirective({ kind: "openMine" })];
+    expect(activeDirectiveKinds(makeNation(makeCityState(), directives), notCapital)).toEqual(
+      new Set(),
+    );
   });
 });
 
