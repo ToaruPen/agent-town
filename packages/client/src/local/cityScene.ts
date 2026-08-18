@@ -162,6 +162,15 @@ export function activeDirectivesForCity(
   );
 }
 
+/** `activeDirectivesForCity` collapsed to kinds, which is all `render/directiveLayer.ts` needs: it
+ *  draws a fixed mark per kind, never per directive instance. */
+export function activeDirectiveKinds(
+  nation: NationState,
+  cityId: string,
+): ReadonlySet<DirectiveKind> {
+  return new Set(activeDirectivesForCity(nation, cityId).map((directive) => directive.kind));
+}
+
 function randomInteger(rng: () => number, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }

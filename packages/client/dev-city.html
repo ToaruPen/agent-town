@@ -63,6 +63,26 @@
         width: 11rem;
       }
 
+      .dev-directives {
+        display: grid;
+        gap: 0.2rem;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+      }
+
+      .dev-directives-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.15rem 0.75rem;
+      }
+
+      .dev-directives-options label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+      }
+
       .dev-status {
         margin: 0;
         color: #c5d5d0;
@@ -114,6 +134,10 @@
           <input id="dev-population" type="range" min="100" max="6000" step="100" value="3000" />
         </label>
       </div>
+      <fieldset class="dev-directives" id="dev-directives">
+        <legend>発令中の施策（C1-8 の見た目の確認用）</legend>
+        <div class="dev-directives-options" id="dev-directives-options"></div>
+      </fieldset>
       <p id="dev-status" class="dev-status"></p>
       <div id="dev-stage" class="dev-stage"></div>
     </main>

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import {
+  type ActiveDirective,
   NATION_TICKS_PER_SEASON,
   type NationCityState,
   type NationState,
@@ -20,6 +21,7 @@ import {
   type CityViewPanelInput,
   createCityViewPanel,
 } from "../src/local/cityViewPanel.js";
+import { DIRECTIVE_OBJECT_LABEL } from "../src/render/directiveLayer.js";
 import { HOUSE_OBJECT_LABEL } from "../src/render/structureLayer.js";
 
 function makeWorldMap(): WorldMap {
@@ -64,7 +66,10 @@ function makePolity(overrides: Partial<Polity> = {}): Polity {
   };
 }
 
-function makeNation(cityState: NationCityState): NationState {
+function makeNation(
+  cityState: NationCityState,
+  activeDirectives: ActiveDirective[] = [],
+): NationState {
   return {
     id: "polity-1",
     controller: "player",
@@ -77,7 +82,7 @@ function makeNation(cityState: NationCityState): NationState {
     culture: 40,
     foodProduction: 220,
     materialProduction: 140,
-    activeDirectives: [],
+    activeDirectives,
     prosperity: {
       population: 0.4,
       production: 0.5,
@@ -95,6 +100,7 @@ interface InputOptions {
   population: number;
   developmentLevel: number;
   bannerColor: string;
+  activeDirectives: ActiveDirective[];
 }
 
 const DEFAULT_INPUT: InputOptions = {
@@ -102,6 +108,7 @@ const DEFAULT_INPUT: InputOptions = {
   population: 4000,
   developmentLevel: 3,
   bannerColor: "#a1b2c3",
+  activeDirectives: [],
 };
 
 function makeInput(overrides: Partial<InputOptions> = {}): CityViewPanelInput {
@@ -114,7 +121,7 @@ function makeInput(overrides: Partial<InputOptions> = {}): CityViewPanelInput {
   const scene: CitySceneInput = {
     city: makeCity({ x: 40, y: 30 }),
     cityState,
-    nation: makeNation(cityState),
+    nation: makeNation(cityState, options.activeDirectives),
     polity: makePolity(),
     worldMap: makeWorldMap(),
     tick: options.tick,
@@ -152,6 +159,23 @@ function objectLayerOf(app: CityViewApp): Container {
 
 function houseCount(app: CityViewApp): number {
   return objectLayerOf(app).children.filter((child) => child.label === HOUSE_OBJECT_LABEL).length;
+}
+
+function directiveObjectCount(app: CityViewApp): number {
+  return objectLayerOf(app).children.filter((child) => child.label === DIRECTIVE_OBJECT_LABEL)
+    .length;
+}
+
+function makeDirective(overrides: Partial<ActiveDirective> = {}): ActiveDirective {
+  return {
+    id: "directive-1",
+    kind: "openMine",
+    targetCityId: null,
+    issuedAtTick: 0,
+    seasonsRemaining: 1,
+    totalSeasons: 3,
+    ...overrides,
+  };
 }
 
 /** happy-dom provides no global `ResizeObserver`, so `mountScene`'s `typeof ResizeObserver !==
@@ -337,6 +361,39 @@ describe("createCityViewPanel", () => {
     expect(host.style.getPropertyValue("--banner-color")).not.toBe(
       `#${input.scene.polity.color.toString(16).padStart(6, "0")}`,
     );
+  });
+
+  it("draws no directive mark when nothing is active", () => {
+    const app = makeApp();
+    const host = document.createElement("div");
+    const panel = createCityViewPanel(host, app);
+
+    panel.open(makeInput());
+
+    expect(directiveObjectCount(app)).toBe(0);
+  });
+
+  it("draws the mine head on open when openMine is active for this city", () => {
+    const app = makeApp();
+    const host = document.createElement("div");
+    const panel = createCityViewPanel(host, app);
+
+    panel.open(makeInput({ activeDirectives: [makeDirective({ kind: "openMine" })] }));
+
+    expect(directiveObjectCount(app)).toBeGreaterThan(0);
+  });
+
+  it("clears the directive mark on the update after the directive completes", () => {
+    const app = makeApp();
+    const host = document.createElement("div");
+    const panel = createCityViewPanel(host, app);
+
+    panel.open(makeInput({ activeDirectives: [makeDirective({ kind: "holdFestival" })] }));
+    expect(directiveObjectCount(app)).toBeGreaterThan(0);
+
+    panel.update(makeInput({ tick: 150, activeDirectives: [] }));
+
+    expect(directiveObjectCount(app)).toBe(0);
   });
 
   it("fires onClose exactly once per close, and not for a close on an already-closed panel", () => {

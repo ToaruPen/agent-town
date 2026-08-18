@@ -25,6 +25,7 @@ import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  activeDirectiveKinds,
   activeDirectivesForCity,
   type CitySceneInput,
   directiveAnchorPositions,
@@ -415,6 +416,22 @@ describe("activeDirectivesForCity", () => {
   it("drops a growCity directive that targets a different city", () => {
     const directive = makeDirective({ kind: "growCity", targetCityId: "city-polity-1-2" });
     expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([]);
+  });
+});
+
+describe("activeDirectiveKinds", () => {
+  it("collapses the filtered directives down to the kinds directiveLayer.ts checks for", () => {
+    const directives = [
+      makeDirective({ kind: "openMine", id: "directive-a" }),
+      makeDirective({ kind: "holdFestival", id: "directive-b" }),
+      makeDirective({ kind: "growCity", targetCityId: "city-polity-1-2", id: "directive-c" }),
+    ];
+    const kinds = activeDirectiveKinds(makeNation(makeCityState(), directives), CITY_ID);
+    expect(kinds).toEqual(new Set(["openMine", "holdFestival"]));
+  });
+
+  it("is empty when nothing is active for this city", () => {
+    expect(activeDirectiveKinds(makeNation(makeCityState(), []), CITY_ID)).toEqual(new Set());
   });
 });
 

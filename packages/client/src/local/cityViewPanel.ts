@@ -2,11 +2,24 @@ import { MAP_HEIGHT, MAP_WIDTH, seasonOfTick, type WorldState } from "@agent-tow
 import type { Application, Container as PixiContainer } from "pixi.js";
 import { Container } from "pixi.js";
 
+import { renderDirectiveLayer } from "../render/directiveLayer.js";
 import { renderMapLayer, TILE_SIZE } from "../render/mapLayer.js";
 import { renderStructureLayer } from "../render/structureLayer.js";
 import { renderTrailLayer } from "../render/trailLayer.js";
 import { createWorldViewport } from "../render/worldViewport.js";
-import { type CitySceneInput, synthesizeCityScene } from "./cityScene.js";
+import {
+  activeDirectiveKinds,
+  type CitySceneInput,
+  directiveAnchorPositions,
+  synthesizeCityScene,
+} from "./cityScene.js";
+
+/** `bannerColor` on the wire is the CSS hex string `hexColor()` (`worldMapView.ts`) produces for
+ *  `host.style`; the directive layer draws with Pixi's own numeric colours, so this is that
+ *  conversion's inverse rather than a second source of the colour. */
+function numericColor(cssHex: string): number {
+  return Number.parseInt(cssHex.slice(1), 16);
+}
 
 /** The slice of `Application` the panel actually touches — narrow on purpose. `createWorldViewport`
  *  only ever reaches `stage`, so a test can hand this a bare `Container` and never pay for `app.init()`
@@ -160,8 +173,16 @@ function paintScene(input: CityViewPanelInput, mounted: MountedScene): void {
     renderTrailLayer(mounted.trailLayer, scene);
     mounted.redrawKey = key;
   }
-  // Cheap regardless of the gate above — see `redrawKeyOf`'s comment.
+  // Cheap regardless of the gate above — see `redrawKeyOf`'s comment. `clearFarmland` and
+  // `encourageStores` already flow through `scene.buildings`; the other three directive marks are
+  // not `Building`s (`directiveLayer.ts`'s own comment says why) and are drawn separately here.
   renderStructureLayer(mounted.objectLayer, scene.buildings);
+  renderDirectiveLayer(
+    mounted.objectLayer,
+    directiveAnchorPositions(scene),
+    activeDirectiveKinds(input.scene.nation, input.scene.city.id),
+    numericColor(input.bannerColor),
+  );
 }
 
 /**

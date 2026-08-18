@@ -1,4 +1,6 @@
 import {
+  type ActiveDirective,
+  type DirectiveKind,
   MAP_HEIGHT,
   MAP_WIDTH,
   NATION_CITY_DEVELOPMENT_CAP,
@@ -18,11 +20,14 @@ import {
 import { Application, Assets, Container, TextureStyle } from "pixi.js";
 
 import {
+  activeDirectiveKinds,
   type CitySceneInput,
   directiveAnchorPositions,
   synthesizeCityScene,
 } from "./local/cityScene.js";
+import { renderDirectiveLayer } from "./render/directiveLayer.js";
 import { renderMapLayer, TILE_SIZE } from "./render/mapLayer.js";
+import { assignNationBanners } from "./render/nationBanner.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
 import { renderStructureLayer } from "./render/structureLayer.js";
 import { renderTrailLayer } from "./render/trailLayer.js";
@@ -82,6 +87,26 @@ const TERRAIN_LABELS: Readonly<Record<Terrain, string>> = {
   forest: "森",
   rock: "岩",
   water: "水",
+};
+
+/** In the order `directiveAnchorPositions` reserves ground for, so the checkbox order matches the
+ *  anchor comment's own corner-run description. */
+const DIRECTIVE_KINDS: readonly DirectiveKind[] = [
+  "clearFarmland",
+  "developTimber",
+  "openMine",
+  "growCity",
+  "encourageStores",
+  "holdFestival",
+];
+
+const DIRECTIVE_KIND_LABELS: Readonly<Record<DirectiveKind, string>> = {
+  clearFarmland: "開墾（畑）",
+  developTimber: "伐採地（木材）",
+  openMine: "採掘（鉱山）",
+  growCity: "都市拡張",
+  encourageStores: "備蓄奨励（穀倉）",
+  holdFestival: "祭礼",
 };
 
 /** Positions far enough inside the world map that every city's 3×3 neighbourhood exists. */
@@ -148,7 +173,20 @@ function buildWorldMap(neighbourhood: readonly WorldMapTerrain[], pos: Position)
   };
 }
 
-function buildNation(cityState: NationCityState): NationState {
+/** One synthesized directive per checked kind, `growCity` targeting the shown city so it survives
+ *  `activeDirectivesForCity`'s filter the same way a real one would. */
+function activeDirectivesFor(kinds: readonly DirectiveKind[], cityId: string): ActiveDirective[] {
+  return kinds.map((kind) => ({
+    id: `dev-directive-${kind}`,
+    kind,
+    targetCityId: kind === "growCity" ? cityId : null,
+    issuedAtTick: 0,
+    seasonsRemaining: 1,
+    totalSeasons: 2,
+  }));
+}
+
+function buildNation(cityState: NationCityState, activeDirectives: ActiveDirective[]): NationState {
   return {
     id: POLITY_ID,
     controller: "player",
@@ -161,7 +199,7 @@ function buildNation(cityState: NationCityState): NationState {
     culture: 38,
     foodProduction: 226,
     materialProduction: 141,
-    activeDirectives: [],
+    activeDirectives,
     prosperity: {
       population: 0.42,
       production: 0.5,
@@ -180,7 +218,12 @@ interface DevControls {
   city: HTMLSelectElement;
   development: HTMLInputElement;
   population: HTMLInputElement;
+  directives: ReadonlyMap<DirectiveKind, HTMLInputElement>;
   status: HTMLElement;
+}
+
+function checkedDirectiveKinds(controls: DevControls): DirectiveKind[] {
+  return DIRECTIVE_KINDS.filter((kind) => controls.directives.get(kind)?.checked === true);
 }
 
 function readSceneInput(controls: DevControls): CitySceneInput {
@@ -202,14 +245,17 @@ function readSceneInput(controls: DevControls): CitySceneInput {
       foundedByEventId: "event-founding",
     },
     cityState,
-    nation: buildNation(cityState),
+    nation: buildNation(
+      cityState,
+      activeDirectivesFor(checkedDirectiveKinds(controls), cityState.cityId),
+    ),
     polity: DEV_POLITY,
     worldMap: buildWorldMap(NEIGHBOURHOODS[isNeighbourhoodName(name) ? name : "plains"], pos),
     tick: Number(controls.season.value) * NATION_TICKS_PER_SEASON,
   };
 }
 
-function describeScene(scene: WorldState): string {
+function describeScene(scene: WorldState, checkedKinds: readonly DirectiveKind[]): string {
   const counts = new Map<Terrain, number>();
   for (const tile of scene.tiles) counts.set(tile.terrain, (counts.get(tile.terrain) ?? 0) + 1);
   const composition = [...counts]
@@ -221,7 +267,14 @@ function describeScene(scene: WorldState): string {
   const anchors = Object.entries(directiveAnchorPositions(scene))
     .map(([kind, pos]) => `${kind} ${pos.x},${pos.y}`)
     .join(" / ");
-  return `家 ${scene.buildings.length} / 街路 ${streets} / 木 ${trees} / ${composition}\n施策の予約地: ${anchors}`;
+  const active =
+    checkedKinds.length === 0
+      ? "なし"
+      : checkedKinds.map((kind) => DIRECTIVE_KIND_LABELS[kind]).join(" / ");
+  return (
+    `家 ${scene.buildings.length} / 街路 ${streets} / 木 ${trees} / ${composition}\n` +
+    `施策の予約地: ${anchors}\n発令中: ${active}`
+  );
 }
 
 const app = new Application();
@@ -247,12 +300,27 @@ trailLayer.eventMode = "none";
 world.addChild(groundLayer, trailLayer, objectLayer);
 app.stage.addChild(world);
 
+function buildDirectiveCheckboxes(host: HTMLElement): Map<DirectiveKind, HTMLInputElement> {
+  const inputs = new Map<DirectiveKind, HTMLInputElement>();
+  for (const kind of DIRECTIVE_KINDS) {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = `dev-directive-${kind}`;
+    label.append(input, document.createTextNode(DIRECTIVE_KIND_LABELS[kind]));
+    host.append(label);
+    inputs.set(kind, input);
+  }
+  return inputs;
+}
+
 const controls: DevControls = {
   neighbourhood: requireElement<HTMLSelectElement>("#dev-neighbourhood"),
   season: requireElement<HTMLSelectElement>("#dev-season"),
   city: requireElement<HTMLSelectElement>("#dev-city"),
   development: requireElement<HTMLInputElement>("#dev-development"),
   population: requireElement<HTMLInputElement>("#dev-population"),
+  directives: buildDirectiveCheckboxes(requireElement<HTMLElement>("#dev-directives-options")),
   status: requireElement<HTMLElement>("#dev-status"),
 };
 
@@ -269,12 +337,24 @@ for (const index of CITY_POSITIONS.keys()) {
 controls.development.max = String(NATION_CITY_DEVELOPMENT_CAP);
 controls.neighbourhood.value = "valley";
 
+// A single polity still goes through the derived banner palette, not `DEV_POLITY.color` directly —
+// same rule `cityViewTarget.ts` follows in the real app (traversal.md §2.2, visual.md §2.1).
+const bannerColor = assignNationBanners([DEV_POLITY])[0]?.color ?? DEV_POLITY.color;
+
 function draw(): void {
-  const scene = synthesizeCityScene(readSceneInput(controls));
+  const input = readSceneInput(controls);
+  const scene = synthesizeCityScene(input);
+  const checkedKinds = checkedDirectiveKinds(controls);
   renderMapLayer(groundLayer, objectLayer, scene);
   renderTrailLayer(trailLayer, scene);
   renderStructureLayer(objectLayer, scene.buildings);
-  controls.status.textContent = describeScene(scene);
+  renderDirectiveLayer(
+    objectLayer,
+    directiveAnchorPositions(scene),
+    activeDirectiveKinds(input.nation, input.city.id),
+    bannerColor,
+  );
+  controls.status.textContent = describeScene(scene, checkedKinds);
 }
 
 for (const control of [
@@ -283,6 +363,7 @@ for (const control of [
   controls.city,
   controls.development,
   controls.population,
+  ...controls.directives.values(),
 ]) {
   control.addEventListener("input", draw);
 }
