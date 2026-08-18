@@ -50,7 +50,7 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 | branch | task | worker | outcome |
 |---|---|---|---|
 | `n1-14-autopilot-gap` | #1 autopilot fills the gap: server change, then client conformance, sequentially on one branch | Codex, then a Claude client worker | **merged `0876200`.** See "Autopilot fills the gap" below |
-| `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | worker done at `9ff0c26` (80 files / 1184 tests green, its report); independent review in progress |
+| `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | **merged `7e370a1`** after one review round (stale-hover fix). See "C1-6b landed" below |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
 no builds, tests, installs or git operations in it from anyone else in that window.
@@ -189,13 +189,12 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1 through C1-5, C1-6a and C1-10 merged).
-- **The simulation is complete; the N1 slice is not.** The plan's own completion criteria include "opening
-  the browser shows live nations, a moving ranking, a working directive panel and a working speed control".
-  Live nations, the ranking and the speed control landed with C1-3, the directive panel with C1-4
-  (`af74fc5`); `main.ts` mounts the HUD. **The world map is the one piece still unmounted**, which is
-  C1-6b. Of the other criteria, same-seed reproducibility and seed *divergence* are both genuinely tested —
-  `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158` — so only that one clause is outstanding.
+  C1-1 through C1-6b and C1-10 merged; next unstarted client tasks are C1-7, C1-8, C1-9).
+- **The N1 slice's code criteria are met as of `7e370a1`.** "Opening the browser shows live nations, a
+  moving ranking, a working directive panel and a working speed control" — all mounted, and the world map
+  with them (C1-6b). Same-seed reproducibility and seed *divergence* are both genuinely tested —
+  `nationBootstrap.test.ts:91` and `worldMapGen.test.ts:158`. What remains on the slice is the owner's
+  browser judgement, listed under "C1-6b landed".
 
   This paragraph claimed `main.ts` was still 14 lines and that C1-3 was next for four commits after C1-3
   merged, while the section at :41 recorded it as merged. A Codex review caught the contradiction. It is
@@ -543,59 +542,47 @@ in place in `worldChronicle.ts`; it moved to `nationText.ts` instead, because a 
 DOM controller would drag `document` into the node-only view-model tests. Accepted — that is the separation
 the repo asks for, and the chronicle imports it back so there is still one table.
 
-## Where C1-6b stopped
+## C1-6b landed — the world map is the page's own surface
 
-`c1-06b-world-map-host` at **`89ba3df`**, one commit, base `ce37717`, tree clean, **gate-green and not WIP**:
-`just check` exit 0, `just test` **79 files / 1101 tests**. Not pushed, not merged. Five of nine pieces done.
+Merged fast-forward at **`7e370a1`**, seven commits, `packages/client/` only: 13 files, +1402/−88, two new
+files (`worldMapHost.ts`, `worldMapHost.test.ts`). Gate after the rebase onto main: `just check` exit 0,
+`just test` **80 files / 1191 tests**. All nine pieces of the continuation brief are in: the constant swap
+to `WORLD_MAP_PLAYER_POLITY_ALPHA` (local ΔE comment deleted as required), the 1 px inner rule and capital
+cross-hatch per visual.md §2.6, hover-only selection per §2.2.1 (0.52 is no longer a resting state,
+applies to rivals under the equality principle), and an on-demand locate pulse on the `L` key — host-owned
+wall-clock frames, deliberately not the HUD's rAF loop; the view model sees only a pure `pulsePhase`.
 
-| piece | state |
-|---|---|
-| persistent host (`worldMapHost.ts`) | done — owns canvas, pointer handler, view-model closure; both surfaces mount it |
-| first mount in `index.html` + `main.ts` | done — `#world-map`, docked between the HUD panels, capped at native 576×384 |
-| repaint from `update` | done — server-driven, no dedupe key on purpose |
-| fill onto banner colours | done — off the archival `Polity.color` |
-| player alpha 0.32 vs 0.28 | done — nothing marked when there is no player nation |
-| 1 px inner rule | **not started** — decision now recorded, unblocked |
-| capital cross-hatch | **not started** — same |
-| hover-only selection (§2.2.1) | **not started** — 0.52 is still a persistent resting state, which the design says collapses terrain to ΔE 6.3 |
-| locate pulse | **not started** |
+With this merge N1's browser completion criterion is code-complete: live nations, ranking, directive
+panel, speed control and the world map are all mounted. What remains on the slice is owner judgement, not
+code — see the questions below.
 
-The four answers to the worker's design questions arrived after it committed, so all four remaining pieces are
-unblocked with the decisions recorded and none begun. The decisions: `worldMapView.ts` paint internals are
-fair game because the design settles it (§2.6 calls the inner rule "the key move" and V-4's test line names
-the inner rule, not the alpha); the hover-only change is to be made deliberately; the hover state applies to
-*any* nation including rivals, under the spec's equality principle.
+Two findings from this task worth keeping:
 
-**Owed before more work lands, both:**
+- **The pulse's peak must grow the band, not relocate it.** The first implementation shrank the inner
+  rule's inset 1→0 at fixed 1 px width, which painted the peak frame's mark exactly onto the banner's own
+  rect — a same-size band relocated rather than an expansion. Caught by the worker's own advisor pass, not
+  by its tests. The fix pins the band's inward edge and grows the width, so the peak covers both bands as
+  one 2 px mark. (Reviewer note that survived into the comments: the 2 px alpha-1.0 band still paints over
+  the banner hue at peak — the point is growth versus relocation, not hue preservation.)
+- **Hover state must be re-resolved against every server update.** `hoveredPolityId` was only recomputed
+  on pointermove, so a stationary cursor over a cell whose owner changed in an update kept the *old* owner
+  washed at 0.52 indefinitely — a de facto resting state, exactly what §2.2.1 forbids. Found by independent
+  review; fixed by retaining the last pointer position and re-resolving after each snapshot swap, with the
+  sharper regression being an owner that *moved* elsewhere lighting up territory nowhere near the cursor.
 
-- **Rebase.** `89ba3df` is based on `ce37717`; main has since moved on through the player-alpha
-  constant, C1-5, #2's normalization and several docs commits. C1-5 touched `index.html`, `main.ts`,
-  `nationHud.ts` and `nationHudState.ts` — the same four files the map host mounts through — so this rebase,
-  unlike C1-5's, will conflict. **Dispatched 2026-08-18** to a fresh client worker that owns the branch and
-  the worktree and rebases onto `beeb6b8` itself — remembering that a dispatch recorded here is not proof of
-  a live owner; the worker's own status is. The nine-piece table above is the whole brief, and the four
-  unstarted pieces have their decisions recorded. The brief also folds in the constant swap below, the
-  `cellAlpha` comment rewrite, and the `hexColor`/`element` collapse from Queued cleanups.
-- **The constant swap.** `MAP_PLAYER_POLITY_ALPHA = 0.32` is at `client/src/render/colors.ts:47` with five
-  references: `src/ui/worldMapView.ts:16` and `:113`, `test/worldMapView.test.ts:10` and `:243`,
-  `test/worldMapHost.test.ts:10`, `:160` and `:170`. Swap to `WORLD_MAP_PLAYER_POLITY_ALPHA` from
-  `@agent-town/shared` and **delete the local doc comment** rather than keeping it — the shared one carries
-  the ΔE reasoning, and duplicating the figures is how they drift.
+Loose ends recorded at the merge:
 
-**Mid-decision state, so it is not rediscovered:**
-
-- `cellAlpha` reads selection → player → resting, and the branch order is right, but **its comment argues from
-  a framing that has been superseded** and should be rewritten. Hover is transient and universal; the player
-  rule is persistent and singular; they are not competing marks of ownership. The passing test "lets a
-  selection outrank the player's own step" stays valid but is named from the old framing.
-- **The locate pulse needs a second redraw source.** The host repaints only when `render` is called, ~1 Hz
-  from the heartbeat, so a 500 ms one-shot needs its own wall-clock frames. The shape the author reached: the
-  host owns an optional animation deadline and self-schedules frames only while one is live — deliberately
-  *not* the HUD's `requestAnimationFrame` loop, which belongs to the countdown.
-- `WorldMapMarks` is an object rather than a fourth nullable string, so it cannot be passed where
-  `selectedPolityId` belongs, and it has room for `hoveredPolityId` when the hover change lands.
-- The canvas class is a **required** host option, not a default: the chronicle's CSS keys off
-  `world-chronicle__map-canvas`, and a shared default would silently restyle whichever surface was written second.
+- **C1-7 owes a `locate()` call.** visual.md §2.6 also fires the pulse automatically on entering the world
+  view from the local view; deliberately unimplemented because C1-7 has not landed. Whoever lands C1-7
+  wires `map.locate()` into that transition.
+- The worker could not run `ai-slop-cleaner` (skill unavailable in its session) and substituted a manual
+  classification pass; the independent review therefore carried the deslop mandate explicitly and found
+  nothing to remove.
+- Owner-judgement questions, stated by the worker in lieu of the browser access every agent is denied:
+  whether the map reads as four nations rather than one-plus-three; whether 6 px cells carry
+  territory/tier/change now the map is always on screen; whether the capital cross-hatch is legible or a
+  smudge at tier-1's ~2.5 px radius; whether the 1→2 px, 0.85→1.0, 250 ms pulse reads as a deliberate
+  locate cue rather than a rendering glitch.
 
 ## C1-5 landed, and it found a hole in the wire format
 
@@ -640,9 +627,10 @@ by reading `protocol.ts` directly.
 
 ## Two of the three "unmerged" branches are not unmerged
 
-`git branch --no-merged main` lists four branches plus `__diag_merge_test`. Only **one** holds work main
-still wants: `c1-06b-world-map-host` (`89ba3df`). `n1-08-balance-horizon` (`cb58162`) diffs against main but
-is dead — see above; it retunes a constant that no longer exists. The other two are finished:
+`git branch --no-merged main` once listed four branches plus `__diag_merge_test`; as of `7e370a1` none
+holds work main still wants. `c1-06b-world-map-host` merged. `n1-08-balance-horizon` (`cb58162`) diffs
+against main but is dead — see above; it retunes a constant that no longer exists. The other two were
+already finished:
 
 - `c1-05-season-report` — merged as `38be255..77798e1`. `git cherry` marks all five commits `-`.
 - `c1-06a-territory-tiers` (`03e0bf1`) — **superseded, not pending.** Its work is in main as `3fb4d8d`, and
@@ -740,6 +728,7 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | ~~Collapse the three copies of `hexColor` and `element`~~ | `client/src/ui/` | **Already done — this row was stale.** The C1-6b worker verified by grep: one definition each (`worldMapView.ts` exports `hexColor`, `worldChronicle.ts` exports `element`), everything else imports. Kept struck-through as a reminder that this table can rot |
 | Retire `heldOrderNote` and `commitSlot.detail`, or decide to keep them | `client/src/ui/seasonReportViewModel.ts`, `nationDashboardViewModel.ts`, both panels, `.season-report__held` CSS | Since `0876200` both are permanently `null` on every path — a legal queued order is never held, and the client deliberately does not report the illegal-order hold since it judges no legality. The renderers only fire inside null guards, so nothing visible leaks; retiring them is an interface + panel + CSS change and a design decision (would a future surface want the note back?). **Unowned** |
 | Pin `player + queued + autoPilot: false` in the engine's state tests | `server/test/nationEngine.test.ts` | The four-state table's queued row is tested only with `autoPilot: true`; the false side rides on an older test that predates the table framing. The conformance worker flagged the asymmetry. One test, reusing the existing fixtures. **Unowned** |
+| De-tautologize the no-player-nation map test | `client/test/worldMapView.test.ts` | "marks no nation at all when the player holds none" filters cells by `polityId !== null && polityId === playerPolityId` with `playerPolityId` bound to `null` — always false regardless of fixture data, so it can never fail. Pre-existing (the removed `isPlayer` form had the same shape); the C1-6b worker preserved it verbatim and flagged it rather than silently strengthening. Needs an assertion that actually bites, e.g. every cell's alpha is the resting 0.28. **Unowned** |
 | Return focus to the opener when a panel closes | `client/src/ui/directivePanel.ts`, `seasonReportPanel.ts` | hud.md §3.5 names the behaviour and neither panel does it. C1-5 read the existing gap as precedent; recorded here so it is one item against both panels rather than a settled question. **Unowned** |
 | Clear the one lint warning `just check` now carries | `client/src/ui/seasonReportViewModel.ts:296` | `useOptionalChain`, introduced by C1-5 and left because Biome's fix changes the type to `boolean \| undefined`. `report?.entries.some(…) === true` satisfies both. **Unowned** |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
