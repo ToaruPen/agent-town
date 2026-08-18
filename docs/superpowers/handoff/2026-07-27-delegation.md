@@ -55,7 +55,7 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 | `chore-client-followups` | Four queued client cleanups: §3.5 focus return (both panels), the useOptionalChain warning, the tautological no-player map test, the Node-globals guard | Claude client worker | **merged `a6b4ea3`** after one review round (opener capture, scoped re-resolution, the guard rebuilt as Biome config). The four Queued-cleanups rows below carry the detail |
 | `c1-07-city-view` | C1-7 mount the city view, plus the `map.locate()` world-entry wiring C1-6b left it | Claude client worker | **merged `75734b5`** after two review rounds; one finding resolved by documenting a design conflict rather than implementing. See "C1-7 landed" below |
 | `chore-retire-held-ui` | Retire `heldOrderNote` / `commitSlot.detail` and their renderers and CSS | Claude client worker | **merged `6e25103`** — the struck-through Queued-cleanups row carries the detail |
-| `c1-08-directive-scenery` | C1-8 directives visible in the city view — the direct continuation of the owner's C1-7 direction | Claude client worker | running — dispatched 2026-08-18, based on `4ccfadd` |
+| `c1-08-directive-scenery` | C1-8 directives visible in the city view — the direct continuation of the owner's C1-7 direction | Claude client worker | **merged `4c16528`** after one review round (four findings, all fixed with stash-proven regression coverage). See "C1-8 landed" below |
 | `chore-engine-queued-pin` | The queued-cleanups engine-test pin: `player + queued + autoPilot: false` commits the queued order | Codex | **merged `276c0e7`** — independent review approved with zero findings; the struck-through Queued-cleanups row carries the detail |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
@@ -194,7 +194,7 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1 through C1-7 and C1-10 merged; next unstarted client tasks are C1-8, C1-9).
+  C1-1 through C1-8 and C1-10 merged; the last unstarted client task is C1-9).
 - **The N1 slice's code criteria are met as of `7e370a1`.** "Opening the browser shows live nations, a
   moving ranking, a working directive panel and a working speed control" — all mounted, and the world map
   with them (C1-6b). Same-seed reproducibility and seed *divergence* are both genuinely tested —
@@ -589,6 +589,56 @@ Loose ends recorded at the merge:
   territory/tier/change now the map is always on screen; whether the capital cross-hatch is legible or a
   smudge at tier-1's ~2.5 px radius; whether the 1→2 px, 0.85→1.0, 250 ms pulse reads as a deliberate
   locate cue rather than a rendering glitch.
+
+## C1-8 landed — directives are scenery, and the review caught the client learning server rules
+
+Merged at **`4c16528`**, eight commits, `packages/client` only: 10 files, +1321/−51, two new files
+(`render/directiveLayer.ts` and its test). Gate after rebase: `just check` exit 0 (zero warnings),
+`just test` **86 files / 1300 tests** — the worker's pre-rebase 1299 plus the engine pin main gained
+underneath it.
+
+What renders, all conditioned purely on presence in `nation.activeDirectives` and gone the season the
+directive completes (there is deliberately no lasting trace — `SeasonReport.completedDirectiveIds` is
+last-season-only and carries ids, not kinds; a future task that wants permanent traces needs server
+support): `clearFarmland` → a field whose crop stage follows `nationSeasonOfTick`; `encourageStores` → a
+granary with build progress from `totalSeasons`/`seasonsRemaining`; trade routes → streets leaving the
+quarter on the partner city's compass bearing; `developTimber`/`openMine`/`holdFestival` → raw-sprite
+marks from the 396 vendored PNGs on the reserved anchors (`directiveLayer.ts`). `growCity` and
+`developmentLevel` needed nothing — the pre-existing house/street scaling already covers them. The mine
+head is raw sprites, not a `Building`, because frozen `FacilityKind` has no `mineHead` — reported as the
+frozen-boundary situation it is, resolved client-side without touching `shared/`. The festival pennant
+was written fresh (nation-banner-coloured) rather than extracted from frozen `historyLayer.ts`.
+
+The review round's four findings, all real, all fixed with stash-proven failing-first evidence:
+
+- **The field and granary re-derived their anchors** from `QUARTER_CENTRE + DIRECTIVE_ANCHOR_OFFSETS`
+  instead of reading `directiveAnchorPositions`, exactly what the dispatch forbade. The fix narrowed
+  `directiveAnchorPositions(scene)` to `(store: Position)` — the plan names the old signature; this is a
+  deliberate narrowing, not drift — so it is callable mid-synthesis, and made it the single formula every
+  consumer goes through, including the module's own bare-ground reservation. The old signature was the
+  root cause: uncallable before a scene existed, which is why `anchorFor()` grew its own copy of the math.
+- **The client had learned a server rule**: `activeDirectivesForCity` tested `kind !== "growCity"`,
+  pinning `listDirectiveOptions`' current choice of which kinds carry targets. Now `targetCityId` is
+  consumed generically — names this city, or null-target shown on the capital (`WorldCity.isCapital`),
+  documented as this view's rendering choice. Real behaviour change: nation-wide directives now draw only
+  on the capital; N1's only shown city *is* the capital, so nothing visible moved.
+- **No test could tell which image was drawn** (Pixi's `Sprite.from` returns one placeholder texture for
+  every unpreloaded path under vitest). Fixed by splitting pure prop-description functions
+  (`{path, pos, depth}`) from the Pixi walk, asserted path-by-path; a swapped stump/log now fails by name.
+- **Bearing coverage was east-only**; now an 8-way table with hand-computed edge expectations, proven by
+  a `dy` sign-flip that failed exactly the six north/south/diagonal cases.
+
+Loose ends recorded at the merge:
+
+- The owner's browser judgement, with concrete steps the worker wrote for `dev-city.html` (checkbox per
+  directive kind added for exactly this): `just dev` → `http://localhost:5173/dev-city.html` → toggle
+  each directive; judge the mine head vs granary distinctness, the timber camp's three props, the pennant
+  colour against the polity banner, and — with all six on — whether the two touching anchor pairs
+  (`openMine`/`encourageStores`, `clearFarmland`/`holdFestival`) read acceptably. That last look is the
+  concrete signal for whether the radius-3 second ring (the supervisor decision reserved in the plan) is
+  actually needed; the worker's geometry-based judgement is that it is not.
+- Directive visuals are impermanent by design (see above) — flagged for any future "lasting monuments"
+  direction.
 
 ## C1-7 landed — the city view is a docked pane, and one review finding was a design conflict
 
