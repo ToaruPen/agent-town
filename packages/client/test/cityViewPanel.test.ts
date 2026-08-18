@@ -154,6 +154,29 @@ function houseCount(app: CityViewApp): number {
   return objectLayerOf(app).children.filter((child) => child.label === HOUSE_OBJECT_LABEL).length;
 }
 
+/** happy-dom provides no global `ResizeObserver`, so `mountScene`'s `typeof ResizeObserver !==
+ *  "undefined"` guard takes the no-observer branch in every other test in this file — a real, valid
+ *  path in its own right, and left alone elsewhere on purpose. This stub exercises the other branch
+ *  specifically, so `teardown()` calling `disconnect()` on the observer it created is actually proven
+ *  rather than merely never falsified by an environment that never builds one. */
+function stubResizeObserver(): { disconnect: ReturnType<typeof vi.fn>; restore(): void } {
+  const disconnect = vi.fn();
+  class FakeResizeObserver {
+    disconnect = disconnect;
+    observe = vi.fn();
+    unobserve = vi.fn();
+  }
+  const globals = globalThis as { ResizeObserver?: unknown };
+  const original = globals.ResizeObserver;
+  globals.ResizeObserver = FakeResizeObserver;
+  return {
+    disconnect,
+    restore(): void {
+      globals.ResizeObserver = original;
+    },
+  };
+}
+
 describe("createCityViewPanel", () => {
   it("mounts nothing and hides its host before the first open", () => {
     const app = makeApp();
@@ -177,30 +200,45 @@ describe("createCityViewPanel", () => {
     expect(panel.isOpen()).toBe(true);
   });
 
-  it("close destroys the mounted subtree and hides the host again, across repeated cycles", () => {
-    const app = makeApp();
-    const host = document.createElement("div");
-    const panel = createCityViewPanel(host, app);
+  it("close destroys the mounted subtree — containers, listeners and the resize observer — across repeated cycles", () => {
+    const observer = stubResizeObserver();
+    try {
+      const app = makeApp();
+      const host = document.createElement("div");
+      const panel = createCityViewPanel(host, app);
 
-    panel.open(makeInput());
-    const firstRoot = app.stage.children[0];
-    if (firstRoot === undefined) throw new Error("nothing mounted");
-    panel.close();
+      panel.open(makeInput());
+      const firstRoot = app.stage.children[0];
+      if (firstRoot === undefined) throw new Error("nothing mounted");
+      // The plan names "no orphaned containers or listeners": `createWorldViewport` attaches its
+      // pointer/wheel handlers to this exact container (`cityViewPanel.ts`'s own comment on why
+      // `Container.destroy` reclaims them). Asserting a nonzero count first is what makes the
+      // post-close zero below proof of removal, rather than proof there was never anything to remove.
+      expect(firstRoot.eventNames().length).toBeGreaterThan(0);
+      panel.close();
 
-    expect(app.stage.children.length).toBe(0);
-    expect(firstRoot.destroyed).toBe(true);
-    expect(host.hidden).toBe(true);
-    expect(panel.isOpen()).toBe(false);
+      expect(app.stage.children.length).toBe(0);
+      expect(firstRoot.destroyed).toBe(true);
+      expect(firstRoot.eventNames()).toHaveLength(0);
+      expect(host.hidden).toBe(true);
+      expect(panel.isOpen()).toBe(false);
+      expect(observer.disconnect).toHaveBeenCalledTimes(1);
 
-    // A second cycle would reveal an orphan left behind by the first — one pass alone cannot.
-    panel.open(makeInput());
-    const secondRoot = app.stage.children[0];
-    if (secondRoot === undefined) throw new Error("nothing mounted");
-    expect(app.stage.children.length).toBe(1);
-    panel.close();
+      // A second cycle would reveal an orphan left behind by the first — one pass alone cannot.
+      panel.open(makeInput());
+      const secondRoot = app.stage.children[0];
+      if (secondRoot === undefined) throw new Error("nothing mounted");
+      expect(app.stage.children.length).toBe(1);
+      expect(secondRoot.eventNames().length).toBeGreaterThan(0);
+      panel.close();
 
-    expect(app.stage.children.length).toBe(0);
-    expect(secondRoot.destroyed).toBe(true);
+      expect(app.stage.children.length).toBe(0);
+      expect(secondRoot.destroyed).toBe(true);
+      expect(secondRoot.eventNames()).toHaveLength(0);
+      expect(observer.disconnect).toHaveBeenCalledTimes(2);
+    } finally {
+      observer.restore();
+    }
   });
 
   it("closes the previous city before mounting a new one when opened again directly", () => {
