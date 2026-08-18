@@ -177,8 +177,8 @@ export function createNationHud(
     clock: createNationClockBar(roots.clock, post),
     dashboard: createNationDashboard(roots.dashboard, {
       send: post,
-      openDirectives: () => {
-        if (!directives.isOpen()) directives.toggle();
+      openDirectives: (opener) => {
+        if (!directives.isOpen()) directives.toggle(opener);
       },
       readCanSend: () => state.connected,
     }),

@@ -6,7 +6,14 @@ import { element } from "./worldChronicle.js";
 
 export interface DirectivePanelController {
   render(view: DirectiveListViewModel | null, generation: number): void;
-  toggle(): void;
+  /**
+   * `explicitOpener`, when given, is the control that was actually clicked — required on the click path
+   * because `document.activeElement` at the moment this runs reflects whatever had focus *before* the
+   * click, not the clicked control itself (a script-dispatched click never runs a browser's focusing
+   * steps, and click-to-focus for a `<button>` is UA-dependent even for a real pointer click). Omitted on
+   * the keyboard path (`D`), where `document.activeElement` is the only signal there is.
+   */
+  toggle(explicitOpener?: HTMLElement): void;
   close(): void;
   isOpen(): boolean;
 }
@@ -154,10 +161,10 @@ export function createDirectivePanel(
       paint();
     },
 
-    toggle(): void {
+    toggle(explicitOpener?: HTMLElement): void {
       const opening = !open;
       if (opening) {
-        const active = document.activeElement;
+        const active = explicitOpener ?? document.activeElement;
         opener =
           active instanceof HTMLElement
             ? { element: active, selector: stableSelectorFor(active) }

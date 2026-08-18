@@ -241,6 +241,31 @@ describe("the order desk's controls", () => {
   });
 
   /**
+   * The click path is not the keyboard path: `document.activeElement` at the moment `toggle()` runs is
+   * whatever had focus *before* the click, not necessarily the clicked control itself — a
+   * script-dispatched click does not run a browser's focusing steps (confirmed empirically: happy-dom's
+   * `.click()` leaves `document.activeElement` on `<body>`), and click-to-focus for a `<button>`
+   * specifically is UA-dependent even for a real pointer click. Reading `activeElement` on this path would
+   * capture the wrong opener, or none. The button that was actually clicked must be captured directly.
+   */
+  it("returns focus to the button that was actually clicked, even though the click itself never focused it", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const opener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(opener).not.toBeNull();
+    expect(document.activeElement).not.toBe(opener);
+
+    (opener as HTMLElement).click();
+    expect(roots.directives.hidden).toBe(false);
+
+    hud.toggleDirectives();
+
+    expect(roots.directives.hidden).toBe(true);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  /**
    * The ambiguous case §3.5 leaves unstated: the opener can vanish from the document while the panel is
    * open (a dashboard rebuild, say). Closing must not throw and must not hand focus to a detached node —
    * there is nothing sensible left to return it to, so it is left wherever the browser's default lands.
@@ -747,6 +772,27 @@ describe("the season report", () => {
     // update, so this is proof of restored focus rather than focus that simply never moved.
     const restoredOpener = roots.strip.querySelector(".nation-strip__toggle");
     expect(restoredOpener).not.toBe(opener);
+    expect(document.activeElement).toBe(restoredOpener);
+  });
+
+  /**
+   * The click path is not the keyboard path — see `directivePanel.ts`'s identical test for why
+   * `document.activeElement` cannot be trusted at click time. The strip's own toggle must be captured
+   * directly from the click itself, not read off whatever had focus beforehand.
+   */
+  it("returns focus to the strip's toggle button when it was clicked without being focused first", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    const opener = roots.strip.querySelector(".nation-strip__toggle");
+    expect(opener).not.toBeNull();
+    expect(document.activeElement).not.toBe(opener);
+
+    (opener as HTMLElement).click();
+    expect(roots.report.hidden).toBe(false);
+
+    hud.toggleReport();
+
+    expect(roots.report.hidden).toBe(true);
+    const restoredOpener = roots.strip.querySelector(".nation-strip__toggle");
     expect(document.activeElement).toBe(restoredOpener);
   });
 

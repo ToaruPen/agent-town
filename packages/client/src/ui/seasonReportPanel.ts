@@ -8,8 +8,16 @@ import { element } from "./worldChronicle.js";
 
 export interface SeasonReportPanelController {
   render(view: SeasonReportViewModel | null, generation: number): void;
-  /** Player-initiated open/close (the `R` key, the strip's own button) — moves focus to the close button. */
-  toggle(): void;
+  /**
+   * Player-initiated open/close (the `R` key, the strip's own button) — moves focus to the close button.
+   *
+   * `explicitOpener`, when given, is the control that was actually clicked — required on the click path
+   * because `document.activeElement` at the moment this runs reflects whatever had focus *before* the
+   * click, not the clicked control itself (a script-dispatched click never runs a browser's focusing
+   * steps, and click-to-focus for a `<button>` is UA-dependent even for a real pointer click). Omitted on
+   * the keyboard path (`R`), where `document.activeElement` is the only signal there is.
+   */
+  toggle(explicitOpener?: HTMLElement): void;
   /**
    * Server-initiated open: hud.md §4.5's famine privilege. Deliberately not routed through `toggle()` —
    * a famine season resolving is not a keypress, and stealing focus out from under a player who is, say,
@@ -105,14 +113,23 @@ function panelBody(view: SeasonReportViewModel, onClose: () => void): HTMLElemen
   return body;
 }
 
-function stripBody(view: SeasonReportViewModel, open: boolean, onToggle: () => void): HTMLElement {
+/**
+ * `onToggle` takes the button itself — hud.md §3.5's opener — rather than reading it back off
+ * `document.activeElement` on the other side: a click does not reliably focus its own control first
+ * (UA-dependent, and never true for a script-dispatched click).
+ */
+function stripBody(
+  view: SeasonReportViewModel,
+  open: boolean,
+  onToggle: (opener: HTMLElement) => void,
+): HTMLElement {
   const inner = element("div", "nation-strip__inner");
   inner.append(element("p", "nation-strip__headline", `前季: ${view.headline}`));
   const button = element("button", "nation-strip__toggle", open ? "決算を閉じる" : "決算を開く R");
   button.type = "button";
   button.setAttribute("aria-controls", "season-report");
   button.setAttribute("aria-expanded", String(open));
-  button.addEventListener("click", onToggle);
+  button.addEventListener("click", () => onToggle(button));
   inner.append(button);
   return inner;
 }
@@ -126,15 +143,21 @@ function stripBody(view: SeasonReportViewModel, open: boolean, onToggle: () => v
 const CLOSE_BUTTON_SELECTOR = ".season-report__close";
 const STRIP_TOGGLE_SELECTOR = ".nation-strip__toggle";
 
-/** Which of the two roots holds focus right now, or neither — read before either is rebuilt. */
+/** Which of the two roots a node belongs to, or neither. */
 type FocusOwner = "strip" | "panel" | null;
 
+function ownerOf(roots: SeasonReportRoots, node: HTMLElement): FocusOwner {
+  if (roots.panel.contains(node)) return "panel";
+  if (roots.strip.contains(node)) return "strip";
+  return null;
+}
+
+/** Which of the two roots holds focus right now, or neither — read before either is rebuilt. Only valid
+ *  on the keyboard path: see `SeasonReportPanelController.toggle` for why the click path uses `ownerOf`
+ *  against the clicked element directly instead. */
 function focusOwner(roots: SeasonReportRoots): FocusOwner {
   const active = document.activeElement;
-  if (!(active instanceof HTMLElement)) return null;
-  if (roots.panel.contains(active)) return "panel";
-  if (roots.strip.contains(active)) return "strip";
-  return null;
+  return active instanceof HTMLElement ? ownerOf(roots, active) : null;
 }
 
 export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportPanelController {
@@ -183,7 +206,7 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
     focusCloseButtonOnNextPaint = false;
     roots.strip.hidden = false;
     roots.strip.classList.toggle("nation-strip--famine", latest.isFamine);
-    roots.strip.replaceChildren(stripBody(latest, open, () => controller.toggle()));
+    roots.strip.replaceChildren(stripBody(latest, open, (opener) => controller.toggle(opener)));
     roots.panel.hidden = !open;
     roots.panel.replaceChildren(...(open ? panelBody(latest, () => controller.close()) : []));
     restoreFocusAfterPaint(restoreTo);
@@ -225,13 +248,17 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
       paint();
     },
 
-    toggle(): void {
+    toggle(explicitOpener?: HTMLElement): void {
       const opening = !open;
       if (opening) {
-        const active = document.activeElement;
+        const active = explicitOpener ?? document.activeElement;
         opener =
           active instanceof HTMLElement
-            ? { owner: focusOwner(roots), element: active, selector: stableSelectorFor(active) }
+            ? {
+                owner: ownerOf(roots, active),
+                element: active,
+                selector: stableSelectorFor(active),
+              }
             : null;
         focusCloseButtonOnNextPaint = true;
       }

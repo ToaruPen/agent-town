@@ -19,8 +19,15 @@ export interface NationDashboardController {
 
 export interface NationDashboardActions {
   send: SendClientMessage;
-  /** Opens the candidate list. The dashboard names the decision; the panel is where it is made. */
-  openDirectives: () => void;
+  /**
+   * Opens the candidate list. The dashboard names the decision; the panel is where it is made.
+   *
+   * Takes the clicked button itself — hud.md §3.5's opener — rather than reading it back off
+   * `document.activeElement` on the other side: a click does not reliably focus its own control first
+   * (UA-dependent, and never true for a script-dispatched click), so `document.activeElement` at the time
+   * this fires may already be something else, or nothing.
+   */
+  openDirectives: (opener: HTMLElement) => void;
   /**
    * Whether there is a socket to send on, read at click time rather than passed in, so a reconnect does
    * not have to rebuild the dashboard to make 取消 live again. The cancel control has to obey this for the
@@ -116,7 +123,7 @@ function commitSlotSection(
   }
   const open = element("button", "nation-dashboard__choose", "施策を選ぶ（D）");
   open.type = "button";
-  open.addEventListener("click", actions.openDirectives);
+  open.addEventListener("click", () => actions.openDirectives(open));
   controls.append(open);
   section.append(controls);
   return section;
