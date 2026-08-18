@@ -126,6 +126,14 @@ describe("seasonReportView", () => {
    * never seen sitting in `nation.activeDirectives`.
    * `orders.chancellorChoice` is the only place its id, kind and issue tick ever reach the client, and
    * it must attribute here rather than rendering 発令者不明.
+   *
+   * Also pins `issuedLabel`, which reads `chancellorSelection`'s stamped `issuedAtTick` for the first
+   * time. Verified against `packages/server/src/sim/nation/engine.ts`: `chancellorSelection` and
+   * `queuedSelection` both stamp `issuedAtTick: tick` with the same boundary `tick`
+   * `resolveSeason`/`report.year`/`report.season` are built from, and `wsServer.ts` derives the wire's
+   * `issuedAtTick` from that identical `nextNationSeasonBoundaryTick`. So a directive selected at a
+   * boundary always dates itself to the season that boundary starts — true for a queued directive today
+   * and now true for a chancellor's preview too, not a value invented for this fix.
    */
   it("attributes a chancellor-picked holdFestival to the chancellor, never 発令者不明", () => {
     const withChoice = applyOrders(
@@ -153,6 +161,7 @@ describe("seasonReportView", () => {
       kindLabel: "祭礼",
       attribution: "chancellor",
       attributionLabel: "宰相の決定",
+      issuedLabel: "紀元1041年 夏 発令",
     });
   });
 

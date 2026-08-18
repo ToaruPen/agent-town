@@ -262,6 +262,20 @@ describe("the chancellor's previewed choice", () => {
       issuedAtTick: 300,
     });
   });
+
+  /**
+   * The §3.6 reconnect rule stated in the brief: the chancellor's entries follow `directiveLog`'s
+   * survival, the same as a queued directive's already does at line ~132 above.
+   */
+  it("survives a reconnect, unlike ownDirectiveIds", () => {
+    const withChoice = applyOrders(welcomed(), ordersFixture());
+    const reconnected = applyWelcome(withChoice, worldFixture());
+
+    expect(reconnected.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "encourageStores",
+      issuedAtTick: 300,
+    });
+  });
 });
 
 /**

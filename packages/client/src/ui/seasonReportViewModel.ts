@@ -237,10 +237,11 @@ function attributionFor(
 }
 
 /**
- * A completed directive whose kind was never observed is not a bug to guard against — it is the
- * guaranteed path for a chancellor-picked `holdFestival` (the one one-season `DirectiveKind`), which
- * completes in the same boundary it is selected, before `activeDirectives` ever carries it. This still
- * has to render something rather than throw.
+ * A completed directive whose kind was never observed is not a bug to guard against — `directiveLog` is
+ * populated only while a session is connected (`activeDirectives`, `orders.queued`,
+ * `orders.chancellorChoice`, `nationHudState.ts`), so an id completed during a disconnect gap or before
+ * this session ever connected reaches here unlogged. This still has to render something rather than
+ * throw.
  */
 function completedDirectiveRow(
   id: DirectiveId,

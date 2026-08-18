@@ -254,12 +254,11 @@ describe("buildSeasonReportViewModel", () => {
     });
 
     /**
-     * `holdFestival` is the one one-season directive (`NATION_DIRECTIVE_DURATIONS`), and
-     * `engine.ts` `activateBoundaryDirectives` adds a freshly selected directive and resolves the season
-     * in the same boundary — so a chancellor-picked festival completes before the client ever observes it
-     * sitting in `activeDirectives`, and `chancellorChoice` carries no id to pre-attribute it by. This is
-     * not a rare edge case: it is the only path available for that kind, every time autopilot picks it.
-     * The report must still render, rather than throwing on a completed id it never logged.
+     * `directiveLog` is populated only from what a connected session has actually seen
+     * (`activeDirectives`, `orders.queued`, `orders.chancellorChoice` — `nationHudState.ts`). An id can
+     * still complete unlogged: a disconnect gap, or a session that connects after the directive was
+     * already selected. The report must still render, rather than throwing on a completed id it never
+     * logged — this operates directly on an empty `log`, independent of how `nationHudState.ts` fills one.
      */
     it("still renders a completed directive whose kind was never observed, rather than throwing", () => {
       const report = reportFixture({ completedDirectiveIds: ["chancellor-polity-1-777"] });
