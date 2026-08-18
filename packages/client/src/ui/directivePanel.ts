@@ -1,6 +1,6 @@
 import type { SendClientMessage } from "../net/wsClient.js";
 import type { DirectiveCardViewModel, DirectiveListViewModel } from "./directiveViewModel.js";
-import { meter } from "./nationDom.js";
+import { meter, resolveOpener, stableSelectorFor } from "./nationDom.js";
 import { issueDirectiveCommand } from "./nationHudState.js";
 import { element } from "./worldChronicle.js";
 
@@ -110,22 +110,6 @@ function panelBody(view: DirectiveListViewModel, send: SendClientMessage): HTMLE
 }
 
 /**
- * A CSS selector that can find a freshly rebuilt stand-in for `node`, when it carries the single stable
- * class every node this codebase builds via `element()` (worldChronicle.ts) gets — e.g. the dashboard's
- * own "施策を選ぶ" button, class `nation-dashboard__choose`, which `nationHud.renderPanels()` rebuilds
- * wholesale on every `applyOrders`/`applyUpdate`, including while this panel sits open mid-decision.
- * `null` when the node has no class to key off (a bare test fixture, `document.body`), in which case a
- * stale reference just stays stale — there is nothing left to re-resolve by.
- *
- * Assumes the class is unique enough on the page that the first match is the right one, matching the
- * hardcoded `STRIP_TOGGLE_SELECTOR` lookup `seasonReportPanel.ts` already does for the same reason.
- */
-function stableSelectorFor(node: HTMLElement): string | null {
-  const className = node.classList[0];
-  return className === undefined ? null : `.${className}`;
-}
-
-/**
  * The order desk's candidate list. Opened on demand (`D`) and rebuilt only when the server sends a new
  * `orders`, which is once a season plus once per action — never on the countdown's frame loop.
  */
@@ -153,19 +137,11 @@ export function createDirectivePanel(
    * The raw captured element goes stale whenever whatever rebuilds it does so while this panel is still
    * open — most commonly the dashboard's "施策を選ぶ" button: submitting a directive without closing the
    * panel triggers the `orders` echo, which rebuilds the dashboard before the player gets around to
-   * closing this panel. `opener.selector` re-resolves against the live document in that case. Failing
-   * that (no selector, or nothing matches — the opener was genuinely removed, not just rebuilt), this is
-   * a no-op rather than focusing something arbitrary.
+   * closing this panel. `resolveOpener` re-resolves against the live document in that case; see it for
+   * when it gives up instead.
    */
   const returnFocusToOpener = (): void => {
-    if (opener !== null) {
-      const target = opener.element.isConnected
-        ? opener.element
-        : opener.selector === null
-          ? null
-          : document.querySelector<HTMLElement>(opener.selector);
-      target?.focus();
-    }
+    if (opener !== null) resolveOpener(opener)?.focus();
     opener = null;
   };
 

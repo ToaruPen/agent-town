@@ -751,6 +751,35 @@ describe("the season report", () => {
   });
 
   /**
+   * The report has a second opener beside the strip's own toggle: the dashboard's "施策を選ぶ" button is
+   * focusable and `R` opens the report from anywhere. That button is exactly the node
+   * `nationHud.renderPanels()` rebuilds on every `applyOrders`/`applyUpdate` — including while the report
+   * sits open, unrelated to the report itself resolving.
+   */
+  it("returns focus to the rebuilt dashboard opener when it repaints while the report is still open", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    const opener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(opener).not.toBeNull();
+    (opener as HTMLElement).focus();
+
+    hud.toggleReport();
+    expect(roots.report.hidden).toBe(false);
+
+    // Some other update lands while the report is still open — `autoPilot` flips off (the default from
+    // `boardedWithReport` is on) so the dashboard's view model genuinely differs and its memoized render
+    // is not skipped.
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const rebuiltOpener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(rebuiltOpener).not.toBeNull();
+    expect(rebuiltOpener).not.toBe(opener);
+
+    hud.toggleReport();
+
+    expect(roots.report.hidden).toBe(true);
+    expect(document.activeElement).toBe(rebuiltOpener);
+  });
+
+  /**
    * The pin must not register an opener at all — hud.md §4.5 gives a famine the right to show the report,
    * not to claim a return destination for a player action that never happened. Closing it afterward must
    * not throw and must not yank focus to whatever the pin's own trigger happened to be.

@@ -1,3 +1,4 @@
+import { resolveOpener, stableSelectorFor } from "./nationDom.js";
 import type {
   SeasonReportCompletedDirectiveRow,
   SeasonReportMetricRow,
@@ -145,8 +146,12 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
   // §4.5 gives it the right to do ("show itself", not move the caret).
   let focusCloseButtonOnNextPaint = false;
   // hud.md §3.5: closing a panel returns focus to whatever opened it. Captured by `toggle()` only — see
-  // `returnFocusToOpener` for why `owner` exists alongside the raw element.
-  let opener: { readonly owner: FocusOwner; readonly element: HTMLElement } | null = null;
+  // `returnFocusToOpener` for why `owner` and `selector` exist alongside the raw element.
+  let opener: {
+    readonly owner: FocusOwner;
+    readonly element: HTMLElement;
+    readonly selector: string | null;
+  } | null = null;
 
   /** Split out of `paint()` purely to keep its complexity under the linter's limit. */
   const restoreFocusAfterPaint = (restoreTo: FocusOwner): void => {
@@ -189,18 +194,23 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
    * opened by `pin()` rather than `toggle()` (a famine pin never moves focus, so there is no opener to
    * return it to) — a no-op in that case.
    *
-   * `owner === "strip"` is resolved by selector rather than by the captured `element`: when the opener is
-   * the strip's own toggle button, `paint()` rebuilds `roots.strip` unconditionally on this same call
-   * (open or closed), so the captured node is already detached by the time `toggle()` returns. Any other
-   * opener is not rebuilt by this controller, so the captured element is used directly, guarded against
-   * having been removed from the document by an unrelated rebuild elsewhere on the page.
+   * `owner === "strip"` is resolved by a hardcoded selector rather than the captured `element`: when the
+   * opener is the strip's own toggle button, `paint()` rebuilds `roots.strip` unconditionally on this same
+   * call (open or closed), so the captured node is already detached by the time `toggle()` returns.
+   *
+   * Any other opener is not rebuilt by *this* controller, but can still be rebuilt by something else on
+   * the page while the report sits open — most commonly the dashboard's own "施策を選ぶ" button, which
+   * `nationHud.renderPanels()` rebuilds on every `applyOrders`/`applyUpdate`. `resolveOpener` (shared with
+   * `directivePanel.ts`, which faces the identical staleness) handles that: re-resolve against the live
+   * document when the raw reference is no longer connected, or give up rather than focus something
+   * arbitrary.
    */
   const returnFocusToOpener = (): void => {
     if (opener !== null) {
       if (opener.owner === "strip") {
         roots.strip.querySelector<HTMLButtonElement>(STRIP_TOGGLE_SELECTOR)?.focus();
-      } else if (opener.element.isConnected) {
-        opener.element.focus();
+      } else {
+        resolveOpener(opener)?.focus();
       }
     }
     opener = null;
@@ -220,7 +230,9 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
       if (opening) {
         const active = document.activeElement;
         opener =
-          active instanceof HTMLElement ? { owner: focusOwner(roots), element: active } : null;
+          active instanceof HTMLElement
+            ? { owner: focusOwner(roots), element: active, selector: stableSelectorFor(active) }
+            : null;
         focusCloseButtonOnNextPaint = true;
       }
       open = opening;
