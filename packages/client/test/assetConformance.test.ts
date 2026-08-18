@@ -186,14 +186,22 @@ const FIXTURE_PALETTE: readonly number[] = [OUTLINE_COLOR, LEAF, SHADE, STONE];
 
 /** Strips string/template literal contents, line comments and block comments, replacing each with an
  *  equal-shape stand-in so an English loanword in a Japanese comment or in on-screen UI text is never
- *  mistaken for a reference. Strings run first so a comment marker inside one is not read as real. Known
+ *  mistaken for a reference. Strings run first so a comment marker inside one is not read as real.
+ *
+ *  The single- and double-quote rules are bounded to one line (`[^'\\\n]` / `[^"\\\n]`, not just
+ *  `[^'\\]` / `[^"\\]`): a real JS string literal can never contain a raw newline, but this codebase's
+ *  comments are full of possessive apostrophes ("the player's own edges" ... later ... "the strip's own
+ *  toggle"). Without the `\n` exclusion, an unbounded single-quote match bridges from the first
+ *  apostrophe to the next one found anywhere later in the file — including across real code in
+ *  between — and erases everything in that span as if it were one string, hiding whatever sits inside it
+ *  from every rule below. Template literals legitimately span lines and keep their unbounded form. Known
  *  gap: code inside a template literal's interpolation is stripped along with the literal and would be
  *  missed — nothing in this codebase does that today (grepped). */
 function stripCommentsAndStrings(text: string): string {
   return text
     .replace(/`(?:\\.|[^`\\])*`/g, "``")
-    .replace(/"(?:\\.|[^"\\])*"/g, '""')
-    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 }
