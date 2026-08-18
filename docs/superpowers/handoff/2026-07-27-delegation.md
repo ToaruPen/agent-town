@@ -57,6 +57,7 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 | `chore-retire-held-ui` | Retire `heldOrderNote` / `commitSlot.detail` and their renderers and CSS | Claude client worker | **merged `6e25103`** — the struck-through Queued-cleanups row carries the detail |
 | `c1-08-directive-scenery` | C1-8 directives visible in the city view — the direct continuation of the owner's C1-7 direction | Claude client worker | **merged `4c16528`** after one review round (four findings, all fixed with stash-proven regression coverage). See "C1-8 landed" below |
 | `chore-engine-queued-pin` | The queued-cleanups engine-test pin: `player + queued + autoPilot: false` commits the queued order | Codex | **merged `276c0e7`** — independent review approved with zero findings; the struck-through Queued-cleanups row carries the detail |
+| `c1-09-change-visible` | C1-9 change made visible and kept calm — the plan's last unstarted client task | Claude client worker | running — dispatched 2026-08-18, based on `57fc33c` |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
 no builds, tests, installs or git operations in it from anyone else in that window.
