@@ -264,7 +264,7 @@ function describeScene(scene: WorldState, checkedKinds: readonly DirectiveKind[]
     .join(" / ");
   const streets = scene.trailCells.filter(({ level }) => level !== "none").length;
   const trees = scene.tiles.filter((tile) => tile.resource?.kind === "wood").length;
-  const anchors = Object.entries(directiveAnchorPositions(scene))
+  const anchors = Object.entries(directiveAnchorPositions(scene.stockpile.pos))
     .map(([kind, pos]) => `${kind} ${pos.x},${pos.y}`)
     .join(" / ");
   const active =
@@ -350,7 +350,7 @@ function draw(): void {
   renderStructureLayer(objectLayer, scene.buildings);
   renderDirectiveLayer(
     objectLayer,
-    directiveAnchorPositions(scene),
+    directiveAnchorPositions(scene.stockpile.pos),
     activeDirectiveKinds(input.nation, input.city.id),
     bannerColor,
   );

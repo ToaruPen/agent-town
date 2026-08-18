@@ -112,24 +112,15 @@ const DIRECTIVE_ANCHOR_OFFSETS: Readonly<Record<DirectiveKind, Position>> = {
   holdFestival: { x: -2, y: 1 },
 };
 
-const ANCHOR_POSITIONS: readonly Position[] = Object.values(DIRECTIVE_ANCHOR_OFFSETS).map(
-  (offset) => shift(QUARTER_CENTRE, offset),
-);
-
-const ANCHOR_KEYS: ReadonlySet<string> = new Set(ANCHOR_POSITIONS.map(({ x, y }) => `${x},${y}`));
-
-function isDirectiveAnchor(pos: Position): boolean {
-  return ANCHOR_KEYS.has(`${pos.x},${pos.y}`);
-}
-
 /**
- * Where C1-8 may put the mark for each active directive, read off the returned state rather than
- * re-derived from the layout: the anchors are fixed offsets from the store the scene already carries.
+ * Where C1-8 may put the mark for each active directive, given the store position the rest of the
+ * scene is built around. The single formula every anchor-consuming caller goes through — the module's
+ * own bare-ground reservation below, the field and granary placement, and every external caller
+ * (`cityViewPanel.ts`, `devCityScene.ts`) — so none of them can drift from what the others reserve.
  */
 export function directiveAnchorPositions(
-  scene: WorldState,
+  store: Position,
 ): Readonly<Record<DirectiveKind, Position>> {
-  const store = scene.stockpile.pos;
   return {
     clearFarmland: shift(store, DIRECTIVE_ANCHOR_OFFSETS.clearFarmland),
     developTimber: shift(store, DIRECTIVE_ANCHOR_OFFSETS.developTimber),
@@ -140,10 +131,14 @@ export function directiveAnchorPositions(
   };
 }
 
-/** The store never moves from `QUARTER_CENTRE`, so this is `directiveAnchorPositions` without needing
- *  a whole synthesized scene to read `stockpile.pos` back off of. */
-function anchorFor(kind: DirectiveKind): Position {
-  return shift(QUARTER_CENTRE, DIRECTIVE_ANCHOR_OFFSETS[kind]);
+const ANCHOR_POSITIONS: readonly Position[] = Object.values(
+  directiveAnchorPositions(QUARTER_CENTRE),
+);
+
+const ANCHOR_KEYS: ReadonlySet<string> = new Set(ANCHOR_POSITIONS.map(({ x, y }) => `${x},${y}`));
+
+function isDirectiveAnchor(pos: Position): boolean {
+  return ANCHOR_KEYS.has(`${pos.x},${pos.y}`);
 }
 
 /**
@@ -533,10 +528,10 @@ const CROP_STAGE_BY_SEASON: Readonly<Record<(typeof SEASONS)[number], CropStage>
  * of a directive once it completes — `SeasonReport.completedDirectiveIds` is last-season-only and
  * carries ids, not kinds — so a permanently-standing field would claim a result the server never sent.
  */
-function clearFarmlandField(season: (typeof SEASONS)[number]): Field {
+function clearFarmlandField(season: (typeof SEASONS)[number], anchor: Position): Field {
   return {
     kind: "field",
-    pos: anchorFor("clearFarmland"),
+    pos: anchor,
     progress: 0,
     complete: false,
     stage: CROP_STAGE_BY_SEASON[season],
@@ -548,7 +543,7 @@ function clearFarmlandField(season: (typeof SEASONS)[number]): Field {
  * `Facility` `Building` — unlike `openMine` (`directiveLayer.ts`), this needs no new shared type. Same
  * visibility rule as the field above: it disappears the season the directive completes.
  */
-function encourageStoresGranary(directive: ActiveDirective): Facility {
+function encourageStoresGranary(directive: ActiveDirective, anchor: Position): Facility {
   const elapsedSeasons = Math.max(0, directive.totalSeasons - directive.seasonsRemaining);
   const ticksPerSeason = FACILITY_BUILD_TICKS.communalGranary / directive.totalSeasons;
   return {
@@ -556,7 +551,7 @@ function encourageStoresGranary(directive: ActiveDirective): Facility {
     id: `directive-mark-${directive.id}`,
     demandId: `directive-mark-${directive.id}`,
     institutionId: `directive-mark-${directive.id}`,
-    pos: anchorFor("encourageStores"),
+    pos: anchor,
     progress: Math.min(FACILITY_BUILD_TICKS.communalGranary, ticksPerSeason * elapsedSeasons),
     complete: false,
     woodDelivered: 0,
@@ -587,17 +582,24 @@ function encourageStoresGranary(directive: ActiveDirective): Facility {
   };
 }
 
-/** The two directives whose mark is an ordinary `Building`, read straight off `activeDirectives`. */
-function directiveBuildings(
+/**
+ * The two directives whose mark is an ordinary `Building`, read straight off `activeDirectives` and
+ * placed at whichever anchors the caller passes in — never re-derived here, so a field or granary can
+ * only ever land where `directiveAnchorPositions` itself would put it. Exported so that contract is
+ * directly checkable: a caller that fed the wrong anchor is the only way this could ever disagree.
+ */
+export function directiveBuildings(
   activeForCity: readonly ActiveDirective[],
   season: (typeof SEASONS)[number],
+  anchors: Readonly<Record<DirectiveKind, Position>>,
 ): Building[] {
   const buildings: Building[] = [];
   if (activeForCity.some((directive) => directive.kind === "clearFarmland")) {
-    buildings.push(clearFarmlandField(season));
+    buildings.push(clearFarmlandField(season, anchors.clearFarmland));
   }
   const granary = activeForCity.find((directive) => directive.kind === "encourageStores");
-  if (granary !== undefined) buildings.push(encourageStoresGranary(granary));
+  if (granary !== undefined)
+    buildings.push(encourageStoresGranary(granary, anchors.encourageStores));
   return buildings;
 }
 
@@ -622,6 +624,11 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
 
   const activeForCity = activeDirectivesForCity(input.nation, input.city.id);
   const season = nationSeasonOfTick(input.tick);
+  // The one place the store's own position is decided; `directiveAnchorPositions` is then called on
+  // this exact value; so `stockpile.pos` below and the anchors buildings are placed at can never read
+  // two different positions for the store, even if this stops being `QUARTER_CENTRE` outright someday.
+  const storePos: Position = { ...QUARTER_CENTRE };
+  const anchors = directiveAnchorPositions(storePos);
 
   const scene: WorldState = {
     tick: displayTick(input.tick),
@@ -631,8 +638,8 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
     agents: [],
     // `renderMapLayer` draws the stockpile unconditionally, so the city store is not optional. No
     // layer reads the amounts, and a nation-wide figure at one city's store would be a wrong one.
-    stockpile: { pos: { ...QUARTER_CENTRE }, wood: 0, food: 0 },
-    buildings: [...drawnHouses(plots), ...directiveBuildings(activeForCity, season)],
+    stockpile: { pos: storePos, wood: 0, food: 0 },
+    buildings: [...drawnHouses(plots), ...directiveBuildings(activeForCity, season, anchors)],
     deaths: [],
     collectives: [],
     institutions: [],

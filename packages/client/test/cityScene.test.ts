@@ -29,6 +29,7 @@ import {
   activeDirectivesForCity,
   type CitySceneInput,
   directiveAnchorPositions,
+  directiveBuildings,
   synthesizeCityScene,
 } from "../src/local/cityScene.js";
 import { citySceneSeed } from "../src/local/sceneRng.js";
@@ -335,7 +336,7 @@ describe("synthesizeCityScene", () => {
 describe("directiveAnchorPositions", () => {
   it("gives every directive kind an anchor of its own beside the store", () => {
     const scene = synthesizeCityScene(makeInput());
-    const anchors = directiveAnchorPositions(scene);
+    const anchors = directiveAnchorPositions(scene.stockpile.pos);
 
     const positions = DIRECTIVE_KINDS.map((kind) => anchors[kind]);
     expect(new Set(positions.map(({ x, y }) => `${x},${y}`)).size).toBe(DIRECTIVE_KINDS.length);
@@ -355,7 +356,7 @@ describe("directiveAnchorPositions", () => {
    * chunk §5 lists beside it; spacing it too is free, and cheaper than revisiting this if it lands.
    */
   it("keeps the anchors that may carry loose props well clear of each other", () => {
-    const anchors = directiveAnchorPositions(synthesizeCityScene(makeInput()));
+    const anchors = directiveAnchorPositions(synthesizeCityScene(makeInput()).stockpile.pos);
     const propKinds: readonly DirectiveKind[] = ["developTimber", "holdFestival", "openMine"];
 
     for (const kind of propKinds) {
@@ -369,7 +370,7 @@ describe("directiveAnchorPositions", () => {
   it("keeps every anchor free of houses, streets and standing resources", () => {
     for (const terrain of ["plains", "forest", "hills", "mountains", "sea"] as const) {
       const scene = synthesizeCityScene(makeInput({ ...CROWDED_CITY, terrain }));
-      const anchors = directiveAnchorPositions(scene);
+      const anchors = directiveAnchorPositions(scene.stockpile.pos);
 
       expect(scene.buildings.length).toBeGreaterThan(0);
       for (const kind of DIRECTIVE_KINDS) {
@@ -387,9 +388,36 @@ describe("directiveAnchorPositions", () => {
   });
 
   it("puts the anchors in the same places for the same city twice", () => {
-    expect(directiveAnchorPositions(synthesizeCityScene(makeInput()))).toEqual(
-      directiveAnchorPositions(synthesizeCityScene(makeInput())),
+    expect(directiveAnchorPositions(synthesizeCityScene(makeInput()).stockpile.pos)).toEqual(
+      directiveAnchorPositions(synthesizeCityScene(makeInput()).stockpile.pos),
     );
+  });
+
+  /**
+   * Review finding: `clearFarmlandField`/`encourageStoresGranary` used to recompute their own anchor
+   * from the module's own `QUARTER_CENTRE` constant instead of reading it from `directiveAnchorPositions`
+   * — a store position that ever differed from `QUARTER_CENTRE` would have split the field/granary away
+   * from the other four marks' reserved plots, and no prior test could catch it: every prior assertion
+   * compared two results that both, independently, hardcoded the same constant, so they always agreed
+   * whether or not the code actually depended on the anchors it was given. This drives
+   * `directiveBuildings` with a store far from `QUARTER_CENTRE` to prove the placement is exactly what
+   * `directiveAnchorPositions` says for that store, not a position `directiveBuildings` derived itself.
+   */
+  it("places the field and granary exactly where directiveAnchorPositions puts them for an arbitrary store", () => {
+    const farStore: Position = { x: 5, y: 41 };
+    const anchors = directiveAnchorPositions(farStore);
+    const directives = [
+      makeDirective({ kind: "clearFarmland" }),
+      makeDirective({ kind: "encourageStores", id: "directive-2" }),
+    ];
+
+    const buildings = directiveBuildings(directives, "spring", anchors);
+
+    expect(buildings.find(isField)?.pos).toEqual(anchors.clearFarmland);
+    expect(buildings.find(isFacility)?.pos).toEqual(anchors.encourageStores);
+    // And not anywhere near QUARTER_CENTRE, which is what the old internal re-derivation would have used.
+    expect(buildings.find(isField)?.pos).not.toEqual({ x: 31, y: 26 });
+    expect(buildings.find(isFacility)?.pos).not.toEqual({ x: 34, y: 23 });
   });
 });
 
@@ -451,7 +479,7 @@ describe("directive buildings", () => {
   it("draws a field at the clearFarmland anchor while the directive is active", () => {
     const directive = makeDirective({ kind: "clearFarmland" });
     const scene = synthesizeCityScene(makeInput({ activeDirectives: [directive] }));
-    const anchors = directiveAnchorPositions(scene);
+    const anchors = directiveAnchorPositions(scene.stockpile.pos);
 
     const fields = scene.buildings.filter(isField);
     expect(fields).toHaveLength(1);
@@ -493,7 +521,7 @@ describe("directive buildings", () => {
       totalSeasons: 2,
     });
     const scene = synthesizeCityScene(makeInput({ activeDirectives: [directive] }));
-    const anchors = directiveAnchorPositions(scene);
+    const anchors = directiveAnchorPositions(scene.stockpile.pos);
 
     const facilities = scene.buildings.filter(isFacility);
     expect(facilities).toHaveLength(1);
