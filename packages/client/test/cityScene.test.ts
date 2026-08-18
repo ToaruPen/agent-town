@@ -622,7 +622,7 @@ describe("trade route roads", () => {
     expect(scene.trailCells[edgeEast.y * MAP_WIDTH + edgeEast.x]?.level).toBe("none");
   });
 
-  it("draws an established road toward the trade partner's bearing, reaching the map edge", () => {
+  it("draws an established road toward the trade partner's bearing, reaching the map edge, and keeps that edge visible ground", () => {
     const scene = synthesizeCityScene(
       makeInput({ otherCities: [eastPartner], tradeRoutes: [eastRoute] }),
     );
@@ -630,6 +630,56 @@ describe("trade route roads", () => {
     expect(cell?.level).toBe("establishedTrail");
     expect(isVisibleGround(scene, edgeEast)).toBe(true);
   });
+
+  /**
+   * Review finding: the test above is the only prior bearing coverage, and it only ever checks east —
+   * it cannot catch a sign error on the other axis (north/south) or a wrong octant on a diagonal;
+   * a `bearingTo` that always returned east would still have passed it. This tables every octant.
+   * `edge` is where a ray from `QUARTER_CENTRE` (32,24) in that direction leaves the 64x48 quarter
+   * first: `min` of how many steps each axis allows before it runs out of bounds, worked out by hand
+   * once per direction rather than re-deriving `roadPositions`' own loop in the test.
+   */
+  const BEARING_CASES: readonly {
+    name: string;
+    dx: -1 | 0 | 1;
+    dy: -1 | 0 | 1;
+    edge: Position;
+  }[] = [
+    { name: "east", dx: 1, dy: 0, edge: { x: MAP_WIDTH - 1, y: 24 } },
+    { name: "southeast", dx: 1, dy: 1, edge: { x: 55, y: MAP_HEIGHT - 1 } },
+    { name: "south", dx: 0, dy: 1, edge: { x: 32, y: MAP_HEIGHT - 1 } },
+    { name: "southwest", dx: -1, dy: 1, edge: { x: 9, y: MAP_HEIGHT - 1 } },
+    { name: "west", dx: -1, dy: 0, edge: { x: 0, y: 24 } },
+    { name: "northwest", dx: -1, dy: -1, edge: { x: 8, y: 0 } },
+    { name: "north", dx: 0, dy: -1, edge: { x: 32, y: 0 } },
+    { name: "northeast", dx: 1, dy: -1, edge: { x: 56, y: 0 } },
+  ];
+
+  it.each(BEARING_CASES)(
+    "draws the road toward the $name bearing, reaching that edge and no other",
+    ({ dx, dy, edge }) => {
+      const partner = makeCity("city-polity-1-2", {
+        x: DEFAULT_OPTIONS.pos.x + dx * 10,
+        y: DEFAULT_OPTIONS.pos.y + dy * 10,
+      });
+      const route = {
+        id: "route-1",
+        cityIds: [DEFAULT_OPTIONS.cityId, "city-polity-1-2"] as [string, string],
+        establishedByEventId: "event-route",
+      };
+      const scene = synthesizeCityScene(
+        makeInput({ otherCities: [partner], tradeRoutes: [route] }),
+      );
+
+      expect(scene.trailCells[edge.y * MAP_WIDTH + edge.x]?.level).toBe("establishedTrail");
+
+      // A wrong sign or octant would reach a different edge instead of this one.
+      const opposite = { x: MAP_WIDTH - 1 - edge.x, y: MAP_HEIGHT - 1 - edge.y };
+      if (opposite.x !== edge.x || opposite.y !== edge.y) {
+        expect(scene.trailCells[opposite.y * MAP_WIDTH + opposite.x]?.level).toBe("none");
+      }
+    },
+  );
 
   it("draws no road when the trade route's partner city is unresolvable", () => {
     const scene = synthesizeCityScene(makeInput({ tradeRoutes: [eastRoute] }));
