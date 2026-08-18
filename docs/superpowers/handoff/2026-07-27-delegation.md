@@ -53,8 +53,8 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 | `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | **merged `7e370a1`** after one review round (stale-hover fix). See "C1-6b landed" below |
 | `n1-15-chancellor-tick` | #4 in full: `chancellorChoice` gains `issuedAtTick` (Codex, `e55e65d`), then the client attribution pass on the same branch (Claude worker, two review rounds) | Codex, then a Claude client worker | **merged `0fb8f71`.** See "発令者不明 is closed" below |
 | `chore-client-followups` | Four queued client cleanups: §3.5 focus return (both panels), the useOptionalChain warning, the tautological no-player map test, the Node-globals guard | Claude client worker | **merged `a6b4ea3`** after one review round (opener capture, scoped re-resolution, the guard rebuilt as Biome config). The four Queued-cleanups rows below carry the detail |
-| `c1-07-city-view` | C1-7 mount the city view, plus the `map.locate()` world-entry wiring C1-6b left it | Claude client worker | running — owner picked C1-7 as the next direction, 2026-08-18 |
-| `chore-retire-held-ui` | Retire `heldOrderNote` / `commitSlot.detail` and their renderers and CSS | Claude client worker | running — owner decided retirement over retention, 2026-08-18 |
+| `c1-07-city-view` | C1-7 mount the city view, plus the `map.locate()` world-entry wiring C1-6b left it | Claude client worker | **merged `75734b5`** after two review rounds; one finding resolved by documenting a design conflict rather than implementing. See "C1-7 landed" below |
+| `chore-retire-held-ui` | Retire `heldOrderNote` / `commitSlot.detail` and their renderers and CSS | Claude client worker | **merged `6e25103`** — the struck-through Queued-cleanups row carries the detail |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
 no builds, tests, installs or git operations in it from anyone else in that window.
@@ -139,9 +139,8 @@ nothing made optional.
   nations, the five HUD roots (`nation-clock`, `nation-dashboard`, `nation-ranking`, `nation-select`,
   `world-status`) are present in the served markup, and the client bundles. What renders is the clock, the
   nation picker, then the dashboard and the prosperity ranking once a nation is chosen. The directive panel
-  (C1-4) and the season report (C1-5) have since mounted. Still unmounted: the world map, whose branch is
-  green but unmerged — see "Where C1-6b stopped". `dev-city.html` remains the only page showing the resident
-  scale.
+  (C1-4), the season report (C1-5), the world map (C1-6b, `7e370a1`) and the docked city view (C1-7,
+  `75734b5`) have since mounted. `dev-city.html` remains the only page showing the resident scale.
 - **A fresh connect carries no player nation, and only `orders` ever names one.** Measured directly:
   `welcome` gives `playerNationId = null` with all four nations at `controller: "agent"`, and
   `wsServer.ts:161`'s `selectNation` returns `[orders]` and never a second `welcome`. So `orders.nationId` is
@@ -193,7 +192,7 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1 through C1-6b and C1-10 merged; next unstarted client tasks are C1-7, C1-8, C1-9).
+  C1-1 through C1-7 and C1-10 merged; next unstarted client tasks are C1-8, C1-9).
 - **The N1 slice's code criteria are met as of `7e370a1`.** "Opening the browser shows live nations, a
   moving ranking, a working directive panel and a working speed control" — all mounted, and the world map
   with them (C1-6b). Same-seed reproducibility and seed *divergence* are both genuinely tested —
@@ -576,9 +575,10 @@ Two findings from this task worth keeping:
 
 Loose ends recorded at the merge:
 
-- **C1-7 owes a `locate()` call.** visual.md §2.6 also fires the pulse automatically on entering the world
-  view from the local view; deliberately unimplemented because C1-7 has not landed. Whoever lands C1-7
-  wires `map.locate()` into that transition.
+- ~~**C1-7 owes a `locate()` call.**~~ Paid at `75734b5`: in the docked layout, closing the city view *is*
+  the local→world transition, so the panel's `onClose` fires `map.locate()` (and repaints the map so the
+  "open city" mark clears the same instant). A target vanishing (nation death) closes through the same
+  path deliberately — that too is a genuine local→world transition, not a player choice.
 - The worker could not run `ai-slop-cleaner` (skill unavailable in its session) and substituted a manual
   classification pass; the independent review therefore carried the deslop mandate explicitly and found
   nothing to remove.
@@ -587,6 +587,57 @@ Loose ends recorded at the merge:
   territory/tier/change now the map is always on screen; whether the capital cross-hatch is legible or a
   smudge at tier-1's ~2.5 px radius; whether the 1→2 px, 0.85→1.0, 250 ms pulse reads as a deliberate
   locate cue rather than a rendering glitch.
+
+## C1-7 landed — the city view is a docked pane, and one review finding was a design conflict
+
+Merged at **`75734b5`**, six commits, `packages/client` only: 14 files, +1349/−16, three new modules
+(`cityViewPanel.ts`, `cityViewTarget.ts`, `cityViewSync.ts`) and four new test files. Gate after rebase
+onto `20bb841`: `just check` exit 0 (zero warnings), `just test` **85 files / 1245 tests** — the worker's
+pre-rebase 1250 minus exactly the five declarations the held-UI retirement removed from main underneath it.
+
+Shape: the PixiJS local view mounts as a pane docked beside the world map, not a route. `cityViewPanel.ts`
+owns DOM/Pixi lifecycle against a `CityViewApp = Pick<Application, "stage"|"canvas"|"resize">`;
+`cityViewTarget.ts` resolves the player's capital into a scene; `cityViewSync.ts` owns the open/update/close
+decision from target *identity* (gone → close, id changed → open, same id → update) with a
+`closingProgrammatically` guard so a vanished-target close never suppresses a respawn the way a player's
+close-button click deliberately does.
+
+Two independent review rounds. Round two's four findings, and where each landed:
+
+- **The UA stylesheet was beating `[hidden]`** — `.city-view`'s own `display` outranked the hidden
+  attribute. Fixed in `03f4e16` with `.city-view[hidden]{display:none}` plus a computed-style test that
+  reads the real shipped stylesheet (`cityViewLayout.test.ts`), not a fixture copy of it.
+- **Shown-city identity was not tracked** — a nation switch or death kept painting the old city under the
+  new one's chrome, because the old gate keyed on a redraw fingerprint two cities can share. Fixed in
+  `e592aab` as the `cityViewSync.ts` module above, which also removed `main.ts`'s parallel
+  `openCityId`/`cityViewOpenedOnce` state (net −40 lines there; the map's "open city" mark now reads
+  `shownCityId()` from the single owner). The worker found and fixed its own ordering bug on the way:
+  `shownCityId` clears *before* `panel.close()`, because the panel's synchronous `onClose` repaints the
+  map, which must not mark a mid-teardown city as open — red/green evidence in `cityViewSync.test.ts`.
+- **The closed view does not widen the world map, and the worker refused to make it** — traversal.md:237
+  says plainly that closing widens the map, but the reviewer's CSS-stretch prescription was wrong: the
+  576×384 canvas is fixed at `WORLD_MAP_CELL_SIZE_PX = 6` for pixel-exact 1 px borders, which any
+  non-integer stretch smears, and even a clean 2× would not match visual.md §2.7's actual answer — a
+  distinct "(new)" playable-world-map mode (`WORLD_MAP_PLAY_CELL_SIZE_PX = 12`, non-linearly-rescaled
+  city radii `[2.5, 3.5, 5, 7]`, thicker borders, shown development core, 1152×768 canvas) that exists
+  nowhere in this codebase and needs `shared/src/constants.ts` entries plus a rendering rewrite. The
+  worker documented the conflict in `index.html` beside the layout CSS (`75844b9`) and handed the call
+  up; the supervisor accepted the deferral. §2.7 is now a queued task below, and it needs owner scoping —
+  it is a feature, not a chore.
+- **Teardown was asserted only by absence of errors** — `75734b5` pins listener removal and
+  `ResizeObserver.disconnect` with a fake observer, regression-probed both ways.
+
+Loose ends recorded at the merge:
+
+- **Closing is one-way.** No UI reopens the city view or opens a different city; `cityViewSync`
+  deliberately suppresses reopening until the target's identity changes. A future UX task, and it wants
+  design input rather than a guessed affordance.
+- `CityViewPanelController.isOpen()` lost its last production caller to `e592aab` and is now test-only —
+  queued below as a chore.
+- traversal.md and visual.md cite line numbers into the pre-C1-7 `main.ts`; stale now that the wiring
+  moved. Docs-only chore, queued below.
+- The owner's browser judgement is still owed on the docked layout itself (`just dev`, port 5173):
+  whether map-beside-city reads as one page or a collision, and whether the close button is discoverable.
 
 ## C1-5 landed, and it found a hole in the wire format
 
@@ -728,6 +779,10 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | ~~De-tautologize the no-player-nation map test~~ | `client/test/worldMapView.test.ts` | **Done in `a6b4ea3`.** The vacuous predicate is gone; the surviving alpha-set assertion plus a fixture non-emptiness guard now fail if any cell is player-marked under a null `playerPolityId` — proven by breaking `cellAlpha` and watching it fail |
 | ~~Return focus to the opener when a panel closes~~ | `client/src/ui/nationDom.ts` and both panels | **Done in `a6b4ea3`**, and it was not the one-liner the row implied. Two real findings on the way: the obvious `document.activeElement` capture is wrong on the click path (click focusability is UA-dependent — pass the event's `currentTarget`), and the opener is routinely *rebuilt* while a panel is open (`renderPanels` runs on every `applyOrders`), so the raw node goes stale on the common path — re-resolution is scoped to the owning root plus a stable key, and refuses to guess between same-class siblings |
 | ~~Clear the one lint warning `just check` now carries~~ | `client/src/ui/seasonReportViewModel.ts` | **Done in `a6b4ea3`** via `report?.entries.some(…) === true`. `just check` now carries zero warnings |
+| Build visual.md §2.7's playable world map mode | `shared/src/constants.ts`, `client/src/` | traversal.md:237's "closing the city view widens the world map" cannot be honored by CSS — the C1-7 review's stretch prescription was refused with the reasoning recorded in `index.html` beside the layout CSS. §2.7 specifies a distinct rendering mode (12 px cells, non-linear radii, 1152×768) needing new shared constants and a rendering rewrite. **A task, not a chore, and it needs owner scoping** — see "C1-7 landed" |
+| Reopen / switch-city UI for the city view | `client/src/` | Closing is one-way as of C1-7; `cityViewSync` suppresses reopening until target identity changes, by design. Wants a designed affordance, not a guessed one. **Unowned** |
+| Drop `CityViewPanelController.isOpen()` or give it a caller | `client/src/local/cityViewPanel.ts` | Test-only since `e592aab` moved identity tracking into `cityViewSync`. One method, its tests move or go with it. **Unowned** |
+| Refresh traversal.md / visual.md line references into `main.ts` | `docs/superpowers/design/` | Both cite pre-C1-7 line numbers; the wiring they point at moved into `cityViewSync.ts` and the `attachCityView` closure. Docs-only. **Unowned** |
 | Narrow `treeSpritePath()`'s return type | `client/src/render/sprites.ts` | Returns a widened `string` against an `as const` `SPRITE_PATHS`, so a test cannot assert path validity at compile time. Narrowing touches unaudited callers |
 | Bring the repo root under `tsc` | root `vitest.config.ts`, `test/` | `pnpm-workspace.yaml` lists only `packages/*`, so `pnpm -r exec tsc` never reaches the root |
 | Make server's Node types a direct dependency | `server/package.json` | Resolves `node:*` only transitively via `@types/ws`; drop or bump that and server tests silently lose Node types |
