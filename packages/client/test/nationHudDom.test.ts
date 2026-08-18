@@ -212,6 +212,57 @@ describe("the order desk's controls", () => {
   });
 
   /**
+   * hud.md §3.5: closing a panel returns focus to whatever opened it — here, the dashboard's own
+   * "施策を選ぶ" button, which is how `D` and a click both actually reach `toggle()`. Focus is moved onto
+   * a control *inside* the panel before closing it, so the assertion cannot pass merely because nothing
+   * ever moved focus away from the opener in the first place.
+   */
+  it("returns focus to the opener when the directive panel closes", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const opener = roots.dashboard.querySelector(".nation-dashboard__choose");
+    expect(opener).not.toBeNull();
+    (opener as HTMLElement).focus();
+    expect(document.activeElement).toBe(opener);
+
+    hud.toggleDirectives();
+    expect(roots.directives.hidden).toBe(false);
+
+    const submit = roots.directives.querySelector("[data-directive-key]");
+    expect(submit).not.toBeNull();
+    (submit as HTMLElement).focus();
+    expect(document.activeElement).toBe(submit);
+
+    hud.toggleDirectives();
+
+    expect(roots.directives.hidden).toBe(true);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  /**
+   * The ambiguous case §3.5 leaves unstated: the opener can vanish from the document while the panel is
+   * open (a dashboard rebuild, say). Closing must not throw and must not hand focus to a detached node —
+   * there is nothing sensible left to return it to, so it is left wherever the browser's default lands.
+   */
+  it("does not throw and does not focus a detached opener when the opener is gone by close time", () => {
+    const { roots, hud } = mountAgainstIndexHtml();
+    hud.applyWelcome(unclaimedWorld(), 1_000);
+    hud.applyOrders(ordersFixture({ nationId: "polity-2", autoPilot: false }));
+    const ephemeral = document.createElement("button");
+    document.body.append(ephemeral);
+    ephemeral.focus();
+    expect(document.activeElement).toBe(ephemeral);
+
+    hud.toggleDirectives();
+    ephemeral.remove();
+
+    expect(() => hud.toggleDirectives()).not.toThrow();
+    expect(roots.directives.hidden).toBe(true);
+    expect(document.activeElement).not.toBe(ephemeral);
+  });
+
+  /**
    * Bullet 1, and the reason `aria-disabled` was chosen over `disabled`: a `disabled` button leaves the tab
    * order and takes the explanation with it. The control has to be present, reachable and inert all at once.
    */
@@ -646,6 +697,65 @@ describe("the season report", () => {
     expect(secondToggle).not.toBe(firstToggle);
     expect(document.activeElement).toBe(secondToggle);
     expect(roots.report.hidden).toBe(true);
+  });
+
+  /** hud.md §3.5: closing a panel returns focus to whatever opened it — here, the strip's own toggle. */
+  it("returns focus to the opener when the season report closes", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    const opener = roots.strip.querySelector(".nation-strip__toggle");
+    expect(opener).not.toBeNull();
+    (opener as HTMLElement).focus();
+    expect(document.activeElement).toBe(opener);
+
+    hud.toggleReport();
+    expect(roots.report.hidden).toBe(false);
+
+    hud.toggleReport();
+
+    expect(roots.report.hidden).toBe(true);
+    // A genuinely new node: the strip repaints on the closing toggle too, same as it does on any other
+    // update, so this is proof of restored focus rather than focus that simply never moved.
+    const restoredOpener = roots.strip.querySelector(".nation-strip__toggle");
+    expect(restoredOpener).not.toBe(opener);
+    expect(document.activeElement).toBe(restoredOpener);
+  });
+
+  /**
+   * The pin must not register an opener at all — hud.md §4.5 gives a famine the right to show the report,
+   * not to claim a return destination for a player action that never happened. Closing it afterward must
+   * not throw and must not yank focus to whatever the pin's own trigger happened to be.
+   */
+  it("does not return focus anywhere when a panel opened by the famine pin is later closed", () => {
+    const famine = reportFixture({
+      entries: [ledgerEntry({ metric: "population", delta: -200, reason: "famine" })],
+    });
+    const { roots, hud } = boardedWithReport(famine);
+    expect(roots.report.hidden).toBe(false);
+    expect(document.activeElement === null || document.activeElement === document.body).toBe(true);
+
+    expect(() => hud.closeTopPanel()).not.toThrow();
+
+    expect(roots.report.hidden).toBe(true);
+    expect(document.activeElement === null || document.activeElement === document.body).toBe(true);
+  });
+
+  /**
+   * The ambiguous case §3.5 leaves unstated: the opener can vanish from the document while the panel is
+   * open. Closing must not throw and must not hand focus to a detached node.
+   */
+  it("does not throw and does not focus a detached opener when the opener is gone by close time", () => {
+    const { roots, hud } = boardedWithReport(reportFixture({ year: 3, season: "summer" }));
+    const ephemeral = document.createElement("button");
+    document.body.append(ephemeral);
+    ephemeral.focus();
+    expect(document.activeElement).toBe(ephemeral);
+
+    hud.toggleReport();
+    ephemeral.remove();
+
+    expect(() => hud.toggleReport()).not.toThrow();
+    expect(roots.report.hidden).toBe(true);
+    expect(document.activeElement).not.toBe(ephemeral);
   });
 
   /**

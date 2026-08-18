@@ -120,6 +120,8 @@ export function createDirectivePanel(
   let renderedKey: string | null = null;
   let open = false;
   let latest: DirectiveListViewModel | null = null;
+  /** Captured by `toggle()` when it opens the panel; consumed and cleared when it closes. */
+  let opener: HTMLElement | null = null;
 
   const paint = (): void => {
     root.hidden = !open;
@@ -127,6 +129,16 @@ export function createDirectivePanel(
     const focused = focusedCardKey(root);
     root.replaceChildren(...panelBody(latest, send));
     restoreFocus(root, focused);
+  };
+
+  /**
+   * hud.md §3.5: closing a panel returns focus to whatever opened it. Guarded against a stale reference —
+   * the opener can be removed from the document by an unrelated rebuild while the panel was open, in which
+   * case there is nothing sensible left to focus and this is a no-op.
+   */
+  const returnFocusToOpener = (): void => {
+    if (opener?.isConnected === true) opener.focus();
+    opener = null;
   };
 
   return {
@@ -139,9 +151,14 @@ export function createDirectivePanel(
     },
 
     toggle(): void {
-      open = !open;
+      const opening = !open;
+      if (opening) {
+        opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      }
+      open = opening;
       renderedKey = null;
       paint();
+      if (!opening) returnFocusToOpener();
     },
 
     close(): void {
@@ -149,6 +166,7 @@ export function createDirectivePanel(
       open = false;
       renderedKey = null;
       paint();
+      returnFocusToOpener();
     },
 
     isOpen(): boolean {

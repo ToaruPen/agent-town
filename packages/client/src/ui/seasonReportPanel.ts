@@ -144,6 +144,9 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
   // a famine pin is server-initiated, and moving focus for it would be the pin doing more than hud.md
   // §4.5 gives it the right to do ("show itself", not move the caret).
   let focusCloseButtonOnNextPaint = false;
+  // hud.md §3.5: closing a panel returns focus to whatever opened it. Captured by `toggle()` only — see
+  // `returnFocusToOpener` for why `owner` exists alongside the raw element.
+  let opener: { readonly owner: FocusOwner; readonly element: HTMLElement } | null = null;
 
   /** Split out of `paint()` purely to keep its complexity under the linter's limit. */
   const restoreFocusAfterPaint = (restoreTo: FocusOwner): void => {
@@ -181,6 +184,28 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
     restoreFocusAfterPaint(restoreTo);
   };
 
+  /**
+   * hud.md §3.5: closing a panel returns focus to whatever opened it. `opener` is null when the panel was
+   * opened by `pin()` rather than `toggle()` (a famine pin never moves focus, so there is no opener to
+   * return it to) — a no-op in that case.
+   *
+   * `owner === "strip"` is resolved by selector rather than by the captured `element`: when the opener is
+   * the strip's own toggle button, `paint()` rebuilds `roots.strip` unconditionally on this same call
+   * (open or closed), so the captured node is already detached by the time `toggle()` returns. Any other
+   * opener is not rebuilt by this controller, so the captured element is used directly, guarded against
+   * having been removed from the document by an unrelated rebuild elsewhere on the page.
+   */
+  const returnFocusToOpener = (): void => {
+    if (opener !== null) {
+      if (opener.owner === "strip") {
+        roots.strip.querySelector<HTMLButtonElement>(STRIP_TOGGLE_SELECTOR)?.focus();
+      } else if (opener.element.isConnected) {
+        opener.element.focus();
+      }
+    }
+    opener = null;
+  };
+
   const controller: SeasonReportPanelController = {
     render(view: SeasonReportViewModel | null, generation: number): void {
       const nextKey = `${generation}:${open}:${JSON.stringify(view)}`;
@@ -191,10 +216,17 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
     },
 
     toggle(): void {
-      open = !open;
-      if (open) focusCloseButtonOnNextPaint = true;
+      const opening = !open;
+      if (opening) {
+        const active = document.activeElement;
+        opener =
+          active instanceof HTMLElement ? { owner: focusOwner(roots), element: active } : null;
+        focusCloseButtonOnNextPaint = true;
+      }
+      open = opening;
       renderedKey = null;
       paint();
+      if (!opening) returnFocusToOpener();
     },
 
     pin(): void {
@@ -209,6 +241,7 @@ export function createSeasonReportPanel(roots: SeasonReportRoots): SeasonReportP
       open = false;
       renderedKey = null;
       paint();
+      returnFocusToOpener();
     },
 
     isOpen(): boolean {
