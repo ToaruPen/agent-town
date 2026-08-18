@@ -379,6 +379,44 @@ describe("the chancellor's previewed choice", () => {
       issuedAtTick: 300,
     });
   });
+
+  /**
+   * Not just the entry but its still-revisable status must survive `welcome` — a preview reconnect finds
+   * on screen is not yet the boundary's actual, so a later preview for the same id arriving after the
+   * reconnect must still be allowed to overwrite it. If `previewDirectiveIds` were dropped instead of
+   * carried through `mergedDirectiveLog`, this id would read as already-settled and freeze at whatever
+   * projection the reconnect happened to catch.
+   */
+  it("keeps a preview revisable across a reconnect, rather than freezing it at the last-seen projection", () => {
+    const previewed = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+    const reconnected = applyWelcome(previewed, worldFixture());
+    const revised = applyOrders(
+      reconnected,
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "growCity",
+          targetCityId: "city-polity-1-1",
+          issuedAtTick: 300,
+        },
+      }),
+    );
+
+    expect(revised.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "growCity",
+      issuedAtTick: 300,
+    });
+  });
 });
 
 /**

@@ -22,7 +22,8 @@ export type NationOrders = Extract<ServerMessage, { type: "orders" }>;
  * What the client remembers about a directive it has actually seen, for the season report's "完了した
  *施策" line (hud.md §4.5). The server never resends a completed directive's kind or issue date —
  * `completedDirectiveIds` on `SeasonReport` is ids only — so this is bookkeeping over facts already sent
- * (`ActiveDirective.kind`/`issuedAtTick`, or `orders.queued`), never a value invented client-side.
+ * (`ActiveDirective.kind`/`issuedAtTick`, `orders.queued`, or `orders.chancellorChoice`), never a value
+ * invented client-side.
  */
 export interface DirectiveLogEntry {
   kind: DirectiveKind;
@@ -128,8 +129,8 @@ export function initialNationHudState(): NationHudState {
  * One `activeDirectives` sighting folded in: added if not already logged, or — if it was logged as a
  * still-revisable chancellor preview — overwritten regardless of what the preview said, retiring the id
  * from `previewIds` so no later preview can touch it again. Every other id keeps first-sighting-wins,
- * unchanged. Returns the same references when nothing changed, so `mergedDirectiveLog`'s loop can carry
- * them forward without allocating.
+ * unchanged. An unchanged directive returns the same references, so a snapshot that adds nothing to the
+ * log leaves both fields identically as they were.
  */
 function mergedDirectiveLogEntry(
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
