@@ -281,6 +281,7 @@ describe("the commit slot", () => {
           id: "chancellor-polity-1-300",
           kind: "holdFestival",
           targetCityId: null,
+          issuedAtTick: 300,
         },
       }),
     );

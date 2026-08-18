@@ -159,6 +159,7 @@ export function ordersFixture(overrides: Partial<NationOrders> = {}): NationOrde
       id: "chancellor-polity-1-300",
       kind: "encourageStores",
       targetCityId: null,
+      issuedAtTick: 300,
     },
     rejected: null,
     ...overrides,

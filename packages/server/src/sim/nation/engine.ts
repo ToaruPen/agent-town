@@ -43,6 +43,10 @@ export function chancellorDirectiveId(nationId: NationId, tick: number): Directi
   return `chancellor-${nationId}-${tick}`;
 }
 
+export function nextNationSeasonBoundaryTick(tick: number): number {
+  return tick - (tick % NATION_TICKS_PER_SEASON) + NATION_TICKS_PER_SEASON;
+}
+
 function matchingOption(
   options: readonly DirectiveOption[],
   kind: DirectiveKind,
@@ -143,7 +147,7 @@ export function advanceNationEngine(
   queuedDirectives: readonly QueuedDirective[],
 ): NationEngineStep {
   const tick = state.tick + 1;
-  if (tick % NATION_TICKS_PER_SEASON !== 0) {
+  if (tick !== nextNationSeasonBoundaryTick(state.tick)) {
     return {
       state: { tick, nations: state.nations },
       reports: new Map(),

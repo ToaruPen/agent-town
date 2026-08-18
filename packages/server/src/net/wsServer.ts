@@ -9,7 +9,6 @@ import {
   type DirectiveOption,
   decodeClientMessage,
   encodeMessage,
-  NATION_TICKS_PER_SEASON,
   type NationId,
   type NationState,
   type NationWorldState,
@@ -30,6 +29,7 @@ import {
   advanceNationEngine,
   chancellorDirectiveId,
   type NationEngineState,
+  nextNationSeasonBoundaryTick,
   type QueuedDirective,
 } from "../sim/nation/engine.js";
 import { createStaticHandler } from "./staticServer.js";
@@ -66,10 +66,6 @@ export interface NationServerRuntime {
 }
 
 type OrderRejection = DirectiveBlockedReason | "notYourNation" | "unknownNation" | null;
-
-function nextSeasonBoundaryTick(tick: number): number {
-  return tick - (tick % NATION_TICKS_PER_SEASON) + NATION_TICKS_PER_SEASON;
-}
 
 class DefaultNationServerRuntime implements NationServerRuntime {
   private readonly history;
@@ -138,6 +134,7 @@ class DefaultNationServerRuntime implements NationServerRuntime {
     if (polity === undefined) throw new Error(`missing polity for nation ${nation.id}`);
     const options = this.options(nation);
     const choice = chooseDirective(nation, polity, options, nation.lastReport);
+    const issuedAtTick = nextNationSeasonBoundaryTick(this.engineState.tick);
     const queued =
       this.queued?.nationId === nation.id
         ? {
@@ -157,9 +154,10 @@ class DefaultNationServerRuntime implements NationServerRuntime {
         choice === null
           ? null
           : {
-              id: chancellorDirectiveId(nation.id, nextSeasonBoundaryTick(this.engineState.tick)),
+              id: chancellorDirectiveId(nation.id, issuedAtTick),
               kind: choice.kind,
               targetCityId: choice.targetCityId,
+              issuedAtTick,
             },
       rejected,
     };

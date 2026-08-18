@@ -94,23 +94,27 @@ describe("nation server runtime", () => {
     expect(boundary[1]?.session).toBe(session);
   });
 
-  it("uses the chancellor choice wire id for the directive cost and effect ledger", () => {
+  it("uses the chancellor choice wire id and issue tick for the committed ledger entries", () => {
     const runtime = createNationServerRuntime(6);
     const session = runtime.createSession();
     const nationId = runtime.worldState().nations[0]?.id;
     if (nationId === undefined) throw new Error("missing nation");
+    runtime.advanceTicks(17);
     const selected = firstOrders(
       runtime.handleClientMessage(session, { type: "selectNation", nationId }),
     );
     const choice = selected.chancellorChoice;
     if (choice === null) throw new Error("missing chancellor choice");
     const wireId = choice.id;
+    const wireIssuedAtTick = choice.issuedAtTick;
 
     expect(choice.kind).toBe("holdFestival");
+    expect(selected.tick).toBe(17);
     expect(wireId).toBe(`chancellor-${nationId}-${NATION_TICKS_PER_SEASON}`);
+    expect(wireIssuedAtTick).toBe(NATION_TICKS_PER_SEASON);
 
     const season = runtime
-      .advanceTicks(NATION_TICKS_PER_SEASON)
+      .advanceTicks(NATION_TICKS_PER_SEASON - selected.tick)
       .find(({ message }) => message.type === "season")?.message;
     if (season?.type !== "season") throw new Error("missing season");
     const report = season.nations.find(({ id }) => id === nationId)?.lastReport;
@@ -121,6 +125,7 @@ describe("nation server runtime", () => {
         .map(({ reason }) => reason),
     );
 
+    expect(season.tick).toBe(wireIssuedAtTick);
     expect(ledgerReasons).toEqual(new Set(["directiveCost", "directiveEffect"]));
     expect(report.completedDirectiveIds).toContain(wireId);
   });

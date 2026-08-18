@@ -118,6 +118,7 @@ describe("wire protocol", () => {
         id: "chancellor-realm-300",
         kind: "clearFarmland",
         targetCityId: null,
+        issuedAtTick: 300,
       },
       rejected: null,
     };
@@ -206,7 +207,54 @@ describe("wire protocol", () => {
           autoPilot: true,
           options: [],
           queued: null,
-          chancellorChoice: { kind: "clearFarmland", targetCityId: null },
+          chancellorChoice: {
+            kind: "clearFarmland",
+            targetCityId: null,
+            issuedAtTick: 300,
+          },
+          rejected: null,
+        }),
+      ),
+    ).toThrow("invalid server message");
+  });
+
+  it("rejects an orders message whose chancellor choice has no issued tick", () => {
+    expect(() =>
+      decodeServerMessage(
+        JSON.stringify({
+          type: "orders",
+          tick: 0,
+          nationId: "realm",
+          autoPilot: true,
+          options: [],
+          queued: null,
+          chancellorChoice: {
+            id: "chancellor-realm-300",
+            kind: "clearFarmland",
+            targetCityId: null,
+          },
+          rejected: null,
+        }),
+      ),
+    ).toThrow("invalid server message");
+  });
+
+  it("rejects an orders message whose chancellor choice has a non-numeric issued tick", () => {
+    expect(() =>
+      decodeServerMessage(
+        JSON.stringify({
+          type: "orders",
+          tick: 0,
+          nationId: "realm",
+          autoPilot: true,
+          options: [],
+          queued: null,
+          chancellorChoice: {
+            id: "chancellor-realm-300",
+            kind: "clearFarmland",
+            targetCityId: null,
+            issuedAtTick: "300",
+          },
           rejected: null,
         }),
       ),

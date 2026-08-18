@@ -186,6 +186,7 @@ describe("buildDirectiveListViewModel", () => {
         id: "chancellor-polity-1-300",
         kind: "growCity",
         targetCityId: "city-elsewhere",
+        issuedAtTick: 300,
       },
     });
 
