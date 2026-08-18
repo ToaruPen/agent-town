@@ -44,8 +44,6 @@ export interface NationCommitSlotViewModel {
   kind: CommitSlotKind;
   /** What commits at the next boundary, in one line. Never empty. */
   headline: string;
-  /** Always null today: no current state has a second line to add under the headline. */
-  detail: string | null;
   /** True only for the warning state: no autopilot and nothing queued, so the season is wasted. */
   emphasis: boolean;
   /** Non-null whenever an order is queued — it stays cancellable up to the boundary that would commit it. */
@@ -163,7 +161,6 @@ function unknownSlot(): NationCommitSlotViewModel {
   return {
     kind: "unknown",
     headline: "同期を待っています",
-    detail: null,
     emphasis: false,
     cancelDirectiveId: null,
   };
@@ -177,7 +174,6 @@ function chancellorSlot(orders: NationOrders): NationCommitSlotViewModel {
       choice === null
         ? "宰相は今季なにも選べません"
         : `${directiveKindLabel(choice.kind)}（宰相の既定）`,
-    detail: null,
     emphasis: false,
     cancelDirectiveId: null,
   };
@@ -200,7 +196,6 @@ function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
     return {
       kind: "queued",
       headline: `${directiveKindLabel(queued.kind)}（あなたの発令）`,
-      detail: null,
       emphasis: false,
       cancelDirectiveId: queued.id,
     };
@@ -209,7 +204,6 @@ function commitSlot(orders: NationOrders | null): NationCommitSlotViewModel {
   return {
     kind: "idle",
     headline: "この季は何も実行されません",
-    detail: null,
     emphasis: true,
     cancelDirectiveId: null,
   };

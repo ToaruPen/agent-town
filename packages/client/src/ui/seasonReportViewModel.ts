@@ -15,7 +15,7 @@ import {
   METRIC_ORDER,
   type MetricDirection,
 } from "./nationDashboardViewModel.js";
-import type { DirectiveLogEntry, NationOrders } from "./nationHudState.js";
+import type { DirectiveLogEntry } from "./nationHudState.js";
 import {
   directiveKindLabel,
   ledgerReasonLabel,
@@ -65,8 +65,6 @@ export interface SeasonReportViewModel {
   headline: string;
   metrics: SeasonReportMetricRow[];
   completedDirectives: SeasonReportCompletedDirectiveRow[];
-  /** Always null today: no current state has a held order to report. */
-  heldOrderNote: string | null;
 }
 
 /** Tie-break for equal-magnitude reasons/entries, so the sort is deterministic rather than input-order. */
@@ -264,31 +262,19 @@ function completedDirectiveRow(
 }
 
 /**
- * `sim/nation/engine.ts:104` `selectDirective` runs `queuedSelection` before it ever looks at
- * `autoPilot`, pinned by the five state tests atop `nationEngine.test.ts`: a legal queued order commits
- * in either autopilot mode, and the chancellor only fills a season with no legal order queued. An illegal
- * queued order is still held rather than obeyed (`queuedSelection` does not consume it), but the client
- * judges no directive's legality, so it never attempts to report that state — this always returns null.
- */
-function heldOrderNote(_orders: NationOrders | null): string | null {
-  return null;
-}
-
-/**
  * The season report: a diff with reasons, not a table of numbers (hud.md §4.5).
  *
  * Deviates from hud.md §4.3's original sketch of `(report, polity, ownDirectiveIds)`: `polity` is dropped
- * (nothing here needs the nation's name or colour), and `directiveLog`/`orders`/`currentYear` are added —
- * `directiveLog` because attributing and dating a completed directive needs more than an id set, `orders`
- * because `heldOrderNote` (above) takes it, and `currentYear` because §3.1a puts the calendar year (not
- * the elapsed year the report/directive-log carry) on this surface.
+ * (nothing here needs the nation's name or colour), and `directiveLog`/`currentYear` are added —
+ * `directiveLog` because attributing and dating a completed directive needs more than an id set, and
+ * `currentYear` because §3.1a puts the calendar year (not the elapsed year the report/directive-log
+ * carry) on this surface.
  * Reported to the supervisor as a deliberate, justified departure rather than chosen silently.
  */
 export function buildSeasonReportViewModel(
   report: SeasonReport | null,
   directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
   ownDirectiveIds: ReadonlySet<DirectiveId>,
-  orders: NationOrders | null,
   currentYear: number | null,
 ): SeasonReportViewModel {
   const isFamine = report?.entries.some((entry) => entry.reason === "famine") === true;
@@ -308,6 +294,5 @@ export function buildSeasonReportViewModel(
         : report.completedDirectiveIds.map((id) =>
             completedDirectiveRow(id, directiveLog, ownDirectiveIds, currentYear),
           ),
-    heldOrderNote: heldOrderNote(orders),
   };
 }

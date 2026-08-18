@@ -901,40 +901,6 @@ describe("the season report", () => {
     expect(document.activeElement).not.toBe(ephemeral);
   });
 
-  /**
-   * `heldOrderNote` is always null: a legal queued order commits in either autopilot mode
-   * (`sim/nation/engine.ts` `selectDirective` runs `queuedSelection` before it looks at `autoPilot`,
-   * pinned by the five state tests atop `nationEngine.test.ts`), and an illegal one is held but never
-   * reported — the client judges no directive's legality. Checked in the mounted panel, not just the view
-   * model, in the same otherwise-quiet-season fixture the old held-order state used.
-   */
-  it("renders no held-order element even with autopilot on and an order queued", () => {
-    const mounted = mountAgainstIndexHtml();
-    mounted.hud.applyWelcome(unclaimedWorld(), 1_000);
-    mounted.hud.applyOrders(
-      ordersFixture({
-        nationId: "polity-2",
-        autoPilot: true,
-        queued: { id: "directive-9", kind: "holdFestival", targetCityId: null },
-      }),
-    );
-    mounted.hud.applyUpdate(
-      worldFixture({
-        history: historyFixture(POLITIES),
-        nations: [
-          nationFixture({
-            id: "polity-2",
-            lastReport: reportFixture({ entries: [], completedDirectiveIds: [] }),
-          }),
-        ],
-      }),
-      2_000,
-    );
-    mounted.hud.toggleReport();
-
-    expect(mounted.roots.report.querySelector(".season-report__held")).toBeNull();
-  });
-
   /** hud.md §4.5: famine "pins the report open… it does not require the player to press R." */
   it("auto-opens the panel when a famine report resolves, without the player pressing R", () => {
     const famine = reportFixture({

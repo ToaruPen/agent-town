@@ -102,9 +102,6 @@ function panelBody(view: SeasonReportViewModel, onClose: () => void): HTMLElemen
     reportHeader(view.headerLabel, onClose),
     element("p", "season-report__headline", view.headline),
   ];
-  if (view.heldOrderNote !== null) {
-    body.push(element("p", "season-report__held", view.heldOrderNote));
-  }
   const metrics = element("ul", "season-report__metrics");
   metrics.append(...view.metrics.map(metricItem));
   body.push(metrics);

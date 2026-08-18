@@ -136,7 +136,6 @@ export function seasonReportView(state: NationHudState): SeasonReportViewModel |
     own.nation.lastReport,
     state.directiveLog,
     state.ownDirectiveIds,
-    state.orders,
     state.currentYear,
   );
 }

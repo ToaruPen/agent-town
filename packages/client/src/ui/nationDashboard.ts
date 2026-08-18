@@ -104,10 +104,6 @@ function commitSlotSection(
   if (slot.emphasis) headline.classList.add("nation-dashboard__commit--idle");
   section.append(headline);
 
-  if (slot.detail !== null) {
-    section.append(element("p", "nation-dashboard__commit-detail", slot.detail));
-  }
-
   const controls = element("p", "nation-dashboard__commit-controls");
   const cancelId = slot.cancelDirectiveId;
   if (cancelId !== null) {

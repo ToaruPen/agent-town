@@ -216,7 +216,6 @@ describe("the commit slot", () => {
 
     expect(slot.kind).toBe("chancellor");
     expect(slot.headline).toBe("備蓄奨励（宰相の既定）");
-    expect(slot.detail).toBeNull();
   });
 
   /** A legal queued order wins in either autopilot mode — the state a fresh player is dropped into. */
@@ -225,7 +224,6 @@ describe("the commit slot", () => {
 
     expect(slot.kind).toBe("queued");
     expect(slot.headline).toBe("祭礼（あなたの発令）");
-    expect(slot.detail).toBeNull();
   });
 
   it("says the player's order commits once autopilot is off", () => {
@@ -233,7 +231,6 @@ describe("the commit slot", () => {
 
     expect(slot.kind).toBe("queued");
     expect(slot.headline).toBe("祭礼（あなたの発令）");
-    expect(slot.detail).toBeNull();
   });
 
   /** The warning state: it has to be visible before the boundary, not discovered in the report after. */
