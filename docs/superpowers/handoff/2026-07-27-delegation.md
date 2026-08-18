@@ -51,6 +51,8 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 |---|---|---|---|
 | `n1-14-autopilot-gap` | #1 autopilot fills the gap: server change, then client conformance, sequentially on one branch | Codex, then a Claude client worker | **merged `0876200`.** See "Autopilot fills the gap" below |
 | `c1-06b-world-map-host` | C1-6b continuation: rebase, constant swap, four remaining pieces, `hexColor`/`element` collapse | Claude client worker | **merged `7e370a1`** after one review round (stale-hover fix). See "C1-6b landed" below |
+| `n1-15-chancellor-tick` | #4's remaining server half: `chancellorChoice` gains `issuedAtTick` (supervisor froze the shape; option 2 from "The chancellor's id reached the wire"), client fixture conformance only | Codex | running |
+| `chore-client-followups` | Four queued client cleanups: §3.5 focus return (both panels), the useOptionalChain warning, the tautological no-player map test, the Node-globals guard | Claude client worker | running |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
 no builds, tests, installs or git operations in it from anyone else in that window.
