@@ -41,8 +41,10 @@ export interface WorldMapSnapshot {
    *  `activeDirectives` from its own owning nation here. Empty means no city ever shows an arc. */
   nations: readonly NationState[];
   /** The season this payload is current as of — what the layer-2 wash paints, and what the host
-   *  compares against its own last-seen season to decide whether a crossfade should start. */
-  season: Season;
+   *  compares against its own last-seen season to decide whether a crossfade should start. Null for a
+   *  surface with no live season to report (the chronicle's static archive mount); the wash draws
+   *  nothing rather than the host inventing one. */
+  season: Season | null;
 }
 
 export interface WorldMapHostController {
@@ -141,6 +143,8 @@ export function createWorldMapHost(
   // The season crossfade's own state — deliberately not shared with the locate pulse's above, even
   // though the shape rhymes: the two animate different things on different schedules, and sharing a
   // deadline field between them would let a change to one animation's timing silently retime the other.
+  // `lastSeason` tracks the same nullable season `WorldMapSnapshot.season` carries, so a surface with no
+  // live season (null on every render) can never satisfy the "changed" half of the trigger below.
   let lastSeason: Season | null = null;
   let crossfadeFromSeason: Season | null = null;
   let crossfadeStartedAt: number | null = null;
@@ -289,8 +293,9 @@ export function createWorldMapHost(
     render(next: WorldMapSnapshot): void {
       // `lastSeason !== null` excludes the very first render: there is no "previous" season to fade
       // from yet, only a resting one to start on — a crossfade there would flash the wash in from
-      // nothing rather than simply showing it.
-      if (lastSeason !== null && lastSeason !== next.season) {
+      // nothing rather than simply showing it. `next.season !== null` excludes a surface with no live
+      // season at all (the chronicle) from ever starting a crossfade toward nothing to draw.
+      if (lastSeason !== null && next.season !== null && lastSeason !== next.season) {
         crossfadeFromSeason = lastSeason;
         crossfadeStartedAt = Date.now();
         scheduleNextCrossfadeFrame();

@@ -520,6 +520,34 @@ describe("the world map's territory-change tracking", () => {
   });
 
   /**
+   * The plan's own required test: "a multi-cell change staggers rather than firing as one flash." Index
+   * 0's own stagger offset is `(0*7)%12 = 0`; index 2's is `(2*7)%12 = 2` — two ticks apart, not the
+   * 12-tick spacing at which `(index*7)%12` collides, so the two cells' windows provably do not open
+   * together. At tick 0, only index 0's window has opened; index 2's starts two ticks later.
+   */
+  it("staggers a multi-cell change rather than firing every cell as one flash", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+    const history = mapHistory();
+
+    host.render(
+      snapshot({
+        history,
+        tick: 0,
+        changedCells: [
+          { index: 0, polityId: "polity-2" },
+          { index: 2, polityId: "polity-1" },
+        ],
+      }),
+    );
+
+    const flashes = nonCasingFlashFills(log);
+    expect(flashes.length).toBeGreaterThan(0);
+    expect(flashes.every(({ style }) => style === bannerFor(history, "polity-2"))).toBe(true);
+    expect(flashes.some(({ style }) => style === bannerFor(history, "polity-1"))).toBe(false);
+  });
+
+  /**
    * The teeth of "at x8 the compressed lifetimes still complete": a huge tick gap between two renders —
    * exactly what x8 produces between broadcasts — must still land on the fully decayed end state, with
    * nothing stuck mid-flash or mid-hatch just because no intermediate tick was ever rendered.
@@ -650,6 +678,22 @@ describe("the world map's season crossfade", () => {
   function washFills(log: PaintLog, hexStyle: string): { alpha: number }[] {
     return log.fills.filter(({ style }) => style === hexStyle).map(({ alpha }) => ({ alpha }));
   }
+
+  /** The chronicle's own case: a surface with no live season must not paint a wash it was never told to. */
+  it("paints no wash at all when the snapshot carries no season", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+
+    host.render(snapshot({ season: null }));
+
+    const anySeasonWash = [
+      ...washFills(log, hexColor(seasonGroundTint("spring"))),
+      ...washFills(log, hexColor(seasonGroundTint("summer"))),
+      ...washFills(log, hexColor(seasonGroundTint("autumn"))),
+      ...washFills(log, hexColor(seasonGroundTint("winter"))),
+    ];
+    expect(anySeasonWash).toEqual([]);
+  });
 
   it("paints a single settled wash in the season's own tint, with no crossfade on the very first render", () => {
     const log = stubCanvasPainting();

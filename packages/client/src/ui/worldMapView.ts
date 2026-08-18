@@ -103,14 +103,16 @@ export interface TrackedTerritoryChange {
 }
 
 /**
- * Layer 2's own wash (visual.md §2.4): `season` is always the resting colour to fill toward, and
- * `previousSeason`/`crossfadeProgress` are either both null (settled, single fill) or both present (a
- * live 600 ms wall-clock crossfade, `previousSeason` fading out as `season` fades in). The host is the
- * only owner of the clock that produces `crossfadeProgress` — this module only ever turns it into a
+ * Layer 2's own wash (visual.md §2.4). `season` is the resting colour to fill toward, or null when this
+ * surface has no season to report at all — the chronicle's static archive mount, which has no live clock
+ * and must not invent one just to satisfy this field; the paint layer draws nothing in that case rather
+ * than guessing. `previousSeason`/`crossfadeProgress` are either both null (settled, single fill) or both
+ * present (a live 600 ms wall-clock crossfade, `previousSeason` fading out as `season` fades in). The host
+ * is the only owner of the clock that produces `crossfadeProgress` — this module only ever turns it into a
  * frame, the same idiom `pulsePhase` already uses for the locate pulse.
  */
 export interface WorldMapSeasonWash {
-  season: Season;
+  season: Season | null;
   previousSeason: Season | null;
   crossfadeProgress: number | null;
 }
@@ -179,7 +181,7 @@ const NO_MARKS: WorldMapMarks = {
   tick: 0,
   territoryChanges: new Map(),
   nations: [],
-  seasonWash: { season: "spring", previousSeason: null, crossfadeProgress: null },
+  seasonWash: { season: null, previousSeason: null, crossfadeProgress: null },
 };
 
 export interface WorldMapViewModel {
@@ -530,6 +532,7 @@ export const SEASON_WASH_ALPHA = 0.1;
  */
 function drawSeasonWash(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   const { season, previousSeason, crossfadeProgress } = view.seasonWash;
+  if (season === null) return;
   const previousAlpha = context.globalAlpha;
   const width = view.width * WORLD_MAP_CELL_SIZE_PX;
   const height = view.height * WORLD_MAP_CELL_SIZE_PX;

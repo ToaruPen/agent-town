@@ -376,8 +376,8 @@ function mapPanel(history: WorldHistory, chronicle: WorldChronicleViewModel): HT
   // draws at its smallest tier, no territory is marked as anyone's, and no local view is open on it.
   // Nothing here is currently changing either — `tick: 0`, `changedCells: []` and `nations: []` are the
   // archive's own "nothing is animating" values, not a live clock the chronicle happens to sit at.
-  // `season: "spring"` is the same kind of value: an arbitrary, static pick — the archive has no live
-  // season to report, and this mount never calls `render` again to cross a boundary out of it.
+  // `season: null`: the archive has no live season to report, and inventing one just to fill the field
+  // would paint a wash the chronicle never actually has — see `WorldMapSnapshot.season`'s own comment.
   host.render({
     history,
     cityStates: [],
@@ -386,7 +386,7 @@ function mapPanel(history: WorldHistory, chronicle: WorldChronicleViewModel): HT
     tick: 0,
     changedCells: [],
     nations: [],
-    season: "spring",
+    season: null,
   });
   replaceMapSelection(selection, polityViews, null);
 
