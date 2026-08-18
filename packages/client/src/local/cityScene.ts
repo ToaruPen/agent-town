@@ -1,7 +1,12 @@
 import {
+  type ActiveDirective,
   type Building,
+  type CropStage,
   DAYS_PER_SEASON,
   type DirectiveKind,
+  FACILITY_BUILD_TICKS,
+  type Facility,
+  type Field,
   FOOD_RESOURCE_MAX,
   FOOD_RESOURCE_MIN,
   FOOD_TILE_CHANCE,
@@ -133,6 +138,28 @@ export function directiveAnchorPositions(
     encourageStores: shift(store, DIRECTIVE_ANCHOR_OFFSETS.encourageStores),
     holdFestival: shift(store, DIRECTIVE_ANCHOR_OFFSETS.holdFestival),
   };
+}
+
+/** The store never moves from `QUARTER_CENTRE`, so this is `directiveAnchorPositions` without needing
+ *  a whole synthesized scene to read `stockpile.pos` back off of. */
+function anchorFor(kind: DirectiveKind): Position {
+  return shift(QUARTER_CENTRE, DIRECTIVE_ANCHOR_OFFSETS[kind]);
+}
+
+/**
+ * Every `DirectiveKind` but `growCity` is nation-wide: `listDirectiveOptions`
+ * (`server/src/sim/nation/directives.ts`) gives every other kind a `null` `targetCityId`, and
+ * `isAlreadyActive` then allows at most one instance of each nation-wide kind at a time. The local view
+ * only ever shows one city, so a nation-wide directive always belongs to it; `growCity` alone carries a
+ * real target and must be matched against this city's own id.
+ */
+export function activeDirectivesForCity(
+  nation: NationState,
+  cityId: string,
+): readonly ActiveDirective[] {
+  return nation.activeDirectives.filter(
+    (directive) => directive.kind !== "growCity" || directive.targetCityId === cityId,
+  );
 }
 
 function randomInteger(rng: () => number, min: number, max: number): number {
@@ -400,6 +427,87 @@ function sceneHistory(input: CitySceneInput): WorldHistory {
   };
 }
 
+const CROP_STAGE_BY_SEASON: Readonly<Record<(typeof SEASONS)[number], CropStage>> = {
+  // A directive-cleared field tracks the calendar, the same as any other farmland would.
+  spring: "sown",
+  summer: "growing",
+  autumn: "ripe",
+  winter: "fallow",
+};
+
+/**
+ * `clearFarmland` is visible only while it sits in `nation.activeDirectives`. The client has no record
+ * of a directive once it completes — `SeasonReport.completedDirectiveIds` is last-season-only and
+ * carries ids, not kinds — so a permanently-standing field would claim a result the server never sent.
+ */
+function clearFarmlandField(season: (typeof SEASONS)[number]): Field {
+  return {
+    kind: "field",
+    pos: anchorFor("clearFarmland"),
+    progress: 0,
+    complete: false,
+    stage: CROP_STAGE_BY_SEASON[season],
+  };
+}
+
+/**
+ * `communalGranary` is an existing `FacilityKind`, so `encourageStores` renders as an ordinary
+ * `Facility` `Building` — unlike `openMine` (`directiveLayer.ts`), this needs no new shared type. Same
+ * visibility rule as the field above: it disappears the season the directive completes.
+ */
+function encourageStoresGranary(directive: ActiveDirective): Facility {
+  const elapsedSeasons = Math.max(0, directive.totalSeasons - directive.seasonsRemaining);
+  const ticksPerSeason = FACILITY_BUILD_TICKS.communalGranary / directive.totalSeasons;
+  return {
+    kind: "communalGranary",
+    id: `directive-mark-${directive.id}`,
+    demandId: `directive-mark-${directive.id}`,
+    institutionId: `directive-mark-${directive.id}`,
+    pos: anchorFor("encourageStores"),
+    progress: Math.min(FACILITY_BUILD_TICKS.communalGranary, ticksPerSeason * elapsedSeasons),
+    complete: false,
+    woodDelivered: 0,
+    inventory: { wood: 0, food: 0 },
+    operation: "inactive",
+    blockedReason: null,
+    maintenanceDue: 0,
+    statsToday: {
+      visits: 0,
+      foodPreserved: 0,
+      foodImported: 0,
+      foodExported: 0,
+      woodSpent: 0,
+      woodReceived: 0,
+      rationMeals: 0,
+      maintenanceWork: 0,
+    },
+    lastUsedAtTick: null,
+    lastTradeTick: null,
+    siteRationale: { score: 0, contributions: [] },
+    provenance: {
+      causedByEventIds: [],
+      proposedByAgentIds: [],
+      supportedByAgentIds: [],
+      opposedByAgentIds: [],
+      decidedAtTick: directive.issuedAtTick,
+    },
+  };
+}
+
+/** The two directives whose mark is an ordinary `Building`, read straight off `activeDirectives`. */
+function directiveBuildings(
+  activeForCity: readonly ActiveDirective[],
+  season: (typeof SEASONS)[number],
+): Building[] {
+  const buildings: Building[] = [];
+  if (activeForCity.some((directive) => directive.kind === "clearFarmland")) {
+    buildings.push(clearFarmlandField(season));
+  }
+  const granary = activeForCity.find((directive) => directive.kind === "encourageStores");
+  if (granary !== undefined) buildings.push(encourageStoresGranary(granary));
+  return buildings;
+}
+
 /**
  * A deterministic, non-authoritative view of one of the player's cities, in the shape the frozen
  * resident-scale renderers already consume. Same input, deeply identical output.
@@ -416,6 +524,9 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
     ...streets.map(({ pos }) => pos),
   ]);
 
+  const activeForCity = activeDirectivesForCity(input.nation, input.city.id);
+  const season = nationSeasonOfTick(input.tick);
+
   const scene: WorldState = {
     tick: displayTick(input.tick),
     width: MAP_WIDTH,
@@ -425,7 +536,7 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
     // `renderMapLayer` draws the stockpile unconditionally, so the city store is not optional. No
     // layer reads the amounts, and a nation-wide figure at one city's store would be a wrong one.
     stockpile: { pos: { ...QUARTER_CENTRE }, wood: 0, food: 0 },
-    buildings: drawnHouses(plots),
+    buildings: [...drawnHouses(plots), ...directiveBuildings(activeForCity, season)],
     deaths: [],
     collectives: [],
     institutions: [],

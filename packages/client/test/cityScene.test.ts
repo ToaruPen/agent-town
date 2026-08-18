@@ -1,5 +1,9 @@
 import {
+  type ActiveDirective,
   type DirectiveKind,
+  FACILITY_BUILD_TICKS,
+  isFacility,
+  isField,
   MAP_HEIGHT,
   MAP_WIDTH,
   NATION_CITY_DEVELOPMENT_CAP,
@@ -20,6 +24,7 @@ import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  activeDirectivesForCity,
   type CitySceneInput,
   directiveAnchorPositions,
   synthesizeCityScene,
@@ -36,6 +41,7 @@ interface SceneOptions {
   population: number;
   developmentLevel: number;
   tick: number;
+  activeDirectives: ActiveDirective[];
 }
 
 const DEFAULT_OPTIONS: SceneOptions = {
@@ -45,6 +51,7 @@ const DEFAULT_OPTIONS: SceneOptions = {
   population: 4000,
   developmentLevel: 3,
   tick: 0,
+  activeDirectives: [],
 };
 
 function makeWorldMap(terrain: WorldMapTerrain): WorldMap {
@@ -88,7 +95,7 @@ function makeCity(cityId: string, pos: Position): WorldCity {
   };
 }
 
-function makeNation(cityState: NationCityState): NationState {
+function makeNation(cityState: NationCityState, activeDirectives: ActiveDirective[]): NationState {
   return {
     id: "polity-1",
     controller: "player",
@@ -101,7 +108,7 @@ function makeNation(cityState: NationCityState): NationState {
     culture: 40,
     foodProduction: 220,
     materialProduction: 140,
-    activeDirectives: [],
+    activeDirectives,
     prosperity: {
       population: 0.4,
       production: 0.5,
@@ -111,6 +118,29 @@ function makeNation(cityState: NationCityState): NationState {
       total: 412,
     },
     lastReport: null,
+  };
+}
+
+function makeDirective(overrides: Partial<ActiveDirective> = {}): ActiveDirective {
+  return {
+    id: "directive-1",
+    kind: "clearFarmland",
+    targetCityId: null,
+    issuedAtTick: 0,
+    seasonsRemaining: 1,
+    totalSeasons: 2,
+    ...overrides,
+  };
+}
+
+const CITY_ID = DEFAULT_OPTIONS.cityId;
+
+function makeCityState(overrides: Partial<NationCityState> = {}): NationCityState {
+  return {
+    cityId: CITY_ID,
+    population: DEFAULT_OPTIONS.population,
+    developmentLevel: DEFAULT_OPTIONS.developmentLevel,
+    ...overrides,
   };
 }
 
@@ -124,7 +154,7 @@ function makeInput(overrides: Partial<SceneOptions> = {}): CitySceneInput {
   return {
     city: makeCity(options.cityId, options.pos),
     cityState,
-    nation: makeNation(cityState),
+    nation: makeNation(cityState, options.activeDirectives),
     polity: makePolity(),
     worldMap: makeWorldMap(options.terrain),
     tick: options.tick,
@@ -349,5 +379,131 @@ describe("directiveAnchorPositions", () => {
     expect(directiveAnchorPositions(synthesizeCityScene(makeInput()))).toEqual(
       directiveAnchorPositions(synthesizeCityScene(makeInput())),
     );
+  });
+});
+
+/**
+ * Only `growCity` ever carries a non-null `targetCityId` (`server/src/sim/nation/directives.ts`
+ * `listDirectiveOptions`): every other kind is nation-wide. Since the local view only ever shows one
+ * city, a nation-wide directive always belongs to it; `growCity` alone must be matched by city.
+ */
+describe("activeDirectivesForCity", () => {
+  it("keeps every nation-wide directive regardless of its null target", () => {
+    const directive = makeDirective({ kind: "developTimber", targetCityId: null });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([
+      directive,
+    ]);
+  });
+
+  it("keeps a growCity directive that targets this city", () => {
+    const directive = makeDirective({ kind: "growCity", targetCityId: CITY_ID });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([
+      directive,
+    ]);
+  });
+
+  it("drops a growCity directive that targets a different city", () => {
+    const directive = makeDirective({ kind: "growCity", targetCityId: "city-polity-1-2" });
+    expect(activeDirectivesForCity(makeNation(makeCityState(), [directive]), CITY_ID)).toEqual([]);
+  });
+});
+
+/**
+ * `clearFarmland` and `encourageStores` render as ordinary `Building` members — a `Field` and a
+ * `communalGranary` `Facility` are already valid `Building` variants, so no shared-package change is
+ * needed. Both are visible only while the directive sits in `activeDirectives`: the client has no
+ * record of a directive once it completes (`SeasonReport.completedDirectiveIds` is last-season-only
+ * and carries ids, not kinds), so nothing here claims permanence the server never sent.
+ */
+describe("directive buildings", () => {
+  it("adds no field when clearFarmland is not active", () => {
+    const scene = synthesizeCityScene(makeInput());
+    expect(scene.buildings.filter(isField)).toEqual([]);
+  });
+
+  it("draws a field at the clearFarmland anchor while the directive is active", () => {
+    const directive = makeDirective({ kind: "clearFarmland" });
+    const scene = synthesizeCityScene(makeInput({ activeDirectives: [directive] }));
+    const anchors = directiveAnchorPositions(scene);
+
+    const fields = scene.buildings.filter(isField);
+    expect(fields).toHaveLength(1);
+    expect(fields[0]?.pos).toEqual(anchors.clearFarmland);
+    expect(fields[0]?.complete).toBe(false);
+  });
+
+  it("gives the field a crop stage that tracks the nation's season, not a fixed one", () => {
+    const stages = new Set(
+      Array.from({ length: 4 }, (_, season) => {
+        const directive = makeDirective({ kind: "clearFarmland" });
+        const scene = synthesizeCityScene(
+          makeInput({ activeDirectives: [directive], tick: season * NATION_TICKS_PER_SEASON }),
+        );
+        return scene.buildings.find(isField)?.stage;
+      }),
+    );
+    expect(stages.size).toBeGreaterThan(1);
+  });
+
+  it("removes the field once clearFarmland is no longer active", () => {
+    const withDirective = synthesizeCityScene(
+      makeInput({ activeDirectives: [makeDirective({ kind: "clearFarmland" })] }),
+    );
+    const without = synthesizeCityScene(makeInput());
+    expect(withDirective.buildings.filter(isField)).toHaveLength(1);
+    expect(without.buildings.filter(isField)).toEqual([]);
+  });
+
+  it("adds no granary when encourageStores is not active", () => {
+    const scene = synthesizeCityScene(makeInput());
+    expect(scene.buildings.filter(isFacility)).toEqual([]);
+  });
+
+  it("draws a communalGranary at the encourageStores anchor while the directive is active", () => {
+    const directive = makeDirective({
+      kind: "encourageStores",
+      seasonsRemaining: 1,
+      totalSeasons: 2,
+    });
+    const scene = synthesizeCityScene(makeInput({ activeDirectives: [directive] }));
+    const anchors = directiveAnchorPositions(scene);
+
+    const facilities = scene.buildings.filter(isFacility);
+    expect(facilities).toHaveLength(1);
+    expect(facilities[0]?.kind).toBe("communalGranary");
+    expect(facilities[0]?.pos).toEqual(anchors.encourageStores);
+    expect(facilities[0]?.complete).toBe(false);
+  });
+
+  it("grows the granary's progress bar as the directive gets closer to completion", () => {
+    const early = synthesizeCityScene(
+      makeInput({
+        activeDirectives: [
+          makeDirective({ kind: "encourageStores", seasonsRemaining: 2, totalSeasons: 2 }),
+        ],
+      }),
+    );
+    const late = synthesizeCityScene(
+      makeInput({
+        activeDirectives: [
+          makeDirective({ kind: "encourageStores", seasonsRemaining: 1, totalSeasons: 2 }),
+        ],
+      }),
+    );
+
+    const earlyProgress = early.buildings.find(isFacility)?.progress ?? 0;
+    const lateProgress = late.buildings.find(isFacility)?.progress ?? 0;
+    expect(lateProgress).toBeGreaterThan(earlyProgress);
+    expect(lateProgress).toBeLessThanOrEqual(FACILITY_BUILD_TICKS.communalGranary);
+  });
+
+  it("keeps both buildings deterministic for the same input", () => {
+    const directives = [
+      makeDirective({ kind: "clearFarmland" }),
+      makeDirective({ kind: "encourageStores", id: "directive-2" }),
+    ];
+    const first = synthesizeCityScene(makeInput({ activeDirectives: directives }));
+    const second = synthesizeCityScene(makeInput({ activeDirectives: directives }));
+    expect(first).toEqual(second);
   });
 });
