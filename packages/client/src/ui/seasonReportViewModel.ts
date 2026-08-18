@@ -291,7 +291,7 @@ export function buildSeasonReportViewModel(
   orders: NationOrders | null,
   currentYear: number | null,
 ): SeasonReportViewModel {
-  const isFamine = report !== null && report.entries.some((entry) => entry.reason === "famine");
+  const isFamine = report?.entries.some((entry) => entry.reason === "famine") === true;
   return {
     waitingForFirstReport: report === null,
     isEmpty: report !== null && report.entries.length === 0,
