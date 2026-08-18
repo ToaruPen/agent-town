@@ -57,7 +57,7 @@ Still held: nothing. #2 landed at `f99dbde`, #1 at `0876200` — all eight decis
 | `chore-retire-held-ui` | Retire `heldOrderNote` / `commitSlot.detail` and their renderers and CSS | Claude client worker | **merged `6e25103`** — the struck-through Queued-cleanups row carries the detail |
 | `c1-08-directive-scenery` | C1-8 directives visible in the city view — the direct continuation of the owner's C1-7 direction | Claude client worker | **merged `4c16528`** after one review round (four findings, all fixed with stash-proven regression coverage). See "C1-8 landed" below |
 | `chore-engine-queued-pin` | The queued-cleanups engine-test pin: `player + queued + autoPilot: false` commits the queued order | Codex | **merged `276c0e7`** — independent review approved with zero findings; the struck-through Queued-cleanups row carries the detail |
-| `c1-09-change-visible` | C1-9 change made visible and kept calm — the plan's last unstarted client task | Claude client worker | running — dispatched 2026-08-18, based on `57fc33c` |
+| `c1-09-change-visible` | C1-9 change made visible and kept calm — the plan's last unstarted client task | Claude client worker | **merged `3d9b6fc`** after one review round (one HIGH fixed, one MEDIUM fixed, one finding refuted as a stale-base diff artifact). See "C1-9 landed" below |
 
 A worktree under `.worktrees/` is a live worker workspace from dispatch until the worker's final report —
 no builds, tests, installs or git operations in it from anyone else in that window.
@@ -195,7 +195,8 @@ nothing made optional.
   of whether fields read as fields at real scale, and a re-run of the Task 7 balance sweep.
 - Active plans: `docs/superpowers/plans/2026-07-27-n1-living-nations.md` (simulation — **all tasks merged**,
   Task 7 balance closed by `d4c87b2`) and `docs/superpowers/plans/2026-07-27-c1-nation-client.md` (client,
-  C1-1 through C1-8 and C1-10 merged; the last unstarted client task is C1-9).
+  **every task C1-1 through C1-10 is merged as of `3d9b6fc`** — what remains on the client is owner
+  judgement, queued cleanups, and whatever the owner directs next).
 - **The N1 slice's code criteria are met as of `7e370a1`.** "Opening the browser shows live nations, a
   moving ranking, a working directive panel and a working speed control" — all mounted, and the world map
   with them (C1-6b). Same-seed reproducibility and seed *divergence* are both genuinely tested —
@@ -591,6 +592,65 @@ Loose ends recorded at the merge:
   smudge at tier-1's ~2.5 px radius; whether the 1→2 px, 0.85→1.0, 250 ms pulse reads as a deliberate
   locate cue rather than a rendering glitch.
 
+## C1-9 landed — change is visible, but the server sends no changes yet
+
+Merged at **`3d9b6fc`**, eight commits, `packages/client` only: 12 files, +1440/−24, two new view-model
+modules (`worldMapChangeViewModel.ts`, `worldMapConstructionViewModel.ts`) with their tests. Gate after
+rebase: `just check` exit 0 (zero warnings), `just test` **88 files / 1339 tests**. With this, **every
+client plan task C1-1 through C1-10 is merged.**
+
+**The lead fact is a server-owned hole: `wsServer.ts`'s `advanceOneTick()` hardcodes `changedCells: []`
+on every `season` message.** The territory flash/hatch is implemented, wired, and proven by paint-level
+tests against synthetic payloads — and cannot fire on live data until the server populates that field.
+The worker correctly reported the gap instead of touching `packages/server/`. Queued below as a server
+task; until it lands, two of C1-9's three treatments are live (construction arc, season crossfade) and
+the third idles.
+
+Shape: territory-change phase math is pure in `tick` (`worldMapChangeViewModel.ts`); the wire's
+`changedCells` was being dropped by `wsClient.ts`'s season-message merge — found and fixed here, it was a
+client bug, not a missing protocol field. Construction draws one progress arc per city (directive closest
+to completion, tie-broken by id, order-independence proven by a permutation test); its directive filter
+deliberately duplicates `cityScene.ts`'s — importing it would pull PixiJS into the Canvas-2D world map
+through `render/trailLayer.ts` (the reviewer verified the transitive chain is real). The season boundary
+announces itself as a 0.10-alpha wash crossfade, the one wall-clock effect, host-owned rAF exactly like
+the locate pulse, self-terminating. The worker also caught its own defect pre-review: the chronicle's
+static mount was satisfying a required `season` field with a hardcoded `"spring"`, painting a permanent
+spring wash on a surface that has no live season — `season` became `Season | null` end-to-end.
+
+The review round: three findings, one refuted, two real and fixed:
+
+- *Refuted by the supervisor*: "the branch deletes its assignment row from the handoff doc" — a
+  stale-base artifact of the review prompt saying `git diff main..HEAD` after main had moved by a
+  docs-only commit. The merge-base diff was clean. The review instruction should name the merge base.
+- **Ownership reverted after the animation (HIGH).** Resting territory rendered from the welcome-time
+  `history.worldMap.cells` forever, so a cell the wire moved A→B flashed B then visibly reverted to A —
+  borders, hover and hit-testing reading A throughout. Fixed with a persistent `liveOwnership` overlay in
+  `worldMapHost.ts`, applied per delta (delta *application*, distinct from the forbidden snapshot
+  *diffing*), folded into the history at one resolution point so paint and hit-testing agree by
+  construction, cleared when a fresh `welcome` replaces the history object.
+- **The flash could be skipped at real cadence (MEDIUM).** The transport is a 1 Hz heartbeat; at x8
+  consecutive repaints sit ~80 ticks apart, so the original 30-tick ramp could pass unrendered.
+  visual.md:825's own sub-5 Hz fallback applies: the flash is now a two-step treatment — full strength
+  for a derived 110-tick window (max speed × tick rate × broadcast interval, plus a 30-tick drift
+  margin), then the hatch — proven observable by a test that renders only at ticks {0, 80, 160}. One
+  honest deviation, recorded: a *staggered* cell's window opens up to 11 ticks after `changeTick`, so
+  the literal "on the update that reports the change" does not hold for it; the worker kept stagger
+  (visual.md §2.4's own requirement, with its own required test) and satisfied "observable at full
+  strength in at least one frame a real session renders" instead.
+
+Loose ends recorded at the merge:
+
+- A caveat for the simulation side, verified by the worker: `changeTick` is boundary-aligned *by
+  construction* today (`season` messages only emit at `nextNationSeasonBoundaryTick`), but nothing in the
+  types enforces it. An off-boundary `season` message would make the flash window and the host's pruning
+  disagree. Queued below as a server pin test.
+- The owner-judgement question the plan itself asks: at x8 with several nations acting, is this a map or
+  a fireworks display? Nothing caps simultaneous flash count. If it reads as fireworks, **the design's
+  named first cut is the recent-change hatch** (visual.md:870-875, the V-5 slice) — the worker initially
+  cited the season wash's 0.06 reduction as the lever and corrected itself on re-read: the wash reduction
+  is a *terrain-legibility* lever from a different passage. Judging it needs the browser the agents are
+  denied — and live territory changes, which need the server gap above closed first.
+
 ## C1-8 landed — directives are scenery, and the review caught the client learning server rules
 
 Merged at **`4c16528`**, eight commits, `packages/client` only: 10 files, +1321/−51, two new files
@@ -832,6 +892,8 @@ else, and would otherwise be lost. Several are now inside a deslop pass's scope 
 | ~~De-tautologize the no-player-nation map test~~ | `client/test/worldMapView.test.ts` | **Done in `a6b4ea3`.** The vacuous predicate is gone; the surviving alpha-set assertion plus a fixture non-emptiness guard now fail if any cell is player-marked under a null `playerPolityId` — proven by breaking `cellAlpha` and watching it fail |
 | ~~Return focus to the opener when a panel closes~~ | `client/src/ui/nationDom.ts` and both panels | **Done in `a6b4ea3`**, and it was not the one-liner the row implied. Two real findings on the way: the obvious `document.activeElement` capture is wrong on the click path (click focusability is UA-dependent — pass the event's `currentTarget`), and the opener is routinely *rebuilt* while a panel is open (`renderPanels` runs on every `applyOrders`), so the raw node goes stale on the common path — re-resolution is scoped to the owning root plus a stable key, and refuses to guess between same-class siblings |
 | ~~Clear the one lint warning `just check` now carries~~ | `client/src/ui/seasonReportViewModel.ts` | **Done in `a6b4ea3`** via `report?.entries.some(…) === true`. `just check` now carries zero warnings |
+| Populate `season.changedCells` in the server | `server/src/net/wsServer.ts` (`advanceOneTick`) | Hardcoded `changedCells: []` on every `season` message, so C1-9's territory flash/hatch — implemented and paint-tested — can never fire on live data. The sim must surface per-season territory deltas to the wire layer. **A server task, unowned; C1-9's headline loose end** |
+| Pin `season`-message boundary alignment in a server test | `server/test/` | `changeTick` alignment holds by construction (`season` only emits at `nextNationSeasonBoundaryTick`) but no type or test enforces it; an off-boundary emission would silently truncate the client's flash window (see "C1-9 landed"). One pin test. **Unowned** |
 | Build visual.md §2.7's playable world map mode | `shared/src/constants.ts`, `client/src/` | traversal.md:237's "closing the city view widens the world map" cannot be honored by CSS — the C1-7 review's stretch prescription was refused with the reasoning recorded in `index.html` beside the layout CSS. §2.7 specifies a distinct rendering mode (12 px cells, non-linear radii, 1152×768) needing new shared constants and a rendering rewrite. **A task, not a chore, and it needs owner scoping** — see "C1-7 landed" |
 | Reopen / switch-city UI for the city view | `client/src/` | Closing is one-way as of C1-7; `cityViewSync` suppresses reopening until target identity changes, by design. Wants a designed affordance, not a guessed one. **Unowned** |
 | Drop `CityViewPanelController.isOpen()` or give it a caller | `client/src/local/cityViewPanel.ts` | Test-only since `e592aab` moved identity tracking into `cityViewSync`. One method, its tests move or go with it. **Unowned** |
