@@ -19,10 +19,16 @@ function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-/** Every `WorldMapMarks` field is required, so every literal needs all three; this fills in "none of
+/** Every `WorldMapMarks` field is required, so every literal needs all four; this fills in "none of
  *  the above" for whichever ones a test does not care about. */
 function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
-  return { playerPolityId: null, hoveredPolityId: null, pulsePhase: null, ...overrides };
+  return {
+    playerPolityId: null,
+    hoveredPolityId: null,
+    pulsePhase: null,
+    openCityId: null,
+    ...overrides,
+  };
 }
 
 /** The banner a nation is assigned, which is now the fill colour as well as the border colour. */
@@ -489,6 +495,24 @@ describe("world map city tiers", () => {
     const view = buildWorldMapViewModel(historyFixture());
 
     expect(view.cities.some(({ isPlayer }) => isPlayer)).toBe(false);
+  });
+
+  /** The open-ring's input (traversal.md §2.2): only the docked local view's own city carries it. */
+  it("marks a city as open and no one else's", () => {
+    const view = buildWorldMapViewModel(
+      historyFixture(),
+      [],
+      marks({ openCityId: "city-polity-1-1" }),
+    );
+
+    expect(view.cities.find(({ id }) => id === "city-polity-1-1")?.isOpen).toBe(true);
+    expect(view.cities.find(({ id }) => id === "city-polity-2-1")?.isOpen).toBe(false);
+  });
+
+  it("marks no city as open while the local view is closed", () => {
+    const view = buildWorldMapViewModel(historyFixture());
+
+    expect(view.cities.some(({ isOpen }) => isOpen)).toBe(false);
   });
 });
 

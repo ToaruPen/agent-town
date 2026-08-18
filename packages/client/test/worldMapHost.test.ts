@@ -106,7 +106,13 @@ function mapHistory(): WorldHistory {
 }
 
 function snapshot(overrides: Partial<WorldMapSnapshot> = {}): WorldMapSnapshot {
-  return { history: mapHistory(), cityStates: [], playerPolityId: null, ...overrides };
+  return {
+    history: mapHistory(),
+    cityStates: [],
+    playerPolityId: null,
+    openCityId: null,
+    ...overrides,
+  };
 }
 
 function mount(log: PaintLog) {
@@ -434,6 +440,33 @@ describe("the player's capital", () => {
 
     expect(withPlayerCapital).toBe(baseline + 1);
     expect(withPlayerNonCapital).toBe(baseline);
+  });
+});
+
+/**
+ * traversal.md §2.2: the docked local view's own city is marked as open on the map — the continuity
+ * cue for a layout where both surfaces stay on screen at once. Isolated on the fixture's non-capital,
+ * non-player city so the ring's own stroke cannot be confused with the capital cross-hatch above,
+ * which needs both `isCapital` and `isPlayer` and this test sets neither.
+ */
+describe("the docked city view's marker", () => {
+  function creamStrokes(log: PaintLog): number {
+    return log.strokes.filter(({ style }) => style === hexColor(MAP_PLAYER_INNER_RULE_COLOR))
+      .length;
+  }
+
+  it("adds one ring stroke over the open city, and none when nothing is open", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+
+    host.render(snapshot({ openCityId: null }));
+    const baseline = creamStrokes(log);
+    log.strokes.length = 0;
+
+    host.render(snapshot({ openCityId: "city-polity-2-1" }));
+    const withOpenCity = creamStrokes(log);
+
+    expect(withOpenCity).toBe(baseline + 1);
   });
 });
 

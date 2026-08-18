@@ -225,6 +225,65 @@
         pointer-events: auto;
       }
 
+      /* The large primary surface (traversal.md §2.2). `flex: 1 1 480px` is the load-bearing part: it
+         is the only item in `.nation-hud` with any flex-grow, so it alone absorbs whatever width the
+         capped `.world-map` and the fixed-width dashboard/ranking columns do not need — on a narrow
+         viewport all four still shrink together via the default flex-shrink, `min-width: 0` keeping
+         this one from forcing an overflow. */
+      .city-view {
+        position: relative;
+        display: flex;
+        flex: 1 1 480px;
+        align-items: flex-start;
+        justify-content: center;
+        min-width: 0;
+        pointer-events: auto;
+      }
+
+      /* 1024×768 is the local map's native size at TILE_SIZE = 16 (traversal.md §2.2). Capped and
+         centred rather than stretched, for the same reason `.world-map__canvas` below is: a
+         non-integer scale would blur the 16 px sprite grid. Hidden by the panel itself — `hidden`
+         via script, not this stylesheet — until it has a target to show. */
+      .city-view__canvas {
+        width: 100%;
+        max-width: 1024px;
+        height: auto;
+        aspect-ratio: 4 / 3;
+        background: #1d2428;
+        border: 2px solid var(--banner-color, var(--world-iron));
+        box-shadow: inset 0 0 0 1px rgb(222 211 179 / 8%);
+        image-rendering: pixelated;
+        touch-action: none;
+      }
+
+      .city-view__close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        color: var(--world-parchment);
+        font-size: 1.1rem;
+        line-height: 1;
+        background: rgb(29 36 40 / 82%);
+        border: 1px solid var(--world-iron);
+        border-radius: 0.2rem;
+        cursor: pointer;
+      }
+
+      .city-view__close:hover {
+        background: rgb(29 36 40 / 96%);
+      }
+
+      .city-view__close:focus-visible {
+        outline: 2px solid #fff176;
+        outline-offset: 2px;
+      }
+
       /* 576×384 is the map's native size at WORLD_MAP_CELL_SIZE_PX = 6. It is capped there and centred
          rather than stretched: a 6 px cell has to carry territory, tier and change at once, and any
          non-integer scale smears the 1 px border that is the whole identity channel. */
@@ -380,9 +439,11 @@
           overflow-y: auto;
         }
 
+        .city-view,
         .nation-dashboard,
         .prosperity {
           width: 100%;
+          flex: none;
         }
 
         .nation-strip__inner {
@@ -1498,14 +1559,18 @@
          name is a region. -->
     <section id="nation-clock" class="nation-clock" aria-label="暦と進行速度"></section>
     <main class="nation-hud">
+      <!-- The primary surface (traversal.md §2.2): large, docked beside the dashboard/map/ranking
+           column rather than overlaid on any of it, so nothing here ever covers anything else. Hidden
+           by `cityViewPanel.ts` until it has something to show, and hidden again on close — which is
+           what lets the world map widen into the freed space rather than merely reveal it underneath. -->
+      <section id="city-view" class="city-view" aria-label="都市の眺め"></section>
       <section
         id="nation-dashboard"
         class="nation-dashboard"
         aria-label="自国の状況"
       ></section>
-      <!-- The primary surface, docked between the two panels rather than overlaid on them: neither ever
-           covers the other, and closing the city view will widen this rather than reveal it
-           (traversal.md §2.2). Empty until a `welcome` arrives, like every panel here. -->
+      <!-- The map and HUD column beside the primary surface (traversal.md §2.2). Empty until a
+           `welcome` arrives, like every panel here. -->
       <section id="world-map" class="world-map" aria-label="世界地図"></section>
       <section id="nation-ranking" class="prosperity" aria-label="繁栄度の順位"></section>
     </main>

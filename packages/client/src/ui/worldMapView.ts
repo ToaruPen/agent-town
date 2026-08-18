@@ -51,6 +51,12 @@ export interface WorldMapCityViewModel {
   /** Whether this city belongs to the player's own nation — the capital cross-hatch's input (visual.md
    *  §2.6). Only meaningful together with `isCapital`; a non-capital city never draws it. */
   isPlayer: boolean;
+  /**
+   * Whether this city's local view is the one currently docked beside the map (traversal.md §2.2). The
+   * continuity cue: both surfaces are visible at once and no transition carries the player's place for
+   * them, so the map has to say it instead.
+   */
+  isOpen: boolean;
   /** Population tier, capital shape and the development ratio, decided in `worldCityViewModel`. */
   glyph: CityGlyph;
 }
@@ -94,9 +100,20 @@ export interface WorldMapMarks {
    * turns a phase into a frame and never touches the clock that produced it.
    */
   pulsePhase: number | null;
+  /**
+   * The city id the docked local view currently shows, or null while it is closed. Independent of
+   * `playerPolityId`: the player step marks a whole nation for the session, this marks the one city
+   * (always the player's own, in N1) whose local view is on screen right now.
+   */
+  openCityId: string | null;
 }
 
-const NO_MARKS: WorldMapMarks = { playerPolityId: null, hoveredPolityId: null, pulsePhase: null };
+const NO_MARKS: WorldMapMarks = {
+  playerPolityId: null,
+  hoveredPolityId: null,
+  pulsePhase: null,
+  openCityId: null,
+};
 
 export interface WorldMapViewModel {
   width: number;
@@ -175,6 +192,7 @@ function buildCities(
   banners: ReadonlyMap<string, string>,
   cityStates: ReadonlyMap<string, NationCityState>,
   playerPolityId: string | null,
+  openCityId: string | null,
 ): WorldMapCityViewModel[] {
   return history.worldMap.cities.map(({ id, name, pos, polityId, isCapital }) => ({
     id,
@@ -185,6 +203,7 @@ function buildCities(
     isCapital,
     isHighlighted: polityId === hoveredPolityId,
     isPlayer: polityId === playerPolityId,
+    isOpen: id === openCityId,
     glyph: chronicleCityGlyph(cityStates.get(id) ?? null, { isCapital }),
   }));
 }
@@ -236,7 +255,7 @@ export function buildWorldMapViewModel(
   marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
-  const { playerPolityId, hoveredPolityId, pulsePhase } = marks;
+  const { playerPolityId, hoveredPolityId, pulsePhase, openCityId } = marks;
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
@@ -247,6 +266,7 @@ export function buildWorldMapViewModel(
       banners,
       new Map(cityStates.map((state) => [state.cityId, state] as const)),
       playerPolityId,
+      openCityId,
     ),
     territoryEdges: buildTerritoryEdges(history, banners, playerPolityId),
     tradeRoutes: buildRoutes(history, hoveredPolityId),
@@ -515,6 +535,29 @@ function drawCapitalCrossHatch(
   context.stroke();
 }
 
+/** One band clear of the casing, so the ring reads as its own mark rather than a thicker casing. */
+const OPEN_CITY_RING_GAP_PX = 2;
+const OPEN_CITY_RING_WIDTH_PX = 1.5;
+
+/**
+ * traversal.md §2.2: the open city is marked as open on the map, the continuity cue for a docked layout
+ * where both surfaces stay on screen and no transition carries the player's place for them. Reuses the
+ * warm-white the player's own inner rule already claims (visual.md §2.6) — in N1 the docked view only
+ * ever targets the player's own capital, so the same "player identity, drawn with a finer pen" idiom
+ * applies without inventing a second colour.
+ */
+function drawOpenCityRing(
+  context: CanvasRenderingContext2D,
+  center: Position,
+  glyph: CityGlyph,
+): void {
+  context.beginPath();
+  context.arc(center.x, center.y, glyph.radiusPx + OPEN_CITY_RING_GAP_PX, 0, Math.PI * 2);
+  context.strokeStyle = hexColor(MAP_PLAYER_INNER_RULE_COLOR);
+  context.lineWidth = OPEN_CITY_RING_WIDTH_PX;
+  context.stroke();
+}
+
 function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   for (const city of view.cities) {
     traceCityGlyph(context, cellCenter(city.pos), city.glyph);
@@ -526,6 +569,9 @@ function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel):
     context.stroke();
     if (city.isCapital && city.isPlayer) {
       drawCapitalCrossHatch(context, cellCenter(city.pos), city.glyph);
+    }
+    if (city.isOpen) {
+      drawOpenCityRing(context, cellCenter(city.pos), city.glyph);
     }
   }
 }

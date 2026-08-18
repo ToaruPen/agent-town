@@ -17,6 +17,8 @@ export interface WorldMapSnapshot {
   /** `nations.flatMap(({ cities }) => cities)`. Empty means every city draws at the smallest tier. */
   cityStates: readonly NationCityState[];
   playerPolityId: string | null;
+  /** The city the docked local view currently shows, or null while it is closed (traversal.md §2.2). */
+  openCityId: string | null;
 }
 
 export interface WorldMapHostController {
@@ -111,6 +113,7 @@ export function createWorldMapHost(
       playerPolityId: snapshot.playerPolityId,
       hoveredPolityId,
       pulsePhase: pulsePhase(),
+      openCityId: snapshot.openCityId,
     });
     renderWorldMapCanvas(canvas, view);
   };
