@@ -3,8 +3,14 @@ import type { FillInstruction, GraphicsInstructions } from "pixi.js";
 import { Container, Graphics, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
-import { DIRECTIVE_OBJECT_LABEL, renderDirectiveLayer } from "../src/render/directiveLayer.js";
-import { objectDepth, TILE_SIZE } from "../src/render/sprites.js";
+import {
+  DIRECTIVE_OBJECT_LABEL,
+  festivalSpriteProps,
+  mineHeadProps,
+  renderDirectiveLayer,
+  timberCampProps,
+} from "../src/render/directiveLayer.js";
+import { objectDepth, SPRITE_ASSETS, TILE_SIZE } from "../src/render/sprites.js";
 
 const ANCHORS: Readonly<Record<DirectiveKind, Position>> = {
   clearFarmland: { x: 30, y: 20 },
@@ -16,6 +22,93 @@ const ANCHORS: Readonly<Record<DirectiveKind, Position>> = {
 };
 const BANNER_COLOR = 0x6f9f91;
 
+/**
+ * `Sprite.from(path)` returns the same placeholder texture for every unpreloaded path in the
+ * vitest/node test environment (`a.texture === b.texture` regardless of `path`), so a test asserting
+ * on rendered `Sprite`s cannot tell a swapped stump/log/axe apart, nor prove they aren't all the same
+ * tile. These three `describe` blocks assert on the pure prop-description functions directly instead,
+ * where `path` is plain data: a swapped or duplicated path fails one of these by name.
+ */
+describe("timberCampProps", () => {
+  it("gives the stump, log and axe their own vendored tile, at quarter-tile offsets from the anchor", () => {
+    const anchor = ANCHORS.developTimber;
+    const baseX = anchor.x * TILE_SIZE;
+    const baseY = anchor.y * TILE_SIZE;
+
+    expect(timberCampProps(anchor)).toEqual([
+      {
+        path: SPRITE_ASSETS.directive.timber.stump,
+        pos: { x: baseX, y: baseY },
+        depth: objectDepth(anchor.y, "resource"),
+      },
+      {
+        path: SPRITE_ASSETS.directive.timber.log,
+        pos: { x: baseX + TILE_SIZE / 4, y: baseY + 2 },
+        depth: objectDepth(anchor.y, "stockpile"),
+      },
+      {
+        path: SPRITE_ASSETS.directive.timber.axe,
+        pos: { x: baseX - TILE_SIZE / 4, y: baseY - 2 },
+        depth: objectDepth(anchor.y, "stockpile"),
+      },
+    ]);
+  });
+});
+
+describe("mineHeadProps", () => {
+  it("gives the wall, roof, emblem and spoil their own vendored tile, roof above and spoil beside the anchor", () => {
+    const anchor = ANCHORS.openMine;
+    const baseX = anchor.x * TILE_SIZE;
+    const baseY = anchor.y * TILE_SIZE;
+    const facilityDepth = objectDepth(anchor.y, "facility");
+
+    expect(mineHeadProps(anchor)).toEqual([
+      {
+        path: SPRITE_ASSETS.directive.mineHead.wall,
+        pos: { x: baseX, y: baseY },
+        depth: facilityDepth,
+      },
+      {
+        path: SPRITE_ASSETS.directive.mineHead.roof,
+        pos: { x: baseX, y: baseY - TILE_SIZE },
+        depth: facilityDepth,
+      },
+      {
+        path: SPRITE_ASSETS.directive.mineHead.emblem,
+        pos: { x: baseX, y: baseY },
+        depth: facilityDepth,
+      },
+      {
+        path: SPRITE_ASSETS.directive.mineHead.spoil,
+        pos: { x: baseX + TILE_SIZE / 2, y: baseY },
+        depth: objectDepth(anchor.y, "resource"),
+      },
+    ]);
+  });
+});
+
+describe("festivalSpriteProps", () => {
+  it("gives the sheaf and keg their own vendored tile, either side of the pennant", () => {
+    const anchor = ANCHORS.holdFestival;
+    const baseX = anchor.x * TILE_SIZE;
+    const baseY = anchor.y * TILE_SIZE;
+    const stockpileDepth = objectDepth(anchor.y, "stockpile");
+
+    expect(festivalSpriteProps(anchor)).toEqual([
+      {
+        path: SPRITE_ASSETS.directive.festival.sheaf,
+        pos: { x: baseX - TILE_SIZE / 4, y: baseY + 2 },
+        depth: stockpileDepth,
+      },
+      {
+        path: SPRITE_ASSETS.directive.festival.keg,
+        pos: { x: baseX + TILE_SIZE / 4, y: baseY + 2 },
+        depth: stockpileDepth,
+      },
+    ]);
+  });
+});
+
 function directiveObjects(layer: Container): (Sprite | Graphics)[] {
   return layer.children.filter(
     (child): child is Sprite | Graphics =>
@@ -24,14 +117,15 @@ function directiveObjects(layer: Container): (Sprite | Graphics)[] {
   );
 }
 
-function spritesAt(sprites: readonly Sprite[], x: number, y: number): Sprite[] {
-  return sprites.filter((sprite) => sprite.position.x === x && sprite.position.y === y);
-}
-
 function isFillInstruction(instruction: GraphicsInstructions): instruction is FillInstruction {
   return instruction.action === "fill";
 }
 
+/**
+ * Wiring proof: given the prop lists above are already checked for content, these confirm
+ * `renderDirectiveLayer` actually draws one Pixi object per description, gates by `activeKinds`, and
+ * clears its own children correctly on the next call -- not what path each sprite ended up with.
+ */
 describe("renderDirectiveLayer", () => {
   it("draws nothing when no directive it depicts is active", () => {
     const layer = new Container();
@@ -53,62 +147,20 @@ describe("renderDirectiveLayer", () => {
     expect(directiveObjects(layer)).toEqual([]);
   });
 
-  describe("developTimber", () => {
-    it("draws the stump, log and axe at quarter-tile offsets from the anchor", () => {
-      const layer = new Container();
-      renderDirectiveLayer(layer, ANCHORS, new Set(["developTimber"]), BANNER_COLOR);
-
-      const sprites = directiveObjects(layer).filter(
-        (child): child is Sprite => child instanceof Sprite,
-      );
-      expect(sprites).toHaveLength(3);
-
-      const anchor = ANCHORS.developTimber;
-      const baseX = anchor.x * TILE_SIZE;
-      const baseY = anchor.y * TILE_SIZE;
-
-      const stump = spritesAt(sprites, baseX, baseY);
-      const log = spritesAt(sprites, baseX + TILE_SIZE / 4, baseY + 2);
-      const axe = spritesAt(sprites, baseX - TILE_SIZE / 4, baseY - 2);
-      expect(stump).toHaveLength(1);
-      expect(log).toHaveLength(1);
-      expect(axe).toHaveLength(1);
-      expect(stump[0]?.zIndex).toBe(objectDepth(anchor.y, "resource"));
-      expect(log[0]?.zIndex).toBe(objectDepth(anchor.y, "stockpile"));
-      expect(axe[0]?.zIndex).toBe(objectDepth(anchor.y, "stockpile"));
-    });
+  it("draws one sprite per timberCampProps entry when developTimber is active", () => {
+    const layer = new Container();
+    renderDirectiveLayer(layer, ANCHORS, new Set(["developTimber"]), BANNER_COLOR);
+    expect(directiveObjects(layer)).toHaveLength(timberCampProps(ANCHORS.developTimber).length);
   });
 
-  describe("openMine", () => {
-    it("draws the roof above the anchor, the wall and emblem on it, and a spoil chunk beside it", () => {
-      const layer = new Container();
-      renderDirectiveLayer(layer, ANCHORS, new Set(["openMine"]), BANNER_COLOR);
-
-      const sprites = directiveObjects(layer).filter(
-        (child): child is Sprite => child instanceof Sprite,
-      );
-      expect(sprites).toHaveLength(4);
-
-      const anchor = ANCHORS.openMine;
-      const baseX = anchor.x * TILE_SIZE;
-      const baseY = anchor.y * TILE_SIZE;
-      const facilityDepth = objectDepth(anchor.y, "facility");
-
-      const roof = spritesAt(sprites, baseX, baseY - TILE_SIZE);
-      // Wall and emblem share the building's own tile, matching structureLayer.ts's grammar.
-      const onTile = spritesAt(sprites, baseX, baseY);
-      const spoil = spritesAt(sprites, baseX + TILE_SIZE / 2, baseY);
-      expect(roof).toHaveLength(1);
-      expect(onTile).toHaveLength(2);
-      expect(spoil).toHaveLength(1);
-      expect(roof[0]?.zIndex).toBe(facilityDepth);
-      expect(onTile.every((sprite) => sprite.zIndex === facilityDepth)).toBe(true);
-      expect(spoil[0]?.zIndex).toBe(objectDepth(anchor.y, "resource"));
-    });
+  it("draws one sprite per mineHeadProps entry when openMine is active", () => {
+    const layer = new Container();
+    renderDirectiveLayer(layer, ANCHORS, new Set(["openMine"]), BANNER_COLOR);
+    expect(directiveObjects(layer)).toHaveLength(mineHeadProps(ANCHORS.openMine).length);
   });
 
   describe("holdFestival", () => {
-    it("draws a pennant filled with the nation's banner colour, plus a sheaf and a keg", () => {
+    it("draws a pennant filled with the nation's banner colour, plus one sprite per festivalSpriteProps entry", () => {
       const layer = new Container();
       renderDirectiveLayer(layer, ANCHORS, new Set(["holdFestival"]), BANNER_COLOR);
 
@@ -116,7 +168,7 @@ describe("renderDirectiveLayer", () => {
       const pennants = objects.filter((child): child is Graphics => child instanceof Graphics);
       const sprites = objects.filter((child): child is Sprite => child instanceof Sprite);
       expect(pennants).toHaveLength(1);
-      expect(sprites).toHaveLength(2);
+      expect(sprites).toHaveLength(festivalSpriteProps(ANCHORS.holdFestival).length);
 
       const anchor = ANCHORS.holdFestival;
       const pennant = pennants[0];
@@ -125,12 +177,6 @@ describe("renderDirectiveLayer", () => {
 
       const fill = pennant?.context.instructions.filter(isFillInstruction).at(-1);
       expect(fill?.data.style.color).toBe(BANNER_COLOR);
-
-      const stockpileDepth = objectDepth(anchor.y, "stockpile");
-      expect(sprites.every((sprite) => sprite.zIndex === stockpileDepth)).toBe(true);
-      // Two distinct ground props, not the same prop drawn twice at the same spot.
-      const positions = new Set(sprites.map(({ position }) => `${position.x},${position.y}`));
-      expect(positions.size).toBe(2);
     });
 
     it("changes the pennant colour with the banner it is given", () => {
@@ -154,8 +200,12 @@ describe("renderDirectiveLayer", () => {
       new Set(["developTimber", "openMine", "holdFestival"]),
       BANNER_COLOR,
     );
-    // 3 timber props + 4 mine sprites + (1 pennant + 2 festival props) = 10.
-    expect(directiveObjects(layer)).toHaveLength(10);
+    const expectedCount =
+      timberCampProps(ANCHORS.developTimber).length +
+      mineHeadProps(ANCHORS.openMine).length +
+      1 + // pennant
+      festivalSpriteProps(ANCHORS.holdFestival).length;
+    expect(directiveObjects(layer)).toHaveLength(expectedCount);
   });
 
   it("clears a stale mark once its directive is no longer active", () => {

@@ -337,4 +337,19 @@ describe("SPRITE_ASSETS.directive", () => {
   it("gives the mine head a distinct tile per slot, matching the roof/wall/emblem grammar", () => {
     expect(new Set(mineHeadPaths.slice(0, 3)).size).toBe(3);
   });
+
+  // Reviewer finding: these tiles are what directiveLayer.ts's tests assert paths against, but only
+  // the mine head's own distinctness was ever checked here -- pointing every timber or festival slot
+  // at one PNG would still pass every prior assertion in this file.
+  it("gives the mine head's spoil chunk its own tile too, distinct from the wall, roof and emblem", () => {
+    expect(new Set(mineHeadPaths).size).toBe(4);
+  });
+
+  it("gives the timber camp's stump, log and axe each their own tile", () => {
+    expect(new Set(timberPaths).size).toBe(3);
+  });
+
+  it("gives the festival's sheaf and keg each their own tile", () => {
+    expect(new Set(festivalPaths).size).toBe(2);
+  });
 });

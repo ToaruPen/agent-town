@@ -5,33 +5,44 @@ import { objectDepth, SPRITE_ASSETS, TILE_SIZE, type WorldObjectKind } from "./s
 
 export const DIRECTIVE_OBJECT_LABEL = "directive-object";
 
-/** Same idiom as `mapLayer.ts`'s stockpile props: a bare sprite sized to the tile grid, sorted by
- *  `objectDepth` among the layer's other direct children rather than nested in its own container. */
-function addProp(
-  layer: Container,
+/**
+ * One sprite's worth of what `renderDirectiveLayer` draws, kept separate from the Pixi calls that
+ * realize it. `Sprite.from(path)` returns the same placeholder texture for every unpreloaded path in
+ * the vitest/node test environment, so a test asserting on rendered `Sprite`s cannot tell a swapped
+ * path from a correct one; asserting on this data directly (see `timberCampProps` and friends in
+ * `directiveLayer.test.ts`) can.
+ */
+export interface DirectiveProp {
+  readonly path: string;
+  /** Pixel position, already offset from the anchor -- not a tile position. */
+  readonly pos: Position;
+  readonly depth: number;
+}
+
+function prop(
   path: string,
   anchor: Position,
   offsetX: number,
   offsetY: number,
   kind: WorldObjectKind,
-): void {
-  const sprite = Sprite.from(path);
-  sprite.position.set(anchor.x * TILE_SIZE + offsetX, anchor.y * TILE_SIZE + offsetY);
-  sprite.width = TILE_SIZE;
-  sprite.height = TILE_SIZE;
-  sprite.label = DIRECTIVE_OBJECT_LABEL;
-  sprite.zIndex = objectDepth(anchor.y, kind);
-  layer.addChild(sprite);
+): DirectiveProp {
+  return {
+    path,
+    pos: { x: anchor.x * TILE_SIZE + offsetX, y: anchor.y * TILE_SIZE + offsetY },
+    depth: objectDepth(anchor.y, kind),
+  };
 }
 
 const TIMBER_OFFSET = TILE_SIZE / 4;
 
 /** `directive-sprites.md` Part 2: stump on the anchor, log and axe at quarter-tile offsets either
  *  side of it -- the same sub-tile idiom `mapLayer.ts` already uses for the stockpile's basket+log. */
-function renderTimberCamp(layer: Container, anchor: Position): void {
-  addProp(layer, SPRITE_ASSETS.directive.timber.stump, anchor, 0, 0, "resource");
-  addProp(layer, SPRITE_ASSETS.directive.timber.log, anchor, TIMBER_OFFSET, 2, "stockpile");
-  addProp(layer, SPRITE_ASSETS.directive.timber.axe, anchor, -TIMBER_OFFSET, -2, "stockpile");
+export function timberCampProps(anchor: Position): readonly DirectiveProp[] {
+  return [
+    prop(SPRITE_ASSETS.directive.timber.stump, anchor, 0, 0, "resource"),
+    prop(SPRITE_ASSETS.directive.timber.log, anchor, TIMBER_OFFSET, 2, "stockpile"),
+    prop(SPRITE_ASSETS.directive.timber.axe, anchor, -TIMBER_OFFSET, -2, "stockpile"),
+  ];
 }
 
 const MINE_SPOIL_OFFSET = TILE_SIZE / 2;
@@ -43,11 +54,39 @@ const MINE_SPOIL_OFFSET = TILE_SIZE / 2;
  * `Building`. The three tiles are drawn directly instead, at the same depth `objectDepth` would give a
  * `facility` on this tile, so a real building elsewhere on the map still sorts correctly against it.
  */
-function renderMineHead(layer: Container, anchor: Position): void {
-  addProp(layer, SPRITE_ASSETS.directive.mineHead.wall, anchor, 0, 0, "facility");
-  addProp(layer, SPRITE_ASSETS.directive.mineHead.roof, anchor, 0, -TILE_SIZE, "facility");
-  addProp(layer, SPRITE_ASSETS.directive.mineHead.emblem, anchor, 0, 0, "facility");
-  addProp(layer, SPRITE_ASSETS.directive.mineHead.spoil, anchor, MINE_SPOIL_OFFSET, 0, "resource");
+export function mineHeadProps(anchor: Position): readonly DirectiveProp[] {
+  return [
+    prop(SPRITE_ASSETS.directive.mineHead.wall, anchor, 0, 0, "facility"),
+    prop(SPRITE_ASSETS.directive.mineHead.roof, anchor, 0, -TILE_SIZE, "facility"),
+    prop(SPRITE_ASSETS.directive.mineHead.emblem, anchor, 0, 0, "facility"),
+    prop(SPRITE_ASSETS.directive.mineHead.spoil, anchor, MINE_SPOIL_OFFSET, 0, "resource"),
+  ];
+}
+
+const FESTIVAL_PROP_OFFSET = TILE_SIZE / 4;
+
+/** `directive-sprites.md` Part 4: the sheaf and keg drawn beside the pennant (`pennantGraphic` below)
+ *  -- dressing, not a claim that anything was built, since `holdFestival` costs no materials and
+ *  completes in one season. */
+export function festivalSpriteProps(anchor: Position): readonly DirectiveProp[] {
+  return [
+    prop(SPRITE_ASSETS.directive.festival.sheaf, anchor, -FESTIVAL_PROP_OFFSET, 2, "stockpile"),
+    prop(SPRITE_ASSETS.directive.festival.keg, anchor, FESTIVAL_PROP_OFFSET, 2, "stockpile"),
+  ];
+}
+
+/** Same idiom as `mapLayer.ts`'s stockpile props: a bare sprite sized to the tile grid, sorted by
+ *  `objectDepth` among the layer's other direct children rather than nested in its own container. */
+function drawProps(layer: Container, props: readonly DirectiveProp[]): void {
+  for (const description of props) {
+    const sprite = Sprite.from(description.path);
+    sprite.position.set(description.pos.x, description.pos.y);
+    sprite.width = TILE_SIZE;
+    sprite.height = TILE_SIZE;
+    sprite.label = DIRECTIVE_OBJECT_LABEL;
+    sprite.zIndex = description.depth;
+    layer.addChild(sprite);
+  }
 }
 
 /** Drawn fresh rather than extracted from the frozen `historyLayer.ts`'s `drawBorderFort` (which
@@ -68,33 +107,6 @@ function pennantGraphic(anchor: Position, flagColor: number): Graphics {
   graphic.label = DIRECTIVE_OBJECT_LABEL;
   graphic.zIndex = objectDepth(anchor.y, "landmark");
   return graphic;
-}
-
-const FESTIVAL_PROP_OFFSET = TILE_SIZE / 4;
-
-/**
- * `directive-sprites.md` Part 4: a pennant marks the festival itself; the sheaf and keg beneath it are
- * dressing, not a claim that anything was built -- `holdFestival` costs no materials and completes in
- * one season, so nothing here should read as construction.
- */
-function renderFestival(layer: Container, anchor: Position, bannerColor: number): void {
-  layer.addChild(pennantGraphic(anchor, bannerColor));
-  addProp(
-    layer,
-    SPRITE_ASSETS.directive.festival.sheaf,
-    anchor,
-    -FESTIVAL_PROP_OFFSET,
-    2,
-    "stockpile",
-  );
-  addProp(
-    layer,
-    SPRITE_ASSETS.directive.festival.keg,
-    anchor,
-    FESTIVAL_PROP_OFFSET,
-    2,
-    "stockpile",
-  );
 }
 
 function clearDirectiveObjects(layer: Container): void {
@@ -121,7 +133,10 @@ export function renderDirectiveLayer(
   bannerColor: number,
 ): void {
   clearDirectiveObjects(layer);
-  if (activeKinds.has("developTimber")) renderTimberCamp(layer, anchors.developTimber);
-  if (activeKinds.has("openMine")) renderMineHead(layer, anchors.openMine);
-  if (activeKinds.has("holdFestival")) renderFestival(layer, anchors.holdFestival, bannerColor);
+  if (activeKinds.has("developTimber")) drawProps(layer, timberCampProps(anchors.developTimber));
+  if (activeKinds.has("openMine")) drawProps(layer, mineHeadProps(anchors.openMine));
+  if (activeKinds.has("holdFestival")) {
+    layer.addChild(pennantGraphic(anchors.holdFestival, bannerColor));
+    drawProps(layer, festivalSpriteProps(anchors.holdFestival));
+  }
 }
