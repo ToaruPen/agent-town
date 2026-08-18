@@ -4,6 +4,7 @@ import {
   encodeMessage,
   type NationWorldState,
   type ServerMessage,
+  type WorldCellChange,
 } from "@agent-town/shared";
 
 const RECONNECT_DELAY_MS = 1_000;
@@ -25,7 +26,12 @@ type OrdersMessage = Extract<ServerMessage, { type: "orders" }>;
 
 interface ConnectionHandlers {
   onWelcome(state: NationWorldState): void;
-  onUpdate(state: NationWorldState): void;
+  /**
+   * `changedCells` is the wire's own per-season delta (visual.md §2.4) alongside the merged state, never
+   * re-derived by diffing two states — a coalesced update would silently lose a flash. Empty for a
+   * `clock` heartbeat, which carries no territory delta at all.
+   */
+  onUpdate(state: NationWorldState, changedCells: readonly WorldCellChange[]): void;
   onOrders(message: OrdersMessage): void;
   /**
    * The socket closed and a reconnect is pending. Optional because the dev pages mount without a
@@ -71,6 +77,12 @@ function createBrowserSocket(url: string): WebSocketLike {
   });
 
   return adapter;
+}
+
+/** The wire's own per-season delta (visual.md §2.4), or empty for a `clock` heartbeat, which carries no
+ *  territory change at all. */
+function changedCellsFrom(message: ServerMessage): readonly WorldCellChange[] {
+  return message.type === "season" ? message.changedCells : [];
 }
 
 function applyStateMessage(state: NationWorldState, message: ServerMessage): NationWorldState {
@@ -120,8 +132,9 @@ export function connect(
       }
       if (state === null) return;
 
+      const changedCells = changedCellsFrom(message);
       state = applyStateMessage(state, message);
-      handlers.onUpdate(state);
+      handlers.onUpdate(state, changedCells);
     };
     socket.onclose = () => {
       // Dropped before the notice, because a closed socket must stop being the send target immediately.

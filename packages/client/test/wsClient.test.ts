@@ -127,6 +127,33 @@ describe("connect", () => {
     expect(onOrders).not.toHaveBeenCalled();
   });
 
+  /**
+   * `WorldCellChange` arrives as a per-season delta on the wire (visual.md §2.4) and must reach a caller
+   * able to feed it straight into the flash/hatch phase math — diffing two `NationWorldState` snapshots
+   * to reconstruct it would silently lose a change a later season coalesced over.
+   */
+  it("surfaces a season message's changed cells to onUpdate's second argument", () => {
+    const socket = new MockWebSocket();
+    const onUpdate = vi.fn();
+    const changedCells = [
+      { index: 2, polityId: "realm" },
+      { index: 5, polityId: null },
+    ];
+
+    connect("ws://example.test", { onWelcome: vi.fn(), onUpdate, onOrders: vi.fn() }, () => socket);
+    socket.emit({ type: "welcome", state: worldFixture() });
+    socket.emit({
+      type: "season",
+      tick: 300,
+      year: 1,
+      season: "summer",
+      nations: [nationFixture()],
+      changedCells,
+    });
+
+    expect(onUpdate.mock.calls[0]?.[1]).toEqual(changedCells);
+  });
+
   it("applies a light clock while retaining history and nations by reference", () => {
     const socket = new MockWebSocket();
     const onWelcome = vi.fn();
@@ -147,6 +174,19 @@ describe("connect", () => {
     expect(updated).toEqual({ ...worldFixture(), tick: 17, speed: 4 });
     expect(updated.history).toBe(welcomed.history);
     expect(updated.nations).toBe(welcomed.nations);
+  });
+
+  /** A `clock` heartbeat carries no territory delta at all — the second argument must say so with an
+   *  empty array, not `undefined`, so a caller can fold it into an accumulator unconditionally. */
+  it("passes an empty changed-cells list alongside a light clock", () => {
+    const socket = new MockWebSocket();
+    const onUpdate = vi.fn();
+
+    connect("ws://example.test", { onWelcome: vi.fn(), onUpdate, onOrders: vi.fn() }, () => socket);
+    socket.emit({ type: "welcome", state: worldFixture() });
+    socket.emit({ type: "clock", tick: 17, year: 1, season: "spring", speed: 4 });
+
+    expect(onUpdate.mock.calls[0]?.[1]).toEqual([]);
   });
 
   it("forwards orders without pretending they are nation state", () => {
