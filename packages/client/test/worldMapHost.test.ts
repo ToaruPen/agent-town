@@ -13,7 +13,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAP_CASING_COLOR, MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
 import { seasonGroundTint } from "../src/render/sprites.js";
-import { TERRITORY_CHANGE_FLASH_PEAK_ALPHA } from "../src/ui/worldMapChangeViewModel.js";
+import {
+  TERRITORY_CHANGE_FLASH_DURATION_TICKS,
+  TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
+} from "../src/ui/worldMapChangeViewModel.js";
 import { createWorldMapHost, type WorldMapSnapshot } from "../src/ui/worldMapHost.js";
 import { hexColor, SEASON_WASH_ALPHA } from "../src/ui/worldMapView.js";
 import { historyFixture, polityFixture } from "./nationFixture.js";
@@ -564,8 +567,11 @@ describe("the world map's territory-change tracking", () => {
     log.strokes.length = 0;
 
     // A later plain clock repaint, well past the flash but still inside the hatch's own window — no new
-    // changedCells at all, the way a `clock` message always arrives.
-    host.render(snapshot({ history, tick: 100, changedCells: [] }));
+    // changedCells at all, the way a `clock` message always arrives. Derived from the exported duration
+    // rather than a hardcoded tick, so this stays true if that widens.
+    host.render(
+      snapshot({ history, tick: TERRITORY_CHANGE_FLASH_DURATION_TICKS + 50, changedCells: [] }),
+    );
     expect(nonCasingFlashFills(log)).toEqual([]);
     expect(bannerStrokes(log, bannerStyle)).toBeGreaterThan(0);
     log.fills.length = 0;

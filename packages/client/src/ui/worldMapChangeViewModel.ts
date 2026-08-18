@@ -1,12 +1,40 @@
-import { NATION_TICKS_PER_SEASON } from "@agent-town/shared";
+import {
+  CLOCK_BROADCAST_MS,
+  NATION_TICKS_PER_SEASON,
+  SPEED_MULTIPLIERS,
+  TICK_RATE,
+} from "@agent-town/shared";
 
 /** visual.md §2.4: a multi-cell change staggers the cells' own start ticks, rather than every one of
  *  them flashing on the same frame — the map should read as many small events, not one blanket flash. */
 const TERRITORY_CHANGE_STAGGER_STEP_TICKS = 7;
 const TERRITORY_CHANGE_STAGGER_MODULUS_TICKS = 12;
 
-/** visual.md §2.4: the flash's own span, from the peak alpha down to the cell's resting fill. */
-export const TERRITORY_CHANGE_FLASH_DURATION_TICKS = 30;
+/**
+ * The widest gap, in simulated ticks, between two consecutive client-visible repaints — verified from
+ * the server's own broadcast loops (`wsServer.ts`), not assumed: a `clock` heartbeat fires every
+ * `CLOCK_BROADCAST_MS` regardless of speed, so no repaint is ever more than that many milliseconds behind
+ * the last one, and at the fastest speed a session can be watching (`SPEED_MULTIPLIERS`'s own max), that
+ * many milliseconds of wall clock advances this many simulated ticks. A window wider than this cannot be
+ * jumped over by every repaint in a row.
+ */
+const MAX_BROADCAST_GAP_TICKS =
+  Math.max(...SPEED_MULTIPLIERS) * TICK_RATE * (CLOCK_BROADCAST_MS / 1_000);
+/** Margin over `MAX_BROADCAST_GAP_TICKS` for real scheduling jitter (event-loop delay, `setInterval`
+ *  drift) — not for the per-cell stagger delay, which is already folded into a window's own start tick
+ *  before this margin is ever measured against it. */
+const BROADCAST_JITTER_MARGIN_TICKS = 30;
+
+/**
+ * visual.md §2.4 / visual.md:825: the flash's own span. Below ~5 Hz — the real cadence at every playable
+ * speed, since the `clock` heartbeat is fixed at ~1 Hz regardless of speed — a smooth decay is not
+ * achievable: a render can land anywhere inside the window, or nowhere at all if the window is narrower
+ * than the gap between two renders. Sized past `MAX_BROADCAST_GAP_TICKS` so a render is always guaranteed
+ * to land inside a changed cell's own window; `territoryChangePhase` below holds the flash at its peak for
+ * the whole span rather than ramping it down; see its own comment for why.
+ */
+export const TERRITORY_CHANGE_FLASH_DURATION_TICKS =
+  MAX_BROADCAST_GAP_TICKS + BROADCAST_JITTER_MARGIN_TICKS;
 export const TERRITORY_CHANGE_FLASH_PEAK_ALPHA = 0.55;
 /** visual.md §2.4: the recent-change hatch's own peak, reached the instant the flash settles. */
 export const TERRITORY_CHANGE_HATCH_PEAK_ALPHA = 0.35;
@@ -32,9 +60,13 @@ export function nextSeasonBoundary(changeTick: number): number {
 
 export interface TerritoryChangePhase {
   /**
-   * 0 at the instant this cell's (staggered) change begins, rising to 1 as the flash settles into the
-   * cell's resting fill; null before the change starts and again once the flash has fully settled — in
-   * both cases the caller has no flash blend to make, only its own resting alpha (or the hatch's).
+   * 0 for every tick inside this cell's (staggered) flash window; null before the change starts and
+   * again once the window has ended — in both null cases the caller has no flash to draw, only its own
+   * resting alpha (or the hatch's). Deliberately not a rising fraction toward 1: visual.md:825's two-step
+   * respecification means the flash holds at full strength for its whole span rather than decaying, since
+   * at real broadcast cadence (see `MAX_BROADCAST_GAP_TICKS`) the client cannot promise it will ever be
+   * asked to render more than one frame inside the window — a decaying value here would describe a fade
+   * the surface may never actually show.
    */
   flashProgress: number | null;
   /** visual.md §2.4: the recent-change hatch's own alpha for this instant, 0 outside its window. */
@@ -63,7 +95,7 @@ export function territoryChangePhase(
 
   const flashEnd = start + TERRITORY_CHANGE_FLASH_DURATION_TICKS;
   if (tick < flashEnd) {
-    return { flashProgress: (tick - start) / TERRITORY_CHANGE_FLASH_DURATION_TICKS, hatchAlpha: 0 };
+    return { flashProgress: 0, hatchAlpha: 0 };
   }
 
   const boundary = nextSeasonBoundary(changeTick);

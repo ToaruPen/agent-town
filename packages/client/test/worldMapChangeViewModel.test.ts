@@ -30,9 +30,18 @@ describe("territoryChangePhase", () => {
     expect(phase.hatchAlpha).toBe(0);
   });
 
-  it("decays the flash linearly and lands on the hatch the instant it ends", () => {
+  /**
+   * visual.md:825: below ~5 Hz — the real cadence at every playable speed, since the `clock` heartbeat is
+   * fixed at ~1 Hz regardless of speed (`wsServer.ts`) — a smooth decay is not achievable, and the flash
+   * must be a two-step change instead: full strength for the whole window, then the hatch. A render can
+   * land anywhere inside the window (or be the only one to land inside it at all), so any tick in the
+   * window must report the same full-strength state as any other — not a fraction that happens to have
+   * decayed by however far that particular render landed.
+   */
+  it("holds the flash at full strength for its whole window, landing on the hatch the instant it ends", () => {
     const changeTick = 0;
 
+    const start = territoryChangePhase(0, changeTick, 0);
     const mid = territoryChangePhase(15, changeTick, 0);
     const justBeforeEnd = territoryChangePhase(
       TERRITORY_CHANGE_FLASH_DURATION_TICKS - 1,
@@ -41,9 +50,10 @@ describe("territoryChangePhase", () => {
     );
     const atEnd = territoryChangePhase(TERRITORY_CHANGE_FLASH_DURATION_TICKS, changeTick, 0);
 
-    expect(mid.flashProgress).toBeCloseTo(0.5, 5);
-    expect(justBeforeEnd.flashProgress).toBeLessThan(1);
-    expect(justBeforeEnd.flashProgress).toBeGreaterThan(0);
+    for (const phase of [start, mid, justBeforeEnd]) {
+      expect(phase.flashProgress).toBe(0);
+      expect(phase.hatchAlpha).toBe(0);
+    }
     // The flash has fully settled into the resting fill by the hatch's own first tick — the caller no
     // longer has a flash-blend decision to make, only the hatch's own alpha.
     expect(atEnd.flashProgress).toBeNull();

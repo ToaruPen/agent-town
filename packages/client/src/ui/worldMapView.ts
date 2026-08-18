@@ -226,10 +226,6 @@ function cellAlpha(
   return polityId === playerPolityId ? WORLD_MAP_PLAYER_POLITY_ALPHA : WORLD_MAP_POLITY_ALPHA;
 }
 
-function lerp(from: number, to: number, progress: number): number {
-  return from + (to - from) * progress;
-}
-
 interface CellChangeVisuals {
   polityColor: string | null;
   polityAlpha: number;
@@ -261,9 +257,12 @@ function cellChangeVisuals(
 
   const phase = territoryChangePhase(tick, tracked.changeTick, index);
   if (phase.flashProgress !== null) {
+    // visual.md:825's two-step respecification: full strength for the whole window, not a decay — see
+    // `territoryChangePhase`'s own comment for why the phase math no longer hands back a fraction to
+    // blend toward `restingAlpha` here.
     return {
       polityColor: changeColor,
-      polityAlpha: lerp(TERRITORY_CHANGE_FLASH_PEAK_ALPHA, restingAlpha, phase.flashProgress),
+      polityAlpha: TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
       recentChangeHatchAlpha: 0,
     };
   }

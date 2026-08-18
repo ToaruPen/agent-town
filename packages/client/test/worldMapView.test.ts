@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { MAP_CITY_FILL_COLOR, NATION_BANNER_RING } from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
 import {
+  TERRITORY_CHANGE_FLASH_DURATION_TICKS,
   TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
   TERRITORY_CHANGE_HATCH_PEAK_ALPHA,
   territoryChangeStagger,
@@ -586,7 +587,9 @@ describe("world map territory change", () => {
       history,
       [],
       marks({
-        tick: 100, // well past both the stagger delay and the 30-tick flash, for any cell in this fixture
+        // Well past both the stagger delay and the flash window, for any cell in this fixture — derived
+        // from the exported duration rather than a hardcoded tick, so this stays true if that widens.
+        tick: changedCellStart + TERRITORY_CHANGE_FLASH_DURATION_TICKS + 50,
         territoryChanges: new Map([[CHANGED_CELL_INDEX, { polityId: "polity-2", changeTick: 0 }]]),
       }),
     );
@@ -648,6 +651,37 @@ describe("world map territory change", () => {
     const view = buildWorldMapViewModel(historyFixture(), [], marks({ tick: 4_242 }));
 
     expect(view.tick).toBe(4_242);
+  });
+
+  /**
+   * visual.md:825 / Part 5 V-5: the transport is a fixed ~1 Hz `clock` heartbeat regardless of speed
+   * (`CLOCK_BROADCAST_MS`), so at x8 consecutive renders are roughly 80 simulated ticks apart
+   * (`SPEED_MULTIPLIERS`'s own max × `TICK_RATE` × the heartbeat period) — verified from the server's own
+   * broadcast loops, not assumed. A render can land anywhere inside a changed cell's flash window, or
+   * miss it entirely if the window is narrower than that gap. Four cells, one per stagger this fixture's
+   * indices happen to produce (0, 7, 2, 9 — `territoryChangeStagger`), rendered only at the three ticks a
+   * real x8 session would actually produce: every one of the four must reach peak alpha in at least one
+   * of them, not just the unstaggered cell whose window already starts at tick 0.
+   */
+  it("shows every staggered cell's flash in at least one frame at a realistic x8 render cadence", () => {
+    const history = historyFixture();
+    const indices = [0, 1, 2, 3];
+    const territoryChanges = new Map(
+      indices.map((index) => [index, { polityId: "polity-2", changeTick: 0 }] as const),
+    );
+    const renderTicks = [0, 80, 160]; // consecutive clock-heartbeat renders at x8
+
+    const reachedPeak = new Set<number>();
+    for (const tick of renderTicks) {
+      const view = buildWorldMapViewModel(history, [], marks({ tick, territoryChanges }));
+      for (const index of indices) {
+        if (view.cells[index]?.polityAlpha === TERRITORY_CHANGE_FLASH_PEAK_ALPHA) {
+          reachedPeak.add(index);
+        }
+      }
+    }
+
+    expect(reachedPeak).toEqual(new Set(indices));
   });
 });
 
