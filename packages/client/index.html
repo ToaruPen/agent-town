@@ -240,6 +240,17 @@
         pointer-events: auto;
       }
 
+      /* Reviewer-found regression: any author-origin rule setting `display` — `.city-view`'s own
+         `display: flex` above — overrides the UA stylesheet's `[hidden] { display: none }` regardless
+         of selector specificity, since author rules always outrank UA ones. `cityViewPanel.ts` sets
+         `host.hidden` both before the first open and on every `close()`, so without this rule the empty
+         canvas and × button stayed on screen throughout — `onClose` and the locate pulse still fired,
+         but the visual local→world transition never actually happened. `.inspect-panel[hidden]` below
+         is the same fix for the same reason, already in this file. */
+      .city-view[hidden] {
+        display: none;
+      }
+
       /* 1024×768 is the local map's native size at TILE_SIZE = 16 (traversal.md §2.2). Capped and
          centred rather than stretched, for the same reason `.world-map__canvas` below is: a
          non-integer scale would blur the 16 px sprite grid. Hidden by the panel itself — `hidden`
