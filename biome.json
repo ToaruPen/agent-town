@@ -27,5 +27,26 @@
         }
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/client/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "process": "The browser bundle has no Node process. @types/node is only on the client's tsconfig for `import.meta.env`'s typings — a real `process` reference here is a server global leaking into client code.",
+                  "Buffer": "The browser bundle has no Node Buffer. @types/node is only on the client's tsconfig for `import.meta.env`'s typings — a real `Buffer` reference here is a server global leaking into client code.",
+                  "__dirname": "The browser bundle has no Node __dirname. @types/node is only on the client's tsconfig for `import.meta.env`'s typings — a real `__dirname` reference here is a server global leaking into client code."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
