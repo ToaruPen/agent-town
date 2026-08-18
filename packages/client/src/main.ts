@@ -1,11 +1,8 @@
 import type { NationWorldState } from "@agent-town/shared";
 import { Application, Assets, TextureStyle } from "pixi.js";
 
-import {
-  type CityViewApp,
-  type CityViewPanelController,
-  createCityViewPanel,
-} from "./local/cityViewPanel.js";
+import { type CityViewApp, createCityViewPanel } from "./local/cityViewPanel.js";
+import { type CityViewSyncController, createCityViewSync } from "./local/cityViewSync.js";
 import { resolvePlayerCityViewTarget } from "./local/cityViewTarget.js";
 import { connect, getWebSocketUrl, type SendClientMessage } from "./net/wsClient.js";
 import { SPRITE_PATHS } from "./render/sprites.js";
@@ -109,47 +106,29 @@ function mountNationHud(roots: NationHudRoots): NationHudHandle {
   let world: NationWorldState | null = null;
   // Null until `attachCityView` runs — the panel needs a loaded `Application`, which starts after the
   // socket (see the module-level comment on `NationHudHandle`). Every use below is guarded on this.
-  let cityView: CityViewPanelController | null = null;
-  // True once the panel has been opened for the first time. After that, `paintCityView` never reopens
-  // it on its own — see the function's own comment for why that is the deliberate scope, not a gap.
-  let cityViewOpenedOnce = false;
-  // The city the docked view currently shows, or null while it is closed — the world map's own "open
-  // city" mark (traversal.md §2.2) reads this, not `cityView.isOpen()` directly, so it stays correct
-  // even before `attachCityView` has run.
-  let openCityId: string | null = null;
+  // Owns the open/update/close decision — see `cityViewSync.ts` for why that logic lives there rather
+  // than here: a nation switch or death needs to compare target *identity* against what is currently
+  // shown, not merely whether a redraw key changed or an open has ever happened.
+  let citySync: CityViewSyncController | null = null;
   const paintMap = (): void => {
-    if (world !== null) map?.render(mapSnapshot(world, hud.state().playerNationId, openCityId));
+    if (world !== null) {
+      // `citySync?.shownCityId() ?? null` rather than a separately tracked variable: the world map's
+      // own "open city" mark (traversal.md §2.2) must agree with what the panel actually shows, and
+      // reading it from `citySync` — the single owner of that fact — is what keeps it from drifting.
+      map?.render(mapSnapshot(world, hud.state().playerNationId, citySync?.shownCityId() ?? null));
+    }
   };
-  /**
-   * Opens the city view once a target exists (plan: "default target is the player's capital"), then
-   * only ever updates it — never reopens it after the player has closed it via the panel's own close
-   * button. That close button would otherwise be pointless: without this guard, the very next server
-   * broadcast (`clock` fires roughly once a second) would reopen the panel it just closed. Reopening a
-   * closed panel, or opening a *different* city than the one currently shown, is out of scope here —
-   * N1 has exactly one target — see the report's owner-judgement list.
-   */
+  /** Resolves the player's target (plan: "default target is the player's capital") and hands it to
+   *  `citySync`, which decides open/update/close from there — see `cityViewSync.ts`. */
   const paintCityView = (): void => {
-    if (cityView === null || world === null) return;
+    if (citySync === null || world === null) return;
     const target = resolvePlayerCityViewTarget(
       world.history,
       world.nations,
       hud.state().playerNationId,
       world.tick,
     );
-    if (target === null) {
-      openCityId = null;
-      return;
-    }
-    if (!cityViewOpenedOnce) {
-      cityView.open(target);
-      cityViewOpenedOnce = true;
-    } else if (cityView.isOpen()) {
-      cityView.update(target);
-    } else {
-      openCityId = null; // closed by the player; stays closed until reopening exists
-      return;
-    }
-    openCityId = target.scene.city.id;
+    citySync.sync(target);
   };
   send = connect(getWebSocketUrl(window.location), {
     onWelcome: (state) => {
@@ -207,18 +186,21 @@ function mountNationHud(roots: NationHudRoots): NationHudHandle {
 
   return {
     attachCityView(cityApp, host): void {
-      cityView = createCityViewPanel(host, cityApp, {
+      const panel = createCityViewPanel(host, cityApp, {
         // visual.md §2.6's automatic locate, on entering the world view from the local view — see
         // `CityViewPanelOptions.onClose`'s own comment for why closing the panel is that transition
         // in this docked layout. Repainting the map here, not waiting for the next server broadcast,
         // is what makes "the open city is marked as open" (traversal.md §2.2) true the instant it
-        // actually stops being true, rather than up to a second later.
+        // actually stops being true, rather than up to a second later. `notifyClosed()` runs first so
+        // `citySync` has already recorded the closed city — including the *player*-vs-vanished-target
+        // distinction — before `paintMap` reads `shownCityId()` back out.
         onClose: () => {
-          openCityId = null;
+          citySync?.notifyClosed();
           map?.locate();
           paintMap();
         },
       });
+      citySync = createCityViewSync(panel);
       paintCityView();
       paintMap();
     },

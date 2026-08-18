@@ -41,6 +41,9 @@ export interface CityViewPanelController {
   update(input: CityViewPanelInput): void;
   /** Tears the mounted scene down and hides the host. A no-op while already closed. */
   close(): void;
+  /** Matches the `isOpen()` every other panel controller in this codebase exposes (directivePanel,
+   *  worldChronicle, seasonReportPanel). `cityViewSync.ts` tracks target identity itself rather than
+   *  calling this, so today it is exercised by tests only — kept for the shape, not dead by oversight. */
   isOpen(): boolean;
 }
 
