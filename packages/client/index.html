@@ -1576,7 +1576,20 @@
            flex row entirely rather than merely painted over, so its freed width returns to the row rather
            than sitting underneath a transparent panel. `.world-map` itself does not grow to claim that
            width (it has no flex-grow); `.nation-hud`'s `justify-content: space-between` absorbs it as
-           extra gap between the remaining panels instead. -->
+           extra gap between the remaining panels instead.
+
+           traversal.md:237 states plainly that "closing the city view widens the world map" — this does
+           not do that, on purpose, and the gap is deliberate rather than an oversight. The world map's
+           576×384 canvas is deliberately fixed at `WORLD_MAP_CELL_SIZE_PX = 6` for pixel-exact 1px
+           borders (see `.world-map__canvas`'s own comment); stretching it via CSS to fill the freed space
+           would smear exactly those borders on any non-integer scale, and even a clean-integer 2× stretch
+           would not match visual.md §2.7's answer for a genuinely larger map — its "playable world map"
+           table specifies `WORLD_MAP_PLAY_CELL_SIZE_PX = 12` with non-linearly-rescaled city radii
+           ([2.5, 3.5, 5, 7], not simply 2× of [2, 2.5, 3, 3.5]), thicker borders, a shown development
+           core, and a 1152×768 canvas — a distinct rendering mode visual.md itself marks "(new)", not
+           present anywhere in this codebase yet. Building it needs new `packages/shared/src/constants.ts`
+           entries and a rendering rewrite, well outside a client-only layout task. Reported rather than
+           guessed at; see the C1-7 handoff report. -->
       <section id="city-view" class="city-view" aria-label="都市の眺め"></section>
       <section
         id="nation-dashboard"
