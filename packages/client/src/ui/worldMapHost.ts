@@ -1,6 +1,7 @@
 import type {
   NationCityState,
   NationState,
+  Season,
   WorldCellChange,
   WorldHistory,
 } from "@agent-town/shared";
@@ -39,6 +40,9 @@ export interface WorldMapSnapshot {
   /** Every living nation's own state — visual.md §2.4's construction-progress arc reads a city's
    *  `activeDirectives` from its own owning nation here. Empty means no city ever shows an arc. */
   nations: readonly NationState[];
+  /** The season this payload is current as of — what the layer-2 wash paints, and what the host
+   *  compares against its own last-seen season to decide whether a crossfade should start. */
+  season: Season;
 }
 
 export interface WorldMapHostController {
@@ -70,6 +74,8 @@ export interface WorldMapHostOptions {
 const CANVAS_LABEL = "現存国家、都市、交易路、現在地を示す世界地図";
 /** visual.md §2.6: the locate pulse's one-shot span. */
 const LOCATE_PULSE_DURATION_MS = 500;
+/** visual.md §2.4: the season boundary's own whole-map crossfade span. */
+const SEASON_CROSSFADE_DURATION_MS = 600;
 
 /**
  * The world map's persistent surface: it owns the canvas, the pointer handler and the view-model
@@ -132,6 +138,20 @@ export function createWorldMapHost(
     return elapsed >= LOCATE_PULSE_DURATION_MS ? null : elapsed / LOCATE_PULSE_DURATION_MS;
   };
 
+  // The season crossfade's own state — deliberately not shared with the locate pulse's above, even
+  // though the shape rhymes: the two animate different things on different schedules, and sharing a
+  // deadline field between them would let a change to one animation's timing silently retime the other.
+  let lastSeason: Season | null = null;
+  let crossfadeFromSeason: Season | null = null;
+  let crossfadeStartedAt: number | null = null;
+  let crossfadeFrameScheduled = false;
+
+  const crossfadePhase = (): number | null => {
+    if (crossfadeStartedAt === null) return null;
+    const elapsed = Date.now() - crossfadeStartedAt;
+    return elapsed >= SEASON_CROSSFADE_DURATION_MS ? null : elapsed / SEASON_CROSSFADE_DURATION_MS;
+  };
+
   /**
    * Folds `next.changedCells` into the accumulator and prunes every entry whose own season boundary the
    * current tick has already reached — run on every `render`, not only one that happens to carry a fresh
@@ -149,6 +169,7 @@ export function createWorldMapHost(
 
   const paint = (): void => {
     if (snapshot === null) return;
+    const crossfade = crossfadePhase();
     const view = buildWorldMapViewModel(snapshot.history, snapshot.cityStates, {
       playerPolityId: snapshot.playerPolityId,
       hoveredPolityId,
@@ -157,6 +178,11 @@ export function createWorldMapHost(
       tick: snapshot.tick,
       territoryChanges,
       nations: snapshot.nations,
+      seasonWash: {
+        season: snapshot.season,
+        previousSeason: crossfade === null ? null : crossfadeFromSeason,
+        crossfadeProgress: crossfade,
+      },
     });
     renderWorldMapCanvas(canvas, view);
   };
@@ -181,6 +207,26 @@ export function createWorldMapHost(
       return;
     }
     scheduleNextPulseFrame();
+  }
+
+  /** The crossfade's own frame loop — see `scheduleNextPulseFrame`'s comment for why this is a
+   *  duplicate of that loop rather than a shared one. */
+  const scheduleNextCrossfadeFrame = (): void => {
+    if (crossfadeFrameScheduled) return;
+    crossfadeFrameScheduled = true;
+    requestAnimationFrame(stepCrossfade);
+  };
+
+  function stepCrossfade(): void {
+    crossfadeFrameScheduled = false;
+    const phase = crossfadePhase();
+    paint();
+    if (phase === null) {
+      crossfadeStartedAt = null;
+      crossfadeFromSeason = null;
+      return;
+    }
+    scheduleNextCrossfadeFrame();
   }
 
   /**
@@ -241,6 +287,15 @@ export function createWorldMapHost(
 
   return {
     render(next: WorldMapSnapshot): void {
+      // `lastSeason !== null` excludes the very first render: there is no "previous" season to fade
+      // from yet, only a resting one to start on — a crossfade there would flash the wash in from
+      // nothing rather than simply showing it.
+      if (lastSeason !== null && lastSeason !== next.season) {
+        crossfadeFromSeason = lastSeason;
+        crossfadeStartedAt = Date.now();
+        scheduleNextCrossfadeFrame();
+      }
+      lastSeason = next.season;
       snapshot = next;
       updateTrackedTerritoryChanges(next);
       resolveHover();

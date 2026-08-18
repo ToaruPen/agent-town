@@ -85,6 +85,7 @@ function mapSnapshot(
     tick: world.tick,
     changedCells,
     nations: world.nations,
+    season: world.season,
   };
 }
 

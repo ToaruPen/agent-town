@@ -12,9 +12,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MAP_CASING_COLOR, MAP_PLAYER_INNER_RULE_COLOR } from "../src/render/colors.js";
 import { assignNationBanners } from "../src/render/nationBanner.js";
+import { seasonGroundTint } from "../src/render/sprites.js";
 import { TERRITORY_CHANGE_FLASH_PEAK_ALPHA } from "../src/ui/worldMapChangeViewModel.js";
 import { createWorldMapHost, type WorldMapSnapshot } from "../src/ui/worldMapHost.js";
-import { hexColor } from "../src/ui/worldMapView.js";
+import { hexColor, SEASON_WASH_ALPHA } from "../src/ui/worldMapView.js";
 import { historyFixture, polityFixture } from "./nationFixture.js";
 
 /** The banner a nation is assigned in `mapHistory()` — same idiom as `worldMapView.test.ts`'s own
@@ -128,6 +129,7 @@ function snapshot(overrides: Partial<WorldMapSnapshot> = {}): WorldMapSnapshot {
     tick: 0,
     changedCells: [],
     nations: [],
+    season: "spring",
     ...overrides,
   };
 }
@@ -635,5 +637,86 @@ describe("the world map's locate pulse", () => {
     clock.advance(250); // the second pulse's own peak
 
     expect(innerRuleAlphas(log).at(-1)).toBe(1);
+  });
+});
+
+/**
+ * visual.md §2.4: the season boundary announces itself with a whole-map crossfade of the layer-2 wash,
+ * 600 ms, wall-clock — deliberately not the locate pulse's own machinery (duplicated, not shared, so a
+ * change to one animation's timing can never silently retime the other), but the same self-scheduling
+ * `requestAnimationFrame` idiom.
+ */
+describe("the world map's season crossfade", () => {
+  function washFills(log: PaintLog, hexStyle: string): { alpha: number }[] {
+    return log.fills.filter(({ style }) => style === hexStyle).map(({ alpha }) => ({ alpha }));
+  }
+
+  it("paints a single settled wash in the season's own tint, with no crossfade on the very first render", () => {
+    const log = stubCanvasPainting();
+    const { host } = mount(log);
+
+    host.render(snapshot({ season: "summer" }));
+
+    const summerFills = washFills(log, hexColor(seasonGroundTint("summer")));
+    expect(summerFills.length).toBeGreaterThan(0);
+    expect(summerFills.every(({ alpha }) => alpha === SEASON_WASH_ALPHA)).toBe(true);
+  });
+
+  it("does not crossfade when a later render reports the same season", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ season: "summer" }));
+    log.fills.length = 0;
+
+    host.render(snapshot({ season: "summer" }));
+
+    const summerFills = washFills(log, hexColor(seasonGroundTint("summer")));
+    expect(summerFills.length).toBeGreaterThan(0);
+    expect(summerFills.every(({ alpha }) => alpha === SEASON_WASH_ALPHA)).toBe(true);
+    expect(clock.scheduledFrameCount).toBe(0);
+  });
+
+  it("splits the 0.10 budget between the old and new season mid-crossfade, and settles on the new one at the deadline", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ season: "summer" }));
+
+    host.render(snapshot({ season: "autumn" })); // the season boundary itself
+    log.fills.length = 0;
+    clock.advance(300); // the crossfade's own midpoint
+
+    const summerMid = washFills(log, hexColor(seasonGroundTint("summer")));
+    const autumnMid = washFills(log, hexColor(seasonGroundTint("autumn")));
+    expect(summerMid.length).toBeGreaterThan(0);
+    expect(autumnMid.length).toBeGreaterThan(0);
+    for (const { alpha } of [...summerMid, ...autumnMid]) {
+      expect(alpha).toBeCloseTo(SEASON_WASH_ALPHA / 2, 5);
+    }
+    log.fills.length = 0;
+
+    clock.advance(300); // past the 600 ms deadline
+
+    const autumnEnd = washFills(log, hexColor(seasonGroundTint("autumn")));
+    const summerEnd = washFills(log, hexColor(seasonGroundTint("summer")));
+    expect(autumnEnd.length).toBeGreaterThan(0);
+    expect(autumnEnd.every(({ alpha }) => alpha === SEASON_WASH_ALPHA)).toBe(true);
+    expect(summerEnd).toEqual([]);
+  });
+
+  it("stops scheduling frames once the crossfade completes, rather than looping forever", () => {
+    const log = stubCanvasPainting();
+    const clock = stubPulseClock();
+    const { host } = mount(log);
+    host.render(snapshot({ season: "summer" }));
+
+    host.render(snapshot({ season: "autumn" }));
+    clock.advance(600); // past the deadline in a single jump
+
+    const fillsAtEnd = log.fills.length;
+    clock.advance(16); // a frame that must never have been scheduled
+
+    expect(log.fills.length).toBe(fillsAtEnd);
   });
 });

@@ -26,7 +26,7 @@ function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-/** Every `WorldMapMarks` field is required, so every literal needs all seven; this fills in "none of
+/** Every `WorldMapMarks` field is required, so every literal needs all eight; this fills in "none of
  *  the above" for whichever ones a test does not care about. */
 function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
   return {
@@ -37,6 +37,7 @@ function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
     tick: 0,
     territoryChanges: new Map(),
     nations: [],
+    seasonWash: { season: "spring", previousSeason: null, crossfadeProgress: null },
     ...overrides,
   };
 }
@@ -712,6 +713,34 @@ describe("world map construction progress", () => {
     expect(view.cities.every(({ constructionProgress }) => constructionProgress === null)).toBe(
       true,
     );
+  });
+});
+
+/**
+ * visual.md §2.4: the season wash's own colour is a pure pass-through here — `buildWorldMapViewModel`
+ * makes no drawing or blending decision about it, it only carries the host's own `seasonWash` down to the
+ * paint layer, the same idiom `pulsePhase` already uses. The paint layer's own blending is asserted at
+ * the host level (`worldMapHost.test.ts`), where a real canvas stub can observe what actually got filled.
+ */
+describe("world map season wash", () => {
+  it("carries the season wash unchanged onto the view model", () => {
+    const seasonWash = {
+      season: "autumn" as const,
+      previousSeason: "summer" as const,
+      crossfadeProgress: 0.4,
+    };
+
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ seasonWash }));
+
+    expect(view.seasonWash).toEqual(seasonWash);
+  });
+
+  it("carries a non-crossfading season wash unchanged too", () => {
+    const seasonWash = { season: "winter" as const, previousSeason: null, crossfadeProgress: null };
+
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ seasonWash }));
+
+    expect(view.seasonWash).toEqual(seasonWash);
   });
 });
 

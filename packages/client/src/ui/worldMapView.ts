@@ -2,6 +2,7 @@ import {
   type NationCityState,
   type NationState,
   type Position,
+  type Season,
   WORLD_MAP_CELL_SIZE_PX,
   WORLD_MAP_PLAYER_POLITY_ALPHA,
   WORLD_MAP_POLITY_ALPHA,
@@ -18,6 +19,7 @@ import {
   MAP_PLAYER_INNER_RULE_COLOR,
 } from "../render/colors.js";
 import { assignNationBanners } from "../render/nationBanner.js";
+import { seasonGroundTint } from "../render/sprites.js";
 import { type CityGlyph, chronicleCityGlyph } from "./worldCityViewModel.js";
 import {
   TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
@@ -101,6 +103,19 @@ export interface TrackedTerritoryChange {
 }
 
 /**
+ * Layer 2's own wash (visual.md §2.4): `season` is always the resting colour to fill toward, and
+ * `previousSeason`/`crossfadeProgress` are either both null (settled, single fill) or both present (a
+ * live 600 ms wall-clock crossfade, `previousSeason` fading out as `season` fades in). The host is the
+ * only owner of the clock that produces `crossfadeProgress` — this module only ever turns it into a
+ * frame, the same idiom `pulsePhase` already uses for the locate pulse.
+ */
+export interface WorldMapSeasonWash {
+  season: Season;
+  previousSeason: Season | null;
+  crossfadeProgress: number | null;
+}
+
+/**
  * Who the map is drawn *for*, as opposed to what is momentarily under the pointer. The player's nation
  * is a resting state that lasts a session; a hover is transient and universal — it applies to any
  * nation, including rivals (visual.md §2.2.1's equality principle). Keeping the two fields apart is what
@@ -151,6 +166,9 @@ export interface WorldMapMarks {
    * Empty means no city ever shows a progress arc, which is what the chronicle's static host mount wants.
    */
   nations: readonly NationState[];
+  /** The layer-2 season wash (visual.md §2.4) — the host's own wall-clock crossfade, already resolved
+   *  to a number by the time it reaches this module, the same idiom `pulsePhase` uses. */
+  seasonWash: WorldMapSeasonWash;
 }
 
 const NO_MARKS: WorldMapMarks = {
@@ -161,6 +179,7 @@ const NO_MARKS: WorldMapMarks = {
   tick: 0,
   territoryChanges: new Map(),
   nations: [],
+  seasonWash: { season: "spring", previousSeason: null, crossfadeProgress: null },
 };
 
 export interface WorldMapViewModel {
@@ -178,6 +197,8 @@ export interface WorldMapViewModel {
   pulsePhase: number | null;
   /** See `WorldMapMarks.tick` — carried through unchanged for the recent-change hatch's moving phase. */
   tick: number;
+  /** See `WorldMapMarks.seasonWash` — carried through unchanged for `drawSeasonWash`. */
+  seasonWash: WorldMapSeasonWash;
 }
 
 export function hexColor(color: number): string {
@@ -391,6 +412,7 @@ export function buildWorldMapViewModel(
     tick,
     territoryChanges,
     nations,
+    seasonWash,
   } = marks;
   return {
     width: history.worldMap.width,
@@ -413,6 +435,7 @@ export function buildWorldMapViewModel(
     },
     pulsePhase,
     tick,
+    seasonWash,
   };
 }
 
@@ -492,6 +515,38 @@ function drawTerrain(context: CanvasRenderingContext2D, view: WorldMapViewModel)
     context.fillStyle = cell.terrainColor;
     context.fillRect(origin.x, origin.y, WORLD_MAP_CELL_SIZE_PX, WORLD_MAP_CELL_SIZE_PX);
   }
+}
+
+/** visual.md §2.4: "The wash is not free, and 0.10 is the budget." The first thing to reduce if terrain
+ *  reading proves too weak — see 0.06's own note in the design doc — not the territory fill, which is
+ *  carrying more information. */
+export const SEASON_WASH_ALPHA = 0.1;
+
+/**
+ * Layer 2 (visual.md §2.2/§2.4): one flat wash across the whole map in the current season's own tint,
+ * reusing `SEASON_GROUND_TINTS` rather than a second palette. A live crossfade splits the same 0.10
+ * budget between the previous season fading out and the new one fading in, so the wash never reads
+ * brighter mid-crossfade than it does at rest on either side of it.
+ */
+function drawSeasonWash(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
+  const { season, previousSeason, crossfadeProgress } = view.seasonWash;
+  const previousAlpha = context.globalAlpha;
+  const width = view.width * WORLD_MAP_CELL_SIZE_PX;
+  const height = view.height * WORLD_MAP_CELL_SIZE_PX;
+  if (previousSeason !== null && crossfadeProgress !== null) {
+    context.globalAlpha = SEASON_WASH_ALPHA * (1 - crossfadeProgress);
+    context.fillStyle = hexColor(seasonGroundTint(previousSeason));
+    context.fillRect(0, 0, width, height);
+    context.globalAlpha = SEASON_WASH_ALPHA * crossfadeProgress;
+    context.fillStyle = hexColor(seasonGroundTint(season));
+    context.fillRect(0, 0, width, height);
+    context.globalAlpha = previousAlpha;
+    return;
+  }
+  context.globalAlpha = SEASON_WASH_ALPHA;
+  context.fillStyle = hexColor(seasonGroundTint(season));
+  context.fillRect(0, 0, width, height);
+  context.globalAlpha = previousAlpha;
 }
 
 function drawPolityOverlays(
@@ -819,6 +874,7 @@ export function renderWorldMapCanvas(canvas: HTMLCanvasElement, view: WorldMapVi
   if (context === null) return;
   context.imageSmoothingEnabled = false;
   drawTerrain(context, view);
+  drawSeasonWash(context, view);
   drawPolityOverlays(context, view.cells);
   drawRecentChangeHatch(context, view.cells, view.tick);
   drawTerritoryBorders(context, view.territoryEdges, view.pulsePhase);
