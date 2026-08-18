@@ -358,6 +358,90 @@ function layStreets(bounds: QuarterBounds | null): Street[] {
   return streets;
 }
 
+interface Bearing {
+  dx: -1 | 0 | 1;
+  dy: -1 | 0 | 1;
+}
+
+/** Clockwise from east, matching `Math.atan2`'s sign convention in a y-down grid. */
+const BEARINGS: readonly Bearing[] = [
+  { dx: 1, dy: 0 },
+  { dx: 1, dy: 1 },
+  { dx: 0, dy: 1 },
+  { dx: -1, dy: 1 },
+  { dx: -1, dy: 0 },
+  { dx: -1, dy: -1 },
+  { dx: 0, dy: -1 },
+  { dx: 1, dy: -1 },
+];
+
+/** Snaps the direction from one world-map position to another onto one of 8 compass directions. */
+function bearingTo(from: Position, to: Position): Bearing | null {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return null;
+  const octant = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
+  return BEARINGS[octant] ?? null;
+}
+
+/** How far the built quarter reaches from its centre in the worst-case direction, so a road can start
+ *  clear of every chosen plot regardless of which way it leaves. */
+function footprintExtent(bounds: QuarterBounds | null): number {
+  if (bounds === null) return PLAZA_RADIUS;
+  return Math.max(
+    QUARTER_CENTRE.x - bounds.minX,
+    bounds.maxX - QUARTER_CENTRE.x,
+    QUARTER_CENTRE.y - bounds.minY,
+    bounds.maxY - QUARTER_CENTRE.y,
+  );
+}
+
+/** A straight line from just outside the built quarter to the edge of the drawn grid, in one
+ *  direction. This is "a road leaving the city" (plan §C1-8), not the whole route to its partner —
+ *  the partner may be far outside the 64x48 quarter the local view depicts at all. */
+function roadPositions(bearing: Bearing, startDistance: number): Position[] {
+  const step: Position = { x: bearing.dx, y: bearing.dy };
+  const positions: Position[] = [];
+  let pos = shift(QUARTER_CENTRE, {
+    x: step.x * (startDistance + 1),
+    y: step.y * (startDistance + 1),
+  });
+  while (isInsideQuarter(pos)) {
+    // Matches `layStreets`: the avenues cross the square, but the anchors stay bare ground.
+    if (!isDirectiveAnchor(pos)) positions.push(pos);
+    pos = shift(pos, step);
+  }
+  return positions;
+}
+
+/**
+ * One bearing per trade route touching this city, toward whichever end is not this city.
+ * `WorldTradeRoute` carries only `cityIds`, so the partner's position is resolved through
+ * `worldMap.cities`; a route whose partner is not in that list contributes no road rather than a guess.
+ */
+function tradeRouteBearings(input: CitySceneInput): Bearing[] {
+  const bearings: Bearing[] = [];
+  for (const route of input.worldMap.tradeRoutes) {
+    if (!route.cityIds.includes(input.city.id)) continue;
+    const partnerId = route.cityIds.find((id) => id !== input.city.id);
+    const partner = input.worldMap.cities.find((city) => city.id === partnerId);
+    if (partner === undefined) continue;
+    const bearing = bearingTo(input.city.pos, partner.pos);
+    if (bearing !== null) bearings.push(bearing);
+  }
+  return bearings;
+}
+
+function tradeRoads(input: CitySceneInput, bounds: QuarterBounds | null): Street[] {
+  const startDistance = footprintExtent(bounds);
+  return tradeRouteBearings(input).flatMap((bearing) =>
+    roadPositions(bearing, startDistance).map((pos) => ({
+      pos,
+      level: "establishedTrail" as const,
+    })),
+  );
+}
+
 /** A plot, a street or the square is ground the city itself cleared, whatever lay there before. */
 function clearFootprint(tiles: Tile[], positions: readonly Position[]): void {
   for (const pos of positions) {
@@ -516,12 +600,15 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
   const rng = createSceneRng(citySceneSeed(input.city.id, input.city.pos));
   const tiles = createTiles(sampleTerrainMix(input.worldMap, input.city.pos), rng);
   const plots = choosePlots(drawnHouseCount(input.cityState), rng);
-  const streets = layStreets(houseBounds(plots));
+  const bounds = houseBounds(plots);
+  const streets = layStreets(bounds);
+  const roads = tradeRoads(input, bounds);
   clearFootprint(tiles, [
     ...plazaPositions(),
     ...ANCHOR_POSITIONS,
     ...plots,
     ...streets.map(({ pos }) => pos),
+    ...roads.map(({ pos }) => pos),
   ]);
 
   const activeForCity = activeDirectivesForCity(input.nation, input.city.id);
@@ -545,8 +632,10 @@ export function synthesizeCityScene(input: CitySceneInput): WorldState {
     history: sceneHistory(input),
   };
 
-  // Wear draws only on open ground with nothing built on it, so a street laid elsewhere vanishes.
-  for (const { pos, level } of streets) {
+  // Wear draws only on open ground with nothing built on it, so a street or road laid elsewhere
+  // vanishes. Roads are written after streets, so where a diagonal road happens to cross the street
+  // grid it stays the road's own `establishedTrail` write — both are that level already in practice.
+  for (const { pos, level } of [...streets, ...roads]) {
     if (!isVisibleGround(scene, pos)) continue;
     scene.trailCells[pos.y * MAP_WIDTH + pos.x] = trailCell(level);
   }

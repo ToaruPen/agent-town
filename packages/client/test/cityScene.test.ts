@@ -19,6 +19,7 @@ import {
   type WorldCity,
   type WorldMap,
   type WorldMapTerrain,
+  type WorldTradeRoute,
 } from "@agent-town/shared";
 import { Container, Sprite } from "pixi.js";
 import { describe, expect, it } from "vitest";
@@ -42,6 +43,8 @@ interface SceneOptions {
   developmentLevel: number;
   tick: number;
   activeDirectives: ActiveDirective[];
+  otherCities: WorldCity[];
+  tradeRoutes: WorldTradeRoute[];
 }
 
 const DEFAULT_OPTIONS: SceneOptions = {
@@ -52,9 +55,15 @@ const DEFAULT_OPTIONS: SceneOptions = {
   developmentLevel: 3,
   tick: 0,
   activeDirectives: [],
+  otherCities: [],
+  tradeRoutes: [],
 };
 
-function makeWorldMap(terrain: WorldMapTerrain): WorldMap {
+function makeWorldMap(
+  terrain: WorldMapTerrain,
+  cities: WorldCity[] = [],
+  tradeRoutes: WorldTradeRoute[] = [],
+): WorldMap {
   return {
     width: WORLD_MAP_WIDTH,
     height: WORLD_MAP_HEIGHT,
@@ -62,8 +71,8 @@ function makeWorldMap(terrain: WorldMapTerrain): WorldMap {
       terrain,
       polityId: "polity-1",
     })),
-    cities: [],
-    tradeRoutes: [],
+    cities,
+    tradeRoutes,
     borderChanges: [],
     settlementFrontierPos: { x: 1, y: 1 },
   };
@@ -151,12 +160,13 @@ function makeInput(overrides: Partial<SceneOptions> = {}): CitySceneInput {
     population: options.population,
     developmentLevel: options.developmentLevel,
   };
+  const city = makeCity(options.cityId, options.pos);
   return {
-    city: makeCity(options.cityId, options.pos),
+    city,
     cityState,
     nation: makeNation(cityState, options.activeDirectives),
     polity: makePolity(),
-    worldMap: makeWorldMap(options.terrain),
+    worldMap: makeWorldMap(options.terrain, [city, ...options.otherCities], options.tradeRoutes),
     tick: options.tick,
   };
 }
@@ -505,5 +515,65 @@ describe("directive buildings", () => {
     const first = synthesizeCityScene(makeInput({ activeDirectives: directives }));
     const second = synthesizeCityScene(makeInput({ activeDirectives: directives }));
     expect(first).toEqual(second);
+  });
+});
+
+/**
+ * "Trade routes touching the city become a road leaving on the correct bearing" (plan §C1-8).
+ * `WorldTradeRoute` carries only `cityIds` (`worldMap.ts`), so the partner's position has to be
+ * resolved through `worldMap.cities` — which is `[]` in every other test's fixture, so an unresolvable
+ * partner has to mean no road rather than a crash or a guess.
+ */
+describe("trade route roads", () => {
+  const edgeEast: Position = { x: MAP_WIDTH - 1, y: Math.floor(MAP_HEIGHT / 2) };
+  const eastPartner = makeCity("city-polity-1-2", {
+    x: DEFAULT_OPTIONS.pos.x + 10,
+    y: DEFAULT_OPTIONS.pos.y,
+  });
+  const eastRoute = {
+    id: "route-1",
+    cityIds: [DEFAULT_OPTIONS.cityId, "city-polity-1-2"] as [string, string],
+    establishedByEventId: "event-route",
+  };
+
+  it("draws no road when no trade route touches the city", () => {
+    const scene = synthesizeCityScene(makeInput());
+    expect(scene.trailCells[edgeEast.y * MAP_WIDTH + edgeEast.x]?.level).toBe("none");
+  });
+
+  it("draws an established road toward the trade partner's bearing, reaching the map edge", () => {
+    const scene = synthesizeCityScene(
+      makeInput({ otherCities: [eastPartner], tradeRoutes: [eastRoute] }),
+    );
+    const cell = scene.trailCells[edgeEast.y * MAP_WIDTH + edgeEast.x];
+    expect(cell?.level).toBe("establishedTrail");
+    expect(isVisibleGround(scene, edgeEast)).toBe(true);
+  });
+
+  it("draws no road when the trade route's partner city is unresolvable", () => {
+    const scene = synthesizeCityScene(makeInput({ tradeRoutes: [eastRoute] }));
+    expect(scene.trailCells[edgeEast.y * MAP_WIDTH + edgeEast.x]?.level).toBe("none");
+  });
+
+  it("keeps every drawn road tile where the trail layer can still draw wear", () => {
+    for (const terrain of ["plains", "forest", "hills", "mountains", "sea"] as const) {
+      const scene = synthesizeCityScene(
+        makeInput({ terrain, otherCities: [eastPartner], tradeRoutes: [eastRoute] }),
+      );
+      const worn = scene.trailCells
+        .map((cell, index) => ({ cell, index }))
+        .filter(({ cell }) => cell.level !== "none");
+
+      expect(worn.length).toBeGreaterThan(0);
+      for (const { index } of worn) {
+        const pos = { x: index % scene.width, y: Math.floor(index / scene.width) };
+        expect(isVisibleGround(scene, pos)).toBe(true);
+      }
+    }
+  });
+
+  it("is deterministic for the same trade routes", () => {
+    const input = () => makeInput({ otherCities: [eastPartner], tradeRoutes: [eastRoute] });
+    expect(synthesizeCityScene(input())).toEqual(synthesizeCityScene(input()));
   });
 });
