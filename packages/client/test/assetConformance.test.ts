@@ -184,6 +184,39 @@ const CONFORMING_TILE = imageFromRows([
 
 const FIXTURE_PALETTE: readonly number[] = [OUTLINE_COLOR, LEAF, SHADE, STONE];
 
+/** Strips string/template literal contents, line comments and block comments, replacing each with an
+ *  equal-shape stand-in so an English loanword in a Japanese comment or in on-screen UI text is never
+ *  mistaken for a reference. Strings run first so a comment marker inside one is not read as real. Known
+ *  gap: code inside a template literal's interpolation is stripped along with the literal and would be
+ *  missed — nothing in this codebase does that today (grepped). */
+function stripCommentsAndStrings(text: string): string {
+  return text
+    .replace(/`(?:\\.|[^`\\])*`/g, "``")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+const NODE_GLOBAL_NAMES = ["process", "Buffer", "__dirname"] as const;
+const NODE_GLOBAL_PATTERN = new RegExp(`(?<!\\.)\\b(${NODE_GLOBAL_NAMES.join("|")})\\b`, "g");
+
+/**
+ * Finds bare references to Node's ambient globals — the gap `types: ["node"]` (client `tsconfig.json`,
+ * since `22950e1`) leaves open: C1-10's own rule below blocks a literal `from "node:"` import, but the
+ * ambient types admit `process`, `Buffer` and `__dirname` with no import at all.
+ *
+ * A match is required to sit on a word boundary (so `processedData` or a `frameBuffer` variable — the
+ * name merely appearing as a substring of a longer identifier — is not a match) and not be immediately
+ * preceded by `.` (so `window.process` — narrowing a property that happens to share the name, not using
+ * the Node global — is not a match either).
+ */
+function findBareNodeGlobalReferences(text: string): string[] {
+  return [...stripCommentsAndStrings(text).matchAll(NODE_GLOBAL_PATTERN)].map(
+    (match) => match[1] ?? "",
+  );
+}
+
 describe("rule 1 — dimensions are an exact multiple of 16", () => {
   it("accepts a single tile", () => {
     expect(checkTileGrid(CONFORMING_TILE)).toEqual([]);
@@ -426,6 +459,39 @@ describe("the new-art gate", () => {
   });
 });
 
+describe("the Node-globals guard's matching rule", () => {
+  it("catches a bare reference to each guarded global", () => {
+    expect(findBareNodeGlobalReferences("const env = process.env.NODE_ENV;")).toEqual(["process"]);
+    expect(findBareNodeGlobalReferences("const buf = Buffer.from('x');")).toEqual(["Buffer"]);
+    expect(findBareNodeGlobalReferences("const here = __dirname;")).toEqual(["__dirname"]);
+  });
+
+  it("ignores a property access that merely shares the name", () => {
+    // `window.process` narrows a property that happens to be named `process`; it is not a reference to
+    // the Node global, so flagging it would punish exactly the kind of feature-detection a browser file
+    // is allowed to do.
+    expect(findBareNodeGlobalReferences("if (window.process) return;")).toEqual([]);
+  });
+
+  it("ignores the name inside a comment", () => {
+    expect(findBareNodeGlobalReferences("// this describes a background process")).toEqual([]);
+    expect(findBareNodeGlobalReferences("/* Buffer here means the UI's own queue */")).toEqual([]);
+  });
+
+  it("ignores the name inside a string or template literal", () => {
+    expect(findBareNodeGlobalReferences('const label = "process";')).toEqual([]);
+    // This is source text being fed to the matcher, not a forgotten template string — it proves a
+    // template literal containing `${...}` is stripped as one unit rather than tripping partway through.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: see comment above
+    expect(findBareNodeGlobalReferences("const label = `Buffer: ${1}`;")).toEqual([]);
+  });
+
+  it("ignores an identifier that merely contains the name as a substring", () => {
+    expect(findBareNodeGlobalReferences("const frameBuffer = new Uint8Array(4);")).toEqual([]);
+    expect(findBareNodeGlobalReferences("const processedData: number[] = [];")).toEqual([]);
+  });
+});
+
 describe("the conformance gate stays out of the browser bundle", () => {
   const sources = listFiles(CLIENT_SRC_ROOT, ".ts");
 
@@ -439,5 +505,15 @@ describe("the conformance gate stays out of the browser bundle", () => {
       return text.includes('from "node:') || text.includes('from "../test/');
     });
     expect(offenders.map((file) => relative(CLIENT_SRC_ROOT, file))).toEqual([]);
+  });
+
+  /** `from "node:"` above catches an import; it cannot see an ambient global used with no import at
+   *  all. See `findBareNodeGlobalReferences` for what counts as a reference and why. */
+  it("never references a bare Node global (process, Buffer, __dirname) from src", () => {
+    const offenders = sources.flatMap((file) => {
+      const found = findBareNodeGlobalReferences(readSource(file));
+      return found.length === 0 ? [] : [`${relative(CLIENT_SRC_ROOT, file)}: ${found.join(", ")}`];
+    });
+    expect(offenders).toEqual([]);
   });
 });
