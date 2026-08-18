@@ -20,12 +20,13 @@ import {
   type WorldMapMarks,
   worldMapPositionFromPointer,
 } from "../src/ui/worldMapView.js";
+import { nationFixture } from "./nationFixture.js";
 
 function hexColor(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-/** Every `WorldMapMarks` field is required, so every literal needs all six; this fills in "none of
+/** Every `WorldMapMarks` field is required, so every literal needs all seven; this fills in "none of
  *  the above" for whichever ones a test does not care about. */
 function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
   return {
@@ -35,6 +36,7 @@ function marks(overrides: Partial<WorldMapMarks> = {}): WorldMapMarks {
     openCityId: null,
     tick: 0,
     territoryChanges: new Map(),
+    nations: [],
     ...overrides,
   };
 }
@@ -645,6 +647,71 @@ describe("world map territory change", () => {
     const view = buildWorldMapViewModel(historyFixture(), [], marks({ tick: 4_242 }));
 
     expect(view.tick).toBe(4_242);
+  });
+});
+
+/**
+ * visual.md §2.4: construction is attached to a city glyph via `ActiveDirective.targetCityId`, read from
+ * each city's *own* owning nation — never a flattened pool of every nation's directives, which would let
+ * one nation's construction leak onto a rival's glyph.
+ */
+describe("world map construction progress", () => {
+  it("computes a city's progress from its own nation's active directive, and leaves an untouched city null", () => {
+    const history = historyFixture();
+    const nations = [
+      nationFixture({
+        id: "polity-1",
+        activeDirectives: [
+          {
+            id: "directive-1",
+            kind: "growCity",
+            targetCityId: "city-polity-1-1",
+            issuedAtTick: 0,
+            seasonsRemaining: 1,
+            totalSeasons: 4,
+          },
+        ],
+      }),
+    ];
+
+    const view = buildWorldMapViewModel(history, [], marks({ nations }));
+
+    expect(view.cities.find(({ id }) => id === "city-polity-1-1")?.constructionProgress).toBe(0.75);
+    expect(view.cities.find(({ id }) => id === "city-polity-2-1")?.constructionProgress).toBeNull();
+  });
+
+  it("never attaches one nation's directive to another nation's city", () => {
+    const history = historyFixture();
+    // A directive naming `city-polity-1-1` but filed under `polity-2` — a malformed state the server
+    // should never produce, but the lookup is keyed by the city's *own* owning nation regardless, so
+    // this can never surface even if it did.
+    const nations = [
+      nationFixture({
+        id: "polity-2",
+        activeDirectives: [
+          {
+            id: "directive-1",
+            kind: "growCity",
+            targetCityId: "city-polity-1-1",
+            issuedAtTick: 0,
+            seasonsRemaining: 1,
+            totalSeasons: 4,
+          },
+        ],
+      }),
+    ];
+
+    const view = buildWorldMapViewModel(history, [], marks({ nations }));
+
+    expect(view.cities.find(({ id }) => id === "city-polity-1-1")?.constructionProgress).toBeNull();
+  });
+
+  it("shows no construction progress when no nation state is given at all", () => {
+    const view = buildWorldMapViewModel(historyFixture());
+
+    expect(view.cities.every(({ constructionProgress }) => constructionProgress === null)).toBe(
+      true,
+    );
   });
 });
 

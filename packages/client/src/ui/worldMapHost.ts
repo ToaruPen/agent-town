@@ -1,4 +1,9 @@
-import type { NationCityState, WorldCellChange, WorldHistory } from "@agent-town/shared";
+import type {
+  NationCityState,
+  NationState,
+  WorldCellChange,
+  WorldHistory,
+} from "@agent-town/shared";
 
 import { nextSeasonBoundary } from "./worldMapChangeViewModel.js";
 import {
@@ -31,6 +36,9 @@ export interface WorldMapSnapshot {
    * silently lose a flash.
    */
   changedCells: readonly WorldCellChange[];
+  /** Every living nation's own state — visual.md §2.4's construction-progress arc reads a city's
+   *  `activeDirectives` from its own owning nation here. Empty means no city ever shows an arc. */
+  nations: readonly NationState[];
 }
 
 export interface WorldMapHostController {
@@ -148,6 +156,7 @@ export function createWorldMapHost(
       openCityId: snapshot.openCityId,
       tick: snapshot.tick,
       territoryChanges,
+      nations: snapshot.nations,
     });
     renderWorldMapCanvas(canvas, view);
   };

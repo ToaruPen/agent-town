@@ -1,5 +1,6 @@
 import {
   type NationCityState,
+  type NationState,
   type Position,
   WORLD_MAP_CELL_SIZE_PX,
   WORLD_MAP_PLAYER_POLITY_ALPHA,
@@ -22,6 +23,7 @@ import {
   TERRITORY_CHANGE_FLASH_PEAK_ALPHA,
   territoryChangePhase,
 } from "./worldMapChangeViewModel.js";
+import { cityConstructionProgress } from "./worldMapConstructionViewModel.js";
 import { extractTerritoryEdges, type TerritoryEdge } from "./worldTerritoryViewModel.js";
 
 const TERRAIN_VIEW = {
@@ -67,6 +69,9 @@ export interface WorldMapCityViewModel {
   isOpen: boolean;
   /** Population tier, capital shape and the development ratio, decided in `worldCityViewModel`. */
   glyph: CityGlyph;
+  /** visual.md §2.4: the progress arc's own fraction, 0..1, or null when no active directive targets
+   *  this city. Deliberately not animated — it only ever advances once per season resolution. */
+  constructionProgress: number | null;
 }
 
 /** An outline edge with the colour to paint it in, so the paint pass makes no colour decisions. */
@@ -139,6 +144,13 @@ export interface WorldMapMarks {
    * a coalesced update would silently lose a flash.
    */
   territoryChanges: ReadonlyMap<number, TrackedTerritoryChange>;
+  /**
+   * Every living nation's own state (visual.md §2.4's construction-progress arc reads `activeDirectives`
+   * from here, per city). Not narrowed further: a city's owning nation is only known once its cities are
+   * being built, so `buildCities` does that lookup itself rather than a caller pre-joining the two.
+   * Empty means no city ever shows a progress arc, which is what the chronicle's static host mount wants.
+   */
+  nations: readonly NationState[];
 }
 
 const NO_MARKS: WorldMapMarks = {
@@ -148,6 +160,7 @@ const NO_MARKS: WorldMapMarks = {
   openCityId: null,
   tick: 0,
   territoryChanges: new Map(),
+  nations: [],
 };
 
 export interface WorldMapViewModel {
@@ -289,6 +302,15 @@ function bannerColors(history: WorldHistory): Map<string, string> {
   );
 }
 
+/** Every nation's `activeDirectives`, keyed by its own id — `buildCities` looks a city's own owning
+ *  nation up here rather than a caller pre-joining the two, so one nation's directives can never leak
+ *  onto a rival's city glyph by accident. */
+function directivesByPolityId(
+  nations: readonly NationState[],
+): Map<string, NationState["activeDirectives"]> {
+  return new Map(nations.map((nation) => [nation.id, nation.activeDirectives] as const));
+}
+
 function buildCities(
   history: WorldHistory,
   hoveredPolityId: string | null,
@@ -296,7 +318,9 @@ function buildCities(
   cityStates: ReadonlyMap<string, NationCityState>,
   playerPolityId: string | null,
   openCityId: string | null,
+  nations: readonly NationState[],
 ): WorldMapCityViewModel[] {
+  const directives = directivesByPolityId(nations);
   return history.worldMap.cities.map(({ id, name, pos, polityId, isCapital }) => ({
     id,
     name,
@@ -308,6 +332,7 @@ function buildCities(
     isPlayer: polityId === playerPolityId,
     isOpen: id === openCityId,
     glyph: chronicleCityGlyph(cityStates.get(id) ?? null, { isCapital }),
+    constructionProgress: cityConstructionProgress(directives.get(polityId) ?? [], id, isCapital),
   }));
 }
 
@@ -358,7 +383,15 @@ export function buildWorldMapViewModel(
   marks: WorldMapMarks = NO_MARKS,
 ): WorldMapViewModel {
   const banners = bannerColors(history);
-  const { playerPolityId, hoveredPolityId, pulsePhase, openCityId, tick, territoryChanges } = marks;
+  const {
+    playerPolityId,
+    hoveredPolityId,
+    pulsePhase,
+    openCityId,
+    tick,
+    territoryChanges,
+    nations,
+  } = marks;
   return {
     width: history.worldMap.width,
     height: history.worldMap.height,
@@ -370,6 +403,7 @@ export function buildWorldMapViewModel(
       new Map(cityStates.map((state) => [state.cityId, state] as const)),
       playerPolityId,
       openCityId,
+      nations,
     ),
     territoryEdges: buildTerritoryEdges(history, banners, playerPolityId),
     tradeRoutes: buildRoutes(history, hoveredPolityId),
@@ -695,6 +729,40 @@ function drawOpenCityRing(
   context.stroke();
 }
 
+const CONSTRUCTION_ARC_WIDTH_PX = 2;
+/** Canvas angle 0 is 3 o'clock; 12 o'clock is a quarter turn back from there. Canvas's own increasing-
+ *  angle direction is already clockwise, so the sweep needs no sign flip. */
+const CONSTRUCTION_ARC_START_ANGLE = -Math.PI / 2;
+
+/**
+ * visual.md §2.4: a progress arc on the city's own casing ring, 12 o'clock clockwise, deliberately not
+ * animated — it only advances once per season resolution, so it needs no motion to be noticed. Traced at
+ * the glyph's own radius (the same path the casing stroke above already follows) rather than offset like
+ * the open-city ring, matching "on the city's casing ring" rather than "one band clear of it". Always a
+ * circular arc regardless of the glyph's own shape (circle or diamond) — the same "ring overlay drawn
+ * independent of glyph shape" idiom `drawOpenCityRing` already uses.
+ */
+function drawConstructionArc(
+  context: CanvasRenderingContext2D,
+  center: Position,
+  glyph: CityGlyph,
+  progress: number,
+): void {
+  const sweep = Math.min(Math.max(progress, 0), 1) * Math.PI * 2;
+  if (sweep <= 0) return;
+  context.beginPath();
+  context.arc(
+    center.x,
+    center.y,
+    glyph.radiusPx,
+    CONSTRUCTION_ARC_START_ANGLE,
+    CONSTRUCTION_ARC_START_ANGLE + sweep,
+  );
+  context.strokeStyle = hexColor(MAP_ACCENT_COLOR);
+  context.lineWidth = CONSTRUCTION_ARC_WIDTH_PX;
+  context.stroke();
+}
+
 function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel): void {
   for (const city of view.cities) {
     traceCityGlyph(context, cellCenter(city.pos), city.glyph);
@@ -709,6 +777,9 @@ function drawCities(context: CanvasRenderingContext2D, view: WorldMapViewModel):
     }
     if (city.isOpen) {
       drawOpenCityRing(context, cellCenter(city.pos), city.glyph);
+    }
+    if (city.constructionProgress !== null) {
+      drawConstructionArc(context, cellCenter(city.pos), city.glyph, city.constructionProgress);
     }
   }
 }

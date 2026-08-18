@@ -84,6 +84,7 @@ function mapSnapshot(
     openCityId,
     tick: world.tick,
     changedCells,
+    nations: world.nations,
   };
 }
 

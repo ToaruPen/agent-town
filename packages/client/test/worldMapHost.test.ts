@@ -127,6 +127,7 @@ function snapshot(overrides: Partial<WorldMapSnapshot> = {}): WorldMapSnapshot {
     openCityId: null,
     tick: 0,
     changedCells: [],
+    nations: [],
     ...overrides,
   };
 }
