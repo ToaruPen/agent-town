@@ -10,8 +10,10 @@ import { type CitySceneInput, synthesizeCityScene } from "./cityScene.js";
 
 /** The slice of `Application` the panel actually touches — narrow on purpose. `createWorldViewport`
  *  only ever reaches `stage`, so a test can hand this a bare `Container` and never pay for `app.init()`
- *  or a WebGL context, and the panel itself never risks constructing a second `Application`. */
-export type CityViewApp = Pick<Application, "stage" | "canvas">;
+ *  or a WebGL context, and the panel itself never risks constructing a second `Application`. `resize` is
+ *  included because the panel's own host toggles `hidden` — see `open()`'s comment for why nothing else
+ *  re-measures the renderer when that happens. */
+export type CityViewApp = Pick<Application, "stage" | "canvas" | "resize">;
 
 export interface CityViewPanelInput {
   scene: CitySceneInput;
@@ -128,6 +130,9 @@ function mountScene(app: CityViewApp, host: HTMLElement): MountedScene {
   if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => {
       if (host.clientWidth === 0 || host.clientHeight === 0) return;
+      // `resizeTo` (see `open()`'s comment) never fires on its own here — this observer is the render
+      // target's only chance to track the host's real size while the panel stays open.
+      app.resize();
       viewport.resize(host.clientWidth, host.clientHeight);
       viewport.fit(worldWidth, worldHeight);
     });
@@ -206,6 +211,12 @@ export function createCityViewPanel(
     open(input): void {
       teardown();
       host.hidden = false;
+      // Pixi's `resizeTo` (set once, in `main.ts`'s `app.init()`) only re-measures on its own setter or
+      // on a `window.resize` event — never on the host merely toggling `hidden`. A host last measured
+      // while `display: none` (say, the browser was resized while the panel was closed) would otherwise
+      // stay pinned at that stale — possibly 0x0 — size forever. Resizing here, right after unhiding and
+      // before `mountScene` reads `host.clientWidth/Height` for the viewport, keeps both in step.
+      app.resize();
       mounted = mountScene(app, host);
       host.style.setProperty("--banner-color", input.bannerColor);
       paintScene(input, mounted);

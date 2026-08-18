@@ -123,7 +123,7 @@ function makeInput(overrides: Partial<InputOptions> = {}): CityViewPanelInput {
 }
 
 function makeApp(): CityViewApp {
-  return { stage: new Container(), canvas: document.createElement("canvas") };
+  return { stage: new Container(), canvas: document.createElement("canvas"), resize: vi.fn() };
 }
 
 /** Depth-first search by label, so the test does not depend on the exact `addChild` order. */
@@ -221,6 +221,20 @@ describe("createCityViewPanel", () => {
     expect(panel.isOpen()).toBe(true);
     // Switching cities never leaves the local view, so this must not fire the world-view locate pulse.
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("resizes the app after unhiding the host, so a host that was measured while hidden is not stuck at 0x0", () => {
+    // Pixi's `resizeTo` re-measures on its own setter and on `window.resize` — nothing re-triggers it
+    // when an element merely toggles `hidden`. Without an explicit `app.resize()` here, a host that was
+    // last measured while `display: none` (e.g. the browser was resized while the panel was closed)
+    // would stay pinned at 0x0 forever, since `open()` unhiding it does not itself fire either trigger.
+    const app = makeApp();
+    const host = document.createElement("div");
+    const panel = createCityViewPanel(host, app);
+
+    panel.open(makeInput());
+
+    expect(app.resize).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing when closed without ever having been opened", () => {

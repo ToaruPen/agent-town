@@ -1560,9 +1560,12 @@
     <section id="nation-clock" class="nation-clock" aria-label="暦と進行速度"></section>
     <main class="nation-hud">
       <!-- The primary surface (traversal.md §2.2): large, docked beside the dashboard/map/ranking
-           column rather than overlaid on any of it, so nothing here ever covers anything else. Hidden
-           by `cityViewPanel.ts` until it has something to show, and hidden again on close — which is
-           what lets the world map widen into the freed space rather than merely reveal it underneath. -->
+           column rather than overlaid on any of it, so nothing here ever covers anything else. Hidden by
+           `cityViewPanel.ts` until it has something to show, and hidden again on close — removed from the
+           flex row entirely rather than merely painted over, so its freed width returns to the row rather
+           than sitting underneath a transparent panel. `.world-map` itself does not grow to claim that
+           width (it has no flex-grow); `.nation-hud`'s `justify-content: space-between` absorbs it as
+           extra gap between the remaining panels instead. -->
       <section id="city-view" class="city-view" aria-label="都市の眺め"></section>
       <section
         id="nation-dashboard"
