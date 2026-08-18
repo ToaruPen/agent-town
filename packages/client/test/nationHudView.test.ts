@@ -128,12 +128,13 @@ describe("seasonReportView", () => {
    * it must attribute here rather than rendering 発令者不明.
    *
    * Also pins `issuedLabel`, which reads `chancellorSelection`'s stamped `issuedAtTick` for the first
-   * time. Verified against `packages/server/src/sim/nation/engine.ts`: `chancellorSelection` and
-   * `queuedSelection` both stamp `issuedAtTick: tick` with the same boundary `tick`
-   * `resolveSeason`/`report.year`/`report.season` are built from, and `wsServer.ts` derives the wire's
-   * `issuedAtTick` from that identical `nextNationSeasonBoundaryTick`. So a directive selected at a
-   * boundary always dates itself to the season that boundary starts — true for a queued directive today
-   * and now true for a chancellor's preview too, not a value invented for this fix.
+   * time. Verified against `packages/server/src/sim/nation/engine.ts`: `chancellorSelection` stamps
+   * `issuedAtTick: tick` with the same boundary `tick` `resolveSeason`/`report.year`/`report.season` are
+   * built from, and `wsServer.ts` derives the wire's `issuedAtTick` from that identical
+   * `nextNationSeasonBoundaryTick`. So a chancellor's directive always dates itself to the season the
+   * boundary that selected it starts — not a value invented for this fix. (`queuedSelection` is
+   * different: it preserves `queued.issuedAtTick`, the tick the player's order was accepted at, not the
+   * boundary — so this date basis does not generalize to a player-queued directive.)
    */
   it("attributes a chancellor-picked holdFestival to the chancellor, never 発令者不明", () => {
     const withChoice = applyOrders(

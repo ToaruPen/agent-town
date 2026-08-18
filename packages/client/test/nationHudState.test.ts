@@ -166,12 +166,13 @@ describe("nation HUD state", () => {
 /**
  * `orders.chancellorChoice` (its `issuedAtTick` landed at `e55e65d`) is the one place a chancellor's pick
  * ever carries an id before it might commit — a preview, not a commitment. Fill-the-gap (`0876200`)
- * commits it only when no legal player order wins the boundary, so it is logged the same way `queued`
- * is: by id, never overwritten once seen, and never added to `ownDirectiveIds` (it is never the
- * player's own). The client predicts nothing about whether a preview will commit; one that never does
- * simply sits unread in the log, which is what lets a chancellor-picked `holdFestival` — the one
- * one-season directive, which completes before `activeDirectives` ever carries it — attribute correctly
- * once it does commit.
+ * commits it only when no legal player order wins the boundary, so it is logged by id and never added to
+ * `ownDirectiveIds` (it is never the player's own). Unlike `queued`, a preview keeps updating in place —
+ * `chooseDirective` re-runs on every `orders` message and the id (`chancellor-${nationId}-${boundaryTick}`)
+ * names only the boundary, not the kind, so the projection can genuinely change before it commits. The
+ * client predicts nothing about whether it will commit; one that never does simply sits unread in the
+ * log, which is what lets a chancellor-picked `holdFestival` — the one one-season directive, which
+ * completes before `activeDirectives` ever carries it — attribute correctly once it does commit.
  */
 describe("the chancellor's previewed choice", () => {
   it("logs the preview by id, attributed to nobody the player can claim", () => {
@@ -200,7 +201,7 @@ describe("the chancellor's previewed choice", () => {
     expect(state.directiveLog.size).toBe(0);
   });
 
-  it("keeps the first-seen preview for a repeated id, and logs a later boundary's id separately", () => {
+  it("updates a repeated id's preview to the latest projection, and logs a later boundary's id separately", () => {
     const first = applyOrders(
       welcomed(),
       ordersFixture({
@@ -212,8 +213,10 @@ describe("the chancellor's previewed choice", () => {
         },
       }),
     );
-    // Same id, a different kind — the projection changed before the boundary committed anything. The
-    // first sighting is kept rather than corrupted by a later preview of the same boundary.
+    // Same id, a different kind — the chancellor's projection changed before the boundary committed
+    // anything, since `chooseDirective` re-runs on every `orders` message. The log must track the latest
+    // projection rather than freeze on whatever it saw first, or a completed report would attribute a
+    // directive that never actually ran.
     const repeated = applyOrders(
       first,
       ordersFixture({
@@ -227,7 +230,7 @@ describe("the chancellor's previewed choice", () => {
     );
 
     expect(repeated.directiveLog.get("chancellor-polity-1-300")).toEqual({
-      kind: "holdFestival",
+      kind: "growCity",
       issuedAtTick: 300,
     });
 
@@ -247,8 +250,108 @@ describe("the chancellor's previewed choice", () => {
       kind: "encourageStores",
       issuedAtTick: 600,
     });
+    // The earlier boundary's entry is untouched by a later, unrelated boundary's preview.
     expect(nextBoundary.directiveLog.get("chancellor-polity-1-300")).toEqual({
-      kind: "holdFestival",
+      kind: "growCity",
+      issuedAtTick: 300,
+    });
+  });
+
+  /**
+   * The reviewer's finding on `d7ae1be`: a preview can be wrong right up to the boundary, and the
+   * observed actual — the same id appearing in `activeDirectives` once it commits — must win regardless
+   * of what any preview said. `mergedDirectiveLog` is what confirms it.
+   */
+  it("lets an observed actual directive overwrite a stale preview for the same id", () => {
+    const previewed = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+    const confirmed = applyUpdate(
+      previewed,
+      worldFixture({
+        nations: [
+          nationFixture({
+            activeDirectives: [
+              {
+                id: "chancellor-polity-1-300",
+                kind: "growCity",
+                targetCityId: "city-polity-1-1",
+                issuedAtTick: 300,
+                seasonsRemaining: 2,
+                totalSeasons: 3,
+              },
+            ],
+          }),
+        ],
+      }),
+      2_000,
+    );
+
+    expect(confirmed.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "growCity",
+      issuedAtTick: 300,
+    });
+  });
+
+  /**
+   * Once an id is confirmed, it is confirmed for good — a stale preview reaching the client afterward
+   * (structurally shouldn't happen, since the server never re-sends a boundary tick that has passed, but
+   * the client does not lean on that alone) must not revert the entry back to a projection that never ran.
+   */
+  it("does not let a preview overwrite an id that activeDirectives has already confirmed", () => {
+    const previewed = applyOrders(
+      welcomed(),
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+    const confirmed = applyUpdate(
+      previewed,
+      worldFixture({
+        nations: [
+          nationFixture({
+            activeDirectives: [
+              {
+                id: "chancellor-polity-1-300",
+                kind: "growCity",
+                targetCityId: "city-polity-1-1",
+                issuedAtTick: 300,
+                seasonsRemaining: 2,
+                totalSeasons: 3,
+              },
+            ],
+          }),
+        ],
+      }),
+      2_000,
+    );
+    const staleRepeat = applyOrders(
+      confirmed,
+      ordersFixture({
+        chancellorChoice: {
+          id: "chancellor-polity-1-300",
+          kind: "holdFestival",
+          targetCityId: null,
+          issuedAtTick: 300,
+        },
+      }),
+    );
+
+    expect(staleRepeat.directiveLog.get("chancellor-polity-1-300")).toEqual({
+      kind: "growCity",
       issuedAtTick: 300,
     });
   });

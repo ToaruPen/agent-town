@@ -1,4 +1,5 @@
 import {
+  type ActiveDirective,
   type ClientMessage,
   type DirectiveId,
   type DirectiveKind,
@@ -72,9 +73,9 @@ export interface NationHudState {
   /**
    * Every directive this session has seen the kind and issue tick of, keyed by id. Populated from
    * `activeDirectives` as it arrives, from `orders.queued`, and from `orders.chancellorChoice` (see
-   * `observedFromOrders` for why the last of those is logged unconditionally, before it is known to
-   * commit) — never overwritten once a key exists, since a directive's kind does not change after it is
-   * issued, so the first sighting is authoritative.
+   * `observedFromOrders` for why the last of those is logged before it is known to commit) — first
+   * sighting is authoritative for `queued` and for an already-confirmed id, but a chancellor's preview
+   * keeps updating in place until `activeDirectives` confirms it; see `previewDirectiveIds`.
    *
    * Survives `welcome`, unlike `orders`: this is a record of what was observed, not an assertion about
    * the next boundary, so a reconnect gap does not invalidate it (measured against `sim/nation/engine.ts`
@@ -87,6 +88,19 @@ export interface NationHudState {
    * such flag. Survives `welcome` for the same reason `directiveLog` does.
    */
   ownDirectiveIds: ReadonlySet<DirectiveId>;
+  /**
+   * Ids in `directiveLog` whose current value is a chancellor's `chancellorChoice` preview that has not
+   * yet been confirmed by `activeDirectives` — `chooseDirective` re-runs on every `orders` message, so
+   * the projected kind can change mid-season under the same id (`chancellorDirectiveId` embeds only the
+   * boundary tick, not the kind). While an id is here, a later preview for it overwrites the log entry
+   * in place. The first `activeDirectives` sighting for that id is the actual commit, which always
+   * outranks any preview: it overwrites the entry regardless of what was there and retires the id from
+   * this set, after which no preview can touch that entry again — matching how `chancellorDirectiveId`'s
+   * boundary tick only advances, so the server never re-sends a preview for an id whose boundary has
+   * already passed. Survives `welcome` for the same reason `directiveLog` does: dropping it would let a
+   * still-revisable preview freeze at whatever the reconnect happened to catch.
+   */
+  previewDirectiveIds: ReadonlySet<DirectiveId>;
 }
 
 const DEFAULT_RESUME_SPEED: SpeedMultiplier = 1;
@@ -106,27 +120,56 @@ export function initialNationHudState(): NationHudState {
     generation: 0,
     directiveLog: new Map(),
     ownDirectiveIds: new Set(),
+    previewDirectiveIds: new Set(),
   };
 }
 
 /**
- * Folds any directive not already logged into the map, from a fresh `nations` snapshot. Returns the same
- * reference when nothing is new, so the render-key dedupe two panels rely on is not defeated by a map
- * that is structurally identical but freshly allocated.
+ * One `activeDirectives` sighting folded in: added if not already logged, or — if it was logged as a
+ * still-revisable chancellor preview — overwritten regardless of what the preview said, retiring the id
+ * from `previewIds` so no later preview can touch it again. Every other id keeps first-sighting-wins,
+ * unchanged. Returns the same references when nothing changed, so `mergedDirectiveLog`'s loop can carry
+ * them forward without allocating.
  */
+function mergedDirectiveLogEntry(
+  log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
+  previewIds: ReadonlySet<DirectiveId>,
+  directive: ActiveDirective,
+): {
+  directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>;
+  previewDirectiveIds: ReadonlySet<DirectiveId>;
+} {
+  const isUnconfirmedPreview = previewIds.has(directive.id);
+  if (log.has(directive.id) && !isUnconfirmedPreview) {
+    return { directiveLog: log, previewDirectiveIds: previewIds };
+  }
+  const directiveLog = new Map(log).set(directive.id, {
+    kind: directive.kind,
+    issuedAtTick: directive.issuedAtTick,
+  });
+  let previewDirectiveIds: ReadonlySet<DirectiveId> = previewIds;
+  if (isUnconfirmedPreview) {
+    const retired = new Set(previewIds);
+    retired.delete(directive.id);
+    previewDirectiveIds = retired;
+  }
+  return { directiveLog, previewDirectiveIds };
+}
+
+/** Folds every directive across a fresh `nations` snapshot into the log, one sighting at a time. */
 function mergedDirectiveLog(
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
+  previewIds: ReadonlySet<DirectiveId>,
   nations: readonly NationState[],
-): ReadonlyMap<DirectiveId, DirectiveLogEntry> {
-  let next: Map<DirectiveId, DirectiveLogEntry> | null = null;
-  for (const nation of nations) {
-    for (const directive of nation.activeDirectives) {
-      if (log.has(directive.id)) continue;
-      next ??= new Map(log);
-      next.set(directive.id, { kind: directive.kind, issuedAtTick: directive.issuedAtTick });
-    }
+): {
+  directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>;
+  previewDirectiveIds: ReadonlySet<DirectiveId>;
+} {
+  let result = { directiveLog: log, previewDirectiveIds: previewIds };
+  for (const directive of nations.flatMap((nation) => nation.activeDirectives)) {
+    result = mergedDirectiveLogEntry(result.directiveLog, result.previewDirectiveIds, directive);
   }
-  return next ?? log;
+  return result;
 }
 
 function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier): SpeedMultiplier {
@@ -157,6 +200,7 @@ function rememberRunningSpeed(previous: SpeedMultiplier, next: SpeedMultiplier):
  * populated from the same `orders.queued`, part company here.
  */
 export function applyWelcome(state: NationHudState, world: NationWorldState): NationHudState {
+  const merged = mergedDirectiveLog(state.directiveLog, state.previewDirectiveIds, world.nations);
   return {
     currentYear: world.history.currentYear,
     history: world.history,
@@ -169,8 +213,9 @@ export function applyWelcome(state: NationHudState, world: NationWorldState): Na
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
     generation: state.generation + 1,
-    directiveLog: mergedDirectiveLog(state.directiveLog, world.nations),
+    directiveLog: merged.directiveLog,
     ownDirectiveIds: new Set(),
+    previewDirectiveIds: merged.previewDirectiveIds,
   };
 }
 
@@ -184,6 +229,7 @@ export function applyUpdate(
   world: NationWorldState,
   now: number,
 ): NationHudState {
+  const merged = mergedDirectiveLog(state.directiveLog, state.previewDirectiveIds, world.nations);
   return {
     ...state,
     nations: world.nations,
@@ -196,7 +242,8 @@ export function applyUpdate(
     },
     speed: world.speed,
     lastNonZeroSpeed: rememberRunningSpeed(state.lastNonZeroSpeed, world.speed),
-    directiveLog: mergedDirectiveLog(state.directiveLog, world.nations),
+    directiveLog: merged.directiveLog,
+    previewDirectiveIds: merged.previewDirectiveIds,
   };
 }
 
@@ -210,19 +257,24 @@ export function applyUpdate(
  * commits. Neither ever populates `ownDirectiveIds` for the chancellor's pick — it is never the player's
  * own — which is what lets `attributionFor` read a logged-but-not-owned id as 宰相の決定.
  *
- * Neither overwrites an existing key, so the *first* sighting is what is kept for each: `queued` can
- * repeat across several `orders` messages within the same season, right up to the boundary that consumes
- * it, and `chancellorChoice` can change its projected kind across messages before that same boundary —
- * the client judges no directive's legality or likelihood of committing, so it does not try to track
- * which preview was "final," only the first one it saw.
+ * `queued` keeps first-sighting-wins: it never overwrites an existing key, since `queued` can repeat
+ * across several `orders` messages within the same season right up to the boundary that consumes it, and
+ * what it names is already exactly what will commit if it does. `chancellorChoice` is different —
+ * `chooseDirective` re-runs on every `orders` message and can project a different kind for the *same* id
+ * across the season (`chancellorDirectiveId` embeds only the boundary tick, not the kind) — so a preview
+ * keeps overwriting in place until `mergedDirectiveLog` confirms it from `activeDirectives`, tracked via
+ * `previewDirectiveIds`. An id already confirmed there, or belonging to `queued` (a disjoint id space —
+ * `chancellor-` prefixed versus server-assigned), is left alone.
  */
 function observedFromOrders(
   log: ReadonlyMap<DirectiveId, DirectiveLogEntry>,
   ownIds: ReadonlySet<DirectiveId>,
+  previewIds: ReadonlySet<DirectiveId>,
   orders: NationOrders,
 ): {
   directiveLog: ReadonlyMap<DirectiveId, DirectiveLogEntry>;
   ownDirectiveIds: ReadonlySet<DirectiveId>;
+  previewDirectiveIds: ReadonlySet<DirectiveId>;
 } {
   const queued = orders.queued;
   const directiveLog =
@@ -232,14 +284,20 @@ function observedFromOrders(
   const ownDirectiveIds =
     queued === null || ownIds.has(queued.id) ? ownIds : new Set(ownIds).add(queued.id);
   const choice = orders.chancellorChoice;
+  const choiceAlreadySettled =
+    choice !== null && directiveLog.has(choice.id) && !previewIds.has(choice.id);
   const withChancellorChoice =
-    choice === null || directiveLog.has(choice.id)
+    choice === null || choiceAlreadySettled
       ? directiveLog
       : new Map(directiveLog).set(choice.id, {
           kind: choice.kind,
           issuedAtTick: choice.issuedAtTick,
         });
-  return { directiveLog: withChancellorChoice, ownDirectiveIds };
+  const previewDirectiveIds =
+    choice === null || choiceAlreadySettled || previewIds.has(choice.id)
+      ? previewIds
+      : new Set(previewIds).add(choice.id);
+  return { directiveLog: withChancellorChoice, ownDirectiveIds, previewDirectiveIds };
 }
 
 /**
@@ -252,7 +310,12 @@ function observedFromOrders(
  * exactly as the server still holds it (measured — a refusal never disturbs `queued`).
  */
 export function applyOrders(state: NationHudState, orders: NationOrders): NationHudState {
-  const observed = observedFromOrders(state.directiveLog, state.ownDirectiveIds, orders);
+  const observed = observedFromOrders(
+    state.directiveLog,
+    state.ownDirectiveIds,
+    state.previewDirectiveIds,
+    orders,
+  );
   return {
     ...state,
     playerNationId: orders.nationId,
@@ -260,6 +323,7 @@ export function applyOrders(state: NationHudState, orders: NationOrders): Nation
     orders,
     directiveLog: observed.directiveLog,
     ownDirectiveIds: observed.ownDirectiveIds,
+    previewDirectiveIds: observed.previewDirectiveIds,
   };
 }
 
