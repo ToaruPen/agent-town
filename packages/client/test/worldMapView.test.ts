@@ -251,15 +251,22 @@ describe("buildWorldMapViewModel", () => {
     );
   });
 
-  /** Spectating is a real state — the picker exists — and it must not decorate an arbitrary nation. */
+  /**
+   * Spectating is a real state — the picker exists — and it must not decorate an arbitrary nation.
+   *
+   * The old form of this test filtered by `polityId !== null && polityId === playerPolityId` with
+   * `playerPolityId` bound to `null`: that predicate is unsatisfiable by construction — if `polityId`
+   * equalled `playerPolityId` (`null`), it could not also be non-null — so it passed for any fixture, any
+   * implementation, even a deliberately broken one. This asserts every owned cell's alpha directly
+   * instead, and `owned.length` guards against the fixture losing its territory and making it vacuous
+   * again a different way. Cities and edges get the identical no-player-mark claim already, in their own
+   * describe blocks below ("marks no city/edge as the player's when nobody holds one") — not repeated here.
+   */
   it("marks no nation at all when the player holds none", () => {
-    const playerPolityId = null;
-    const view = buildWorldMapViewModel(historyFixture(), [], marks({ playerPolityId }));
+    const view = buildWorldMapViewModel(historyFixture(), [], marks({ playerPolityId: null }));
 
-    expect(
-      view.cells.some(({ polityId }) => polityId !== null && polityId === playerPolityId),
-    ).toBe(false);
     const owned = view.cells.filter(({ polityId }) => polityId !== null);
+    expect(owned.length).toBeGreaterThan(0);
     expect(new Set(owned.map(({ polityAlpha }) => polityAlpha))).toEqual(
       new Set([WORLD_MAP_POLITY_ALPHA]),
     );
